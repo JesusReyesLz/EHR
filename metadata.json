@@ -1,0 +1,7 @@
+{
+  "name": "MedExpediente MX - Sistema ECE Integral",
+  "description": "Sistema de Expediente Clínico Electrónico de alta fidelidad cumpliendo con NOM-004-SSA3-2012 y NOM-024-SSA3-2012, diseñado para el sector salud mexicano.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
