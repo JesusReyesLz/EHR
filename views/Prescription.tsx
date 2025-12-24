@@ -1,12 +1,13 @@
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { 
   ChevronLeft, Printer, QrCode, Plus, Trash2, Eye, 
-  ArrowLeft, ShieldCheck, Stethoscope, Search,
-  MapPin, GraduationCap, Heart, Pill, ClipboardList
+  ShieldCheck, Search, Heart, Pill, ClipboardList, Activity, 
+  Droplet, Thermometer, Wind, Save, PlusCircle, AlertCircle,
+  MapPin, Phone, User, Landmark
 } from 'lucide-react';
-import { Patient, MedicationPrescription, MedicationStock } from '../types';
+import { Patient, MedicationPrescription, MedicationStock, Vitals } from '../types';
 import { VADEMECUM_DB } from '../constants';
 
 const Prescription: React.FC<{ patients: Patient[] }> = ({ patients }) => {
@@ -19,26 +20,29 @@ const Prescription: React.FC<{ patients: Patient[] }> = ({ patients }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [suggestions, setSuggestions] = useState<MedicationStock[]>([]);
   
-  const noteData = location.state as { 
-    diagnosis?: string; 
-    indicaciones?: string 
-  } | null;
+  const dataFromNote = location.state as { diagnosis?: string, meds?: MedicationPrescription[], generalPlan?: string, cieCode?: string } | null;
 
-  const [medications, setMedications] = useState<MedicationPrescription[]>([]);
-
+  const [medications, setMedications] = useState<MedicationPrescription[]>(dataFromNote?.meds || []);
   const [prescriptionData, setPrescriptionData] = useState({
-    diagnostico: noteData?.diagnosis || '',
-    indicaciones: noteData?.indicaciones || '',
-    folio: `REC-${new Date().getFullYear()}-${Math.floor(Math.random() * 9000) + 1000}`,
+    diagnostico: dataFromNote?.diagnosis || '',
+    cieCode: dataFromNote?.cieCode || '',
+    indicaciones: dataFromNote?.generalPlan || '',
+    folio: `REC-MX-${Date.now().toString().slice(-8)}`,
     fecha: new Date().toLocaleDateString('es-MX', { day: '2-digit', month: 'long', year: 'numeric' }),
     emisor: {
-      institucion: 'U.N.A.M. / Facultad de Medicina',
-      cedulaGral: '12345678',
-      cedulaEsp: '99887766',
-      direccion: 'Av. Insurgentes Sur 123, Col. Juárez, CP 06600, CDMX',
-      telefono: '55 1234 5678'
+      institucion: 'Universidad Autónoma de Chiapas',
+      cedulaGral: '12840177',
+      especialidad: 'Medicina Interna',
+      direccion: 'Av. Paseo de los Leones 2345, Monterrey, N.L.',
+      telefono: '81 1234 5678'
     }
   });
+
+  const [vitals, setVitals] = useState<Vitals | null>(null);
+
+  useEffect(() => {
+    if (patient) setVitals(patient.currentVitals || null);
+  }, [patient]);
 
   const handleSearchMed = (val: string) => {
     setSearchTerm(val);
@@ -53,304 +57,281 @@ const Prescription: React.FC<{ patients: Patient[] }> = ({ patients }) => {
     }
   };
 
-  const addMedicationManual = () => {
-    const newMed: MedicationPrescription = {
-      id: `MED-MAN-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
-      name: '',
-      genericName: '',
-      presentation: 'Tabletas',
-      dosage: '',
-      frequency: 'Cada 8 horas',
-      duration: '7 días',
-      route: 'Oral',
-      instructions: ''
-    };
-    setMedications(prev => [...prev, newMed]);
-  };
-
   const selectMedFromDB = (med: MedicationStock) => {
     const newMed: MedicationPrescription = {
-      id: `MED-DB-${Date.now()}`,
+      id: `MED-${Date.now()}`,
       name: med.name,
       genericName: med.genericName,
       presentation: med.presentation,
       dosage: med.concentration || '',
       frequency: 'Cada 8 horas',
       duration: '7 días',
-      route: med.presentation.toLowerCase().includes('inyectable') ? 'Intramuscular' : 'Oral',
+      route: 'Oral',
       instructions: ''
     };
-    setMedications(prev => [...prev, newMed]);
+    setMedications([...medications, newMed]);
     setSearchTerm('');
     setSuggestions([]);
   };
 
-  const updateMedication = useCallback((medId: string, field: keyof MedicationPrescription, value: string) => {
-    setMedications(prev => prev.map(m => m.id === medId ? { ...m, [field]: value } : m));
-  }, []);
-
-  const removeMedication = (medId: string) => {
-    setMedications(prev => prev.filter(m => m.id !== medId));
+  const addManualTreatment = () => {
+    const newMed: MedicationPrescription = {
+      id: `TRAT-${Date.now()}`,
+      name: 'NUEVO TRATAMIENTO / INSUMO',
+      genericName: '',
+      dosage: '',
+      frequency: '',
+      duration: '',
+      route: 'N/A',
+      instructions: ''
+    };
+    setMedications([...medications, newMed]);
   };
 
-  if (!patient) return <div className="p-20 text-center font-black text-slate-300 uppercase">Paciente no encontrado</div>;
+  const updateMed = (mid: string, field: keyof MedicationPrescription, value: string) => {
+    setMedications(medications.map(m => m.id === mid ? { ...m, [field]: value } : m));
+  };
+
+  if (!patient) return null;
 
   return (
-    <div className="max-w-5xl mx-auto pb-32 animate-in fade-in">
-      <div className="flex flex-col md:flex-row md:items-center justify-between mb-10 no-print bg-white p-8 rounded-[3rem] border border-slate-200 shadow-2xl sticky top-20 z-[60] gap-4">
+    <div className="max-w-7xl mx-auto pb-32 animate-in fade-in">
+      {/* TOOLBAR */}
+      <div className="bg-white p-5 rounded-[2.5rem] border border-slate-200 shadow-2xl mb-8 flex flex-wrap items-center justify-between gap-4 no-print sticky top-20 z-50">
         <div className="flex items-center gap-6">
-          <button onClick={() => navigate(-1)} className="p-4 bg-slate-900 text-white rounded-2xl hover:bg-blue-600 transition-all shadow-xl">
-            <ChevronLeft size={20} />
-          </button>
+          <button onClick={() => navigate(-1)} className="p-4 bg-slate-900 text-white rounded-2xl hover:bg-blue-600 transition-all shadow-xl"><ChevronLeft size={20}/></button>
           <div>
-            <h1 className="text-2xl font-black text-slate-900 uppercase tracking-tight">Recetario Médico</h1>
-            <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest">Atención: {patient.name}</p>
+            <h1 className="text-xl font-black text-slate-900 uppercase tracking-tighter leading-none">Recetario Médico Profesional</h1>
+            <p className="text-[10px] text-blue-600 font-black uppercase tracking-widest mt-1">Cumplimiento NOM-024 / COFEPRIS</p>
           </div>
         </div>
-        
-        <div className="flex flex-wrap items-center gap-4">
+        <div className="flex gap-3 items-center">
            {!isPreview && (
-              <div className="flex gap-2 w-full md:w-auto">
-                <div className="relative flex-1 md:w-80">
-                   <div className="relative">
-                      <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5" />
-                      <input 
-                        className="w-full pl-14 pr-4 py-4 bg-slate-50 border border-slate-200 rounded-3xl text-[10px] font-black uppercase tracking-widest outline-none focus:ring-4 focus:ring-blue-100 transition-all" 
-                        placeholder="Buscar en Vademécum..." 
-                        value={searchTerm} 
-                        onChange={e => handleSearchMed(e.target.value)} 
-                      />
-                   </div>
+             <div className="flex items-center gap-3">
+                <div className="relative">
+                   <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
+                   <input 
+                     className="pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-[10px] font-black uppercase outline-none focus:bg-white w-48 shadow-sm transition-all" 
+                     placeholder="Añadir fármaco..." 
+                     value={searchTerm} 
+                     onChange={e => handleSearchMed(e.target.value)} 
+                   />
                    {suggestions.length > 0 && (
-                      <div className="absolute top-full left-0 w-full mt-3 bg-white border border-slate-200 rounded-[2rem] shadow-2xl z-[100] overflow-hidden animate-in fade-in zoom-in-95">
-                         {suggestions.map(med => (
-                            <button key={med.id} onClick={() => selectMedFromDB(med)} className="w-full text-left p-5 hover:bg-blue-50 border-b border-slate-50 last:border-0 group transition-all">
-                               <p className="text-xs font-black uppercase group-hover:text-blue-700">{med.genericName}</p>
-                               <p className="text-[9px] text-slate-400 font-bold uppercase mt-1">{med.name} • {med.presentation}</p>
-                            </button>
-                         ))}
-                      </div>
+                     <div className="absolute top-full left-0 w-full mt-1 bg-white border border-slate-200 rounded-xl shadow-2xl z-[100] overflow-hidden animate-in zoom-in-95">
+                        {suggestions.map(s => (
+                          <button key={s.id} onClick={() => selectMedFromDB(s)} className="w-full text-left p-3 hover:bg-blue-50 border-b border-slate-50 last:border-0">
+                            <p className="text-[10px] font-black uppercase text-slate-900">{s.name}</p>
+                            <p className="text-[8px] text-slate-400 font-bold uppercase">{s.genericName}</p>
+                          </button>
+                        ))}
+                     </div>
                    )}
                 </div>
-                <button onClick={addMedicationManual} className="p-4 bg-blue-600 text-white rounded-3xl hover:bg-slate-900 transition-all shadow-lg flex items-center justify-center group" title="Agregar Manualmente">
-                   <Plus size={24} className="group-hover:rotate-90 transition-transform" />
-                </button>
-              </div>
+                <button onClick={addManualTreatment} className="px-5 py-2.5 bg-slate-100 text-slate-600 border border-slate-200 rounded-xl font-black text-[9px] uppercase hover:bg-white transition-all">+ Manual</button>
+             </div>
            )}
-           <button 
-             onClick={() => setIsPreview(!isPreview)} 
-             className={`flex items-center px-10 py-4 rounded-full font-black text-[10px] uppercase tracking-widest shadow-xl transition-all ${isPreview ? 'bg-slate-900 text-white' : 'bg-emerald-600 text-white hover:bg-slate-900'}`}
-           >
-              {isPreview ? <ArrowLeft size={16} className="mr-3" /> : <Eye size={16} className="mr-3" />} 
-              {isPreview ? 'Volver a Editar' : 'Vista de Impresión'}
+           <button onClick={() => setIsPreview(!isPreview)} className="px-8 py-3 bg-slate-900 text-white rounded-2xl font-black text-[10px] uppercase shadow-lg hover:bg-blue-600 transition-all flex items-center gap-3">
+             {isPreview ? 'Seguir Editando' : 'Ver Vista de Impresión'}
            </button>
-           {isPreview && (
-             <button onClick={() => window.print()} className="p-4 bg-blue-600 text-white rounded-full shadow-xl hover:bg-slate-900 transition-all">
-                <Printer size={20} />
-             </button>
-           )}
+           {isPreview && <button onClick={() => window.print()} className="p-4 bg-emerald-600 text-white rounded-2xl shadow-lg hover:bg-slate-900 transition-all"><Printer size={20}/></button>}
         </div>
       </div>
 
-      <div className={`bg-white shadow-2xl rounded-[4rem] overflow-hidden flex flex-col transition-all duration-700 ${isPreview ? 'scale-[1.01]' : 'border border-slate-200'} print:shadow-none print:scale-100 print:rounded-none`}>
-        <PrescriptionDocument 
-          patient={patient} 
-          medications={medications} 
-          prescriptionData={prescriptionData} 
-          updateMedication={updateMedication}
-          removeMedication={removeMedication}
-          addMedicationManual={addMedicationManual}
-          setPrescriptionData={(newData: any) => setPrescriptionData(prev => ({...prev, ...newData}))}
-          isPreview={isPreview}
-          label="ORIGINAL"
-        />
-        
-        <div className="h-20 bg-slate-50 flex items-center justify-center overflow-hidden no-print relative">
-           <div className="w-full border-t-4 border-dotted border-slate-300"></div>
-           <div className="absolute px-12 py-3 bg-white border-2 border-slate-200 rounded-full text-[10px] font-black text-slate-400 uppercase tracking-[0.5em] shadow-sm">Línea de Corte Normativo</div>
-        </div>
+      {!isPreview ? (
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+          <div className="lg:col-span-8 space-y-6">
+            <div className="bg-white border border-slate-200 rounded-[3rem] p-10 shadow-sm space-y-8">
+              <div className="flex items-center gap-4 border-b border-slate-50 pb-6">
+                 <div className="w-10 h-10 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center"><Pill size={24} /></div>
+                 <h3 className="text-xs font-black uppercase tracking-[0.2em] text-slate-900">Manejo Terapéutico (Rp.)</h3>
+              </div>
+              
+              <div className="space-y-4">
+                {medications.map((m, idx) => (
+                  <div key={m.id} className="p-6 bg-slate-50 border border-slate-200 rounded-[2.5rem] space-y-5 group animate-in slide-in-from-right-2">
+                    <div className="flex justify-between items-center">
+                       <div className="flex-1 flex items-center gap-4">
+                          <span className="w-7 h-7 bg-slate-900 text-white rounded-lg flex items-center justify-center font-black text-[10px]">{idx + 1}</span>
+                          <input className="bg-transparent border-none p-0 text-[13px] font-black text-slate-900 uppercase w-full outline-none focus:ring-0" value={m.name} onChange={e => updateMed(m.id, 'name', e.target.value.toUpperCase())} />
+                       </div>
+                       <button onClick={() => setMedications(medications.filter(med => med.id !== m.id))} className="text-slate-300 hover:text-rose-600 transition-all"><Trash2 size={18} /></button>
+                    </div>
+                    
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                       {[
+                         { f: 'dosage', l: 'Dosis' },
+                         { f: 'frequency', l: 'Frecuencia' },
+                         { f: 'route', l: 'Vía' },
+                         { f: 'duration', l: 'Duración' }
+                       ].map(item => (
+                         <div key={item.f} className="space-y-1.5">
+                            <label className="text-[7px] font-black text-slate-400 uppercase tracking-widest block ml-1">{item.l}</label>
+                            <input className="w-full p-2 bg-white border border-slate-200 rounded-xl text-[10px] font-black uppercase outline-none focus:border-blue-600 shadow-sm" value={(m as any)[item.f]} onChange={e => updateMed(m.id, item.f as any, e.target.value)} />
+                         </div>
+                       ))}
+                    </div>
+                    <div className="space-y-1.5">
+                       <label className="text-[7px] font-black text-slate-400 uppercase tracking-widest block ml-1">Instrucciones precisas</label>
+                       <input className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-[10px] font-medium italic outline-none focus:border-emerald-300 shadow-sm" placeholder="Ej: Tomar 20 min antes del desayuno..." value={m.instructions} onChange={e => updateMed(m.id, 'instructions', e.target.value)} />
+                    </div>
+                  </div>
+                ))}
+                {medications.length === 0 && (
+                  <div className="py-24 text-center space-y-4 opacity-20 border-4 border-dashed border-slate-100 rounded-[3rem]">
+                     <Search size={48} className="mx-auto" />
+                     <p className="text-[10px] font-black uppercase tracking-widest">Añada medicamentos o insumos (Rp.)</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
 
-        <div className="hidden print:block border-t-2 border-dashed border-slate-300 w-full h-0 my-4"></div>
-        
-        <PrescriptionDocument 
-          patient={patient} 
-          medications={medications} 
-          prescriptionData={prescriptionData} 
-          updateMedication={updateMedication}
-          removeMedication={removeMedication}
-          addMedicationManual={addMedicationManual}
-          setPrescriptionData={(newData: any) => setPrescriptionData(prev => ({...prev, ...newData}))}
-          isPreview={isPreview}
-          label="COPIA EXPEDIENTE"
-        />
-      </div>
+          <div className="lg:col-span-4 space-y-6">
+            <div className="bg-slate-900 text-white rounded-[3rem] p-10 shadow-2xl space-y-8 sticky top-32 border-b-[10px] border-blue-600">
+               <h3 className="text-[11px] font-black uppercase tracking-widest text-blue-400 flex items-center gap-3">
+                  <ClipboardList size={18} /> Datos de Receta
+               </h3>
+               <div className="space-y-6">
+                  <div className="space-y-3">
+                     <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest ml-1">Diagnóstico (CIE-11)</label>
+                     <textarea className="w-full bg-white/5 border border-white/10 p-5 rounded-2xl text-[11px] font-black uppercase outline-none h-20 focus:bg-white/10" value={prescriptionData.diagnostico} onChange={e => setPrescriptionData({...prescriptionData, diagnostico: e.target.value})} />
+                     <input className="w-full bg-white/5 border border-white/10 p-3 rounded-xl text-[9px] font-black text-blue-400 uppercase" value={prescriptionData.cieCode} onChange={e => setPrescriptionData({...prescriptionData, cieCode: e.target.value})} placeholder="CÓDIGO CIE-11" />
+                  </div>
+                  <div className="space-y-3">
+                     <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest ml-1">Indicaciones No Farmacológicas / Dieta</label>
+                     <textarea className="w-full bg-white/5 border border-white/10 p-5 rounded-2xl text-[11px] font-medium italic outline-none h-36 focus:bg-white/10" value={prescriptionData.indicaciones} onChange={e => setPrescriptionData({...prescriptionData, indicaciones: e.target.value})} placeholder="Dieta, reposo, cuidados..." />
+                  </div>
+               </div>
+            </div>
+          </div>
+        </div>
+      ) : (
+        /* VISTA DE IMPRESIÓN PROFESIONAL */
+        <div className="bg-white shadow-2xl rounded-[3.5rem] overflow-hidden flex flex-col print:shadow-none print:rounded-none">
+           <PrescriptionDoc patient={patient} vitals={vitals} meds={medications} data={prescriptionData} label="ORIGINAL - EXPEDIENTE CLÍNICO" />
+           <div className="h-12 bg-slate-50 flex items-center justify-center no-print border-y border-slate-100 relative">
+              <div className="w-full border-t-2 border-dashed border-slate-300 mx-10"></div>
+              <span className="absolute px-8 py-1.5 bg-white border border-slate-200 rounded-full text-[9px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-3 shadow-sm">
+                <Landmark size={12} /> Línea de Corte • Copia Paciente / Farmacia
+              </span>
+           </div>
+           <PrescriptionDoc patient={patient} vitals={vitals} meds={medications} data={prescriptionData} label="COPIA - PACIENTE / SURTIDO" />
+        </div>
+      )}
     </div>
   );
 };
 
-const PrescriptionDocument = ({ patient, medications, prescriptionData, updateMedication, removeMedication, addMedicationManual, setPrescriptionData, isPreview, label }: any) => (
-  <div className="relative bg-white p-12 overflow-hidden flex flex-col border-b border-slate-100 last:border-b-0">
-    <div className="relative z-10 flex justify-between items-start mb-10 border-b-2 border-slate-900 pb-8">
-      <div className="flex gap-8">
-        <div className="w-24 h-24 bg-slate-900 rounded-[2rem] flex items-center justify-center text-blue-400 shadow-2xl shrink-0">
-           <Heart size={48} />
+const PrescriptionDoc = ({ patient, vitals, meds, data, label }: any) => (
+  <div className="relative p-12 bg-white flex flex-col border-b border-slate-100 last:border-b-0 print:p-10 print:h-[50vh]">
+     {/* Header Profesional NOM-004 */}
+     <div className="flex justify-between border-b-4 border-slate-900 pb-6 mb-8">
+        <div className="flex gap-6">
+           <div className="w-16 h-16 bg-slate-900 rounded-2xl flex items-center justify-center text-white shadow-lg"><Heart size={32} /></div>
+           <div className="space-y-0.5">
+              <h2 className="text-xl font-black text-slate-900 tracking-tighter uppercase leading-none">Centro Médico Especializado San Francisco</h2>
+              <p className="text-[8px] font-bold text-slate-500 uppercase">{data.emisor.direccion} • Tel: {data.emisor.telefono}</p>
+              <div className="pt-2">
+                 <p className="text-[13px] font-black text-slate-900 uppercase leading-none">Dr. Alejandro Méndez Lozano</p>
+                 <p className="text-[8px] font-black text-blue-600 uppercase tracking-widest mt-1">{data.emisor.especialidad} • Cédula Prof: {data.emisor.cedulaGral} • {data.emisor.institucion}</p>
+              </div>
+           </div>
         </div>
-        <div className="space-y-3">
-           <div>
-              <h2 className="text-2xl font-black text-slate-900 uppercase tracking-tighter leading-none">Dr. Alejandro Méndez</h2>
-              <p className="text-[9px] font-black text-blue-600 uppercase tracking-[0.2em] mt-2 flex items-center">
-                 <GraduationCap size={12} className="mr-2" /> {prescriptionData.emisor.institucion}
+        <div className="text-right flex flex-col justify-between items-end">
+           <QrCode size={48} className="text-slate-900 opacity-90" />
+           <div className="mt-2">
+              <p className="text-[11px] font-black text-slate-900 tracking-tighter uppercase leading-none">FOLIO: {data.folio}</p>
+              <p className="text-[8px] font-bold text-slate-400 mt-1 uppercase">{data.fecha}</p>
+           </div>
+        </div>
+     </div>
+
+     <div className="flex gap-10">
+        {/* Signos Vitales y Perfil (Margen Izquierdo) */}
+        <div className="w-24 bg-slate-50 border border-slate-200 rounded-[2rem] p-4 space-y-5 shrink-0 h-fit">
+           <p className="text-[7px] font-black text-slate-400 uppercase text-center border-b border-slate-200 pb-2">Somatometría</p>
+           {[
+             { l: 'T.A.', v: vitals?.bp || '--/--' },
+             { l: 'F.C.', v: vitals?.hr || '--' },
+             { l: 'T°', v: vitals?.temp || '--' },
+             { l: 'SpO2', v: vitals?.o2 || '--' }
+           ].map(v => (
+             <div key={v.l} className="text-center">
+                <span className="text-[6px] font-black text-slate-400 uppercase block leading-none">{v.l}</span>
+                <p className="text-[12px] font-black text-slate-900">{v.v}</p>
+             </div>
+           ))}
+           <div className="pt-2 border-t border-slate-200 text-center">
+              <span className="text-[6px] font-black text-slate-400 uppercase">Peso / IMC</span>
+              <p className="text-[9px] font-black text-slate-800 mt-1">{vitals?.weight}kg / {vitals?.bmi}</p>
+           </div>
+        </div>
+
+        <div className="flex-1 space-y-6">
+           {/* Identificación del Paciente */}
+           <div className="grid grid-cols-3 gap-6 border-b border-slate-100 pb-4">
+              <div className="col-span-2 space-y-1">
+                 <label className="text-[7px] font-black text-slate-400 uppercase block">Paciente</label>
+                 <p className="text-[14px] font-black text-slate-900 uppercase tracking-tight">{patient.name}</p>
+              </div>
+              <div className="text-right space-y-1">
+                 <label className="text-[7px] font-black text-slate-400 uppercase block">Edad / Sexo</label>
+                 <p className="text-[12px] font-bold text-slate-700 uppercase">{patient.age} AÑOS / {patient.sex}</p>
+              </div>
+           </div>
+
+           {/* Cuerpo de la Receta: Rp. */}
+           <div className="space-y-5 min-h-[220px]">
+              <div className="flex items-center gap-3 mb-4">
+                 <span className="text-[18px] font-black text-slate-900 italic">Rp.</span>
+                 <div className="h-[2px] flex-1 bg-slate-900/5"></div>
+              </div>
+              <div className="space-y-6">
+                 {meds.map((m: any, idx: number) => (
+                    <div key={m.id} className="relative pl-8">
+                       <span className="absolute left-0 top-0 font-black text-slate-200 text-2xl">{idx + 1}</span>
+                       <div className="space-y-1">
+                          {/* NOMBRE GENÉRICO RESALTADO LEGALMENTE */}
+                          <p className="text-[12px] font-black text-slate-900 uppercase leading-none">
+                             {m.genericName || m.name} <span className="text-[9px] text-slate-500 font-bold ml-1 italic">({m.name})</span>
+                          </p>
+                          <p className="text-[10px] font-bold text-slate-600 uppercase tracking-tight leading-tight">
+                            ADMINISTRAR {m.dosage} {m.frequency} VÍA {m.route} DURANTE {m.duration}.
+                          </p>
+                          {m.instructions && <p className="text-[9px] text-blue-700 italic font-bold mt-1 leading-none">{m.instructions}</p>}
+                       </div>
+                    </div>
+                 ))}
+                 {meds.length === 0 && <p className="text-center py-10 text-[10px] font-black text-slate-200 uppercase tracking-[0.4em]">Sin medicamentos prescritos</p>}
+              </div>
+           </div>
+
+           {/* Indicaciones Generales */}
+           <div className="pt-4 border-t-2 border-slate-100">
+              <h4 className="text-[8px] font-black text-slate-900 uppercase tracking-widest flex items-center gap-2 mb-2">
+                 <ClipboardList size={10} className="text-blue-600" /> Indicaciones Generales y Dieta
+              </h4>
+              <p className="text-[10px] text-slate-600 italic font-medium leading-relaxed bg-slate-50 p-4 rounded-2xl border border-slate-100 uppercase">
+                 "{data.indicaciones || 'Vigilancia de signos de alarma. Dieta normal y abundantes líquidos según tolerancia.'}"
               </p>
            </div>
-           <div className="grid grid-cols-2 gap-x-8 gap-y-1">
-              <p className="text-[9px] font-bold text-slate-500 uppercase">Ced. Gral: <span className="text-slate-900">{prescriptionData.emisor.cedulaGral}</span></p>
-              <p className="text-[9px] font-bold text-slate-500 uppercase">Ced. Esp: <span className="text-slate-900">{prescriptionData.emisor.cedulaEsp}</span></p>
-              <p className="text-[8px] font-bold text-slate-400 uppercase col-span-full mt-1 flex items-center"><MapPin size={10} className="mr-1.5" /> {prescriptionData.emisor.direccion}</p>
-           </div>
         </div>
-      </div>
-      <div className="text-right">
-         <QrCode size={64} className="text-slate-900 mb-2 inline-block" />
-         <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Validación COFEPRIS</p>
-         <p className="text-xl font-black text-blue-600 tracking-tighter mt-1">{prescriptionData.folio}</p>
-      </div>
-    </div>
+     </div>
 
-    <div className="relative z-10 grid grid-cols-4 gap-6 bg-slate-50 p-8 rounded-[2.5rem] mb-10 border border-slate-100">
-      <div className="col-span-3">
-        <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest block mb-1">Nombre del Paciente</label>
-        <p className="text-sm font-black text-slate-900 uppercase tracking-tight">{patient.name}</p>
-      </div>
-      <div className="text-right">
-        <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest block mb-1">Fecha Emisión</label>
-        <p className="text-sm font-black text-slate-700 uppercase">{prescriptionData.fecha}</p>
-      </div>
-      <div className="col-span-full h-px bg-slate-200"></div>
-      <div className="grid grid-cols-4 gap-4 col-span-full">
-         <div><label className="text-[8px] font-black text-slate-400 uppercase block">Edad / Sexo</label><p className="text-[10px] font-bold">{patient.age} Años / {patient.sex}</p></div>
-         <div><label className="text-[8px] font-black text-slate-400 uppercase block">Peso / Talla</label><p className="text-[10px] font-bold">{patient.currentVitals?.weight || '--'} kg / {patient.currentVitals?.height || '--'} cm</p></div>
-         <div className="col-span-2">
-            <label className="text-[8px] font-black text-slate-400 uppercase block">Diagnóstico Presuntivo</label>
-            {!isPreview ? (
-              <input 
-                className="w-full bg-transparent text-[10px] font-bold border-b border-slate-200 outline-none focus:border-blue-600" 
-                value={prescriptionData.diagnostico} 
-                onChange={e => setPrescriptionData({ diagnostico: e.target.value })}
-                placeholder="Escriba el diagnóstico..."
-              />
-            ) : (
-              <p className="text-[10px] font-bold text-slate-800 uppercase italic truncate">"{prescriptionData.diagnostico}"</p>
-            )}
-         </div>
-      </div>
-    </div>
-
-    <div className="relative z-10 space-y-10 flex-1 min-h-[400px]">
-      <div className="space-y-6">
-         <div className="flex justify-between items-center no-print">
-            <label className="text-[10px] font-black text-slate-900 uppercase tracking-[0.2em] flex items-center">
-               <Stethoscope size={16} className="text-blue-600 mr-2" /> Tratamiento Farmacológico (Rp.)
-            </label>
-            {!isPreview && medications.length > 0 && (
-               <button onClick={addMedicationManual} className="flex items-center gap-2 px-4 py-2 bg-slate-900 text-white rounded-xl text-[8px] font-black uppercase hover:bg-blue-600 transition-all">
-                  <Plus size={12} /> Agregar Otro
-               </button>
-            )}
-         </div>
-         
-         <div className="space-y-8">
-            {medications.map((med: any, idx: number) => (
-               <div key={med.id} className="relative pl-12 group animate-in slide-in-from-left-2">
-                  <div className="absolute left-0 top-0 text-xl font-black text-slate-200 group-hover:text-blue-200 transition-colors">{idx + 1}.</div>
-                  <div className="space-y-4">
-                     <div className="flex justify-between items-start">
-                        <div className="flex-1 mr-4">
-                           {!isPreview ? (
-                              <div className="flex gap-3">
-                                <input 
-                                  className="flex-[2] bg-slate-100 border-b-2 border-slate-200 p-3 text-xs font-black uppercase outline-none focus:bg-blue-50 focus:border-blue-600 transition-all" 
-                                  placeholder="Nombre del Medicamento" 
-                                  value={med.genericName || med.name} 
-                                  onChange={e => updateMedication(med.id, 'genericName', e.target.value)} 
-                                />
-                                <input 
-                                  className="flex-1 bg-slate-100 border-b-2 border-slate-200 p-3 text-xs font-bold outline-none focus:bg-blue-50 focus:border-blue-600 transition-all" 
-                                  placeholder="Presentación" 
-                                  value={med.presentation} 
-                                  onChange={e => updateMedication(med.id, 'presentation', e.target.value)} 
-                                />
-                              </div>
-                           ) : (
-                              <p className="text-sm font-black text-slate-900 uppercase tracking-tight">
-                                {med.genericName || med.name} <span className="text-slate-400 font-bold ml-2">({med.presentation})</span>
-                              </p>
-                           )}
-                        </div>
-                        {!isPreview && (
-                           <button onClick={() => removeMedication(med.id)} className="text-slate-300 hover:text-rose-600 p-2 transition-colors no-print"><Trash2 size={18} /></button>
-                        )}
-                     </div>
-                     
-                     <div className="grid grid-cols-4 gap-6">
-                        <div className="col-span-2">
-                           <label className="text-[8px] font-black text-slate-400 uppercase block mb-1">Dosis y Frecuencia</label>
-                           {!isPreview ? (
-                              <div className="flex gap-2">
-                                <input className="w-full bg-slate-50 border-b border-slate-200 p-2 text-[10px] font-bold outline-none focus:border-blue-600" value={med.dosage} onChange={e => updateMedication(med.id, 'dosage', e.target.value)} placeholder="Ej: 500mg" />
-                                <input className="w-full bg-slate-50 border-b border-slate-200 p-2 text-[10px] font-bold outline-none focus:border-blue-600" value={med.frequency} onChange={e => updateMedication(med.id, 'frequency', e.target.value)} placeholder="Frecuencia..." />
-                              </div>
-                           ) : (
-                              <p className="text-[10px] font-black text-slate-800 uppercase">{med.dosage} — {med.frequency}</p>
-                           )}
-                        </div>
-                        <div>
-                           <label className="text-[8px] font-black text-slate-400 uppercase block mb-1">Duración</label>
-                           {!isPreview ? (
-                              <input className="w-full bg-slate-50 border-b border-slate-200 p-2 text-[10px] font-bold outline-none focus:border-blue-600" value={med.duration} onChange={e => updateMedication(med.id, 'duration', e.target.value)} placeholder="Ej: 7 días" />
-                           ) : (
-                              <p className="text-[10px] font-black text-slate-800 uppercase">{med.duration}</p>
-                           )}
-                        </div>
-                        <div>
-                           <label className="text-[8px] font-black text-slate-400 uppercase block mb-1">Vía</label>
-                           {!isPreview ? (
-                              <input className="w-full bg-slate-50 border-b border-slate-200 p-2 text-[10px] font-bold outline-none focus:border-blue-600" value={med.route} onChange={e => updateMedication(med.id, 'route', e.target.value)} />
-                           ) : (
-                              <p className="text-[10px] font-black text-slate-800 uppercase">{med.route}</p>
-                           )}
-                        </div>
-                     </div>
-                  </div>
-               </div>
-            ))}
-         </div>
-      </div>
-
-      <div className="space-y-4 mt-12 border-t border-slate-100 pt-8">
-         <label className="text-[10px] font-black text-slate-900 uppercase tracking-[0.2em] flex items-center">
-            <ClipboardList size={16} className="text-emerald-600 mr-2" /> Recomendaciones Generales e Higiene
-         </label>
-         <textarea 
-            disabled={isPreview}
-            className="w-full text-[11px] font-medium p-8 bg-slate-50 border border-slate-200 rounded-[2.5rem] h-32 outline-none focus:bg-white focus:border-emerald-400 transition-all resize-none italic leading-relaxed disabled:bg-transparent disabled:border-none disabled:p-0" 
-            value={prescriptionData.indicaciones} 
-            onChange={e => setPrescriptionData({ indicaciones: e.target.value })} 
-            placeholder="Especifique dieta, reposo, signos de alarma o cuidados generales..." 
-         />
-      </div>
-    </div>
-
-    <div className="mt-20 pt-10 border-t-2 border-slate-900 flex justify-between items-end relative z-10">
-       <div className="bg-slate-900 text-white px-6 py-3 rounded-2xl text-[9px] font-black uppercase tracking-[0.2em] flex items-center gap-3">
-          <ShieldCheck size={18} className="text-emerald-400" /> Firma Electrónica Avanzada Activa
-       </div>
-       <div className="flex flex-col items-center">
-          <div className="w-72 h-24 border-b-2 border-slate-900 mb-3 flex items-center justify-center italic text-blue-100/50 text-2xl font-serif">Firma Digitalizada</div>
-          <p className="text-sm font-black text-slate-900 uppercase">Dr. Alejandro Méndez</p>
-          <p className="text-[9px] font-black text-slate-400 uppercase mt-1">Cédula Profesional: {prescriptionData.emisor.cedulaGral}</p>
-          <p className="text-[8px] font-black text-blue-600 mt-3 uppercase border-2 border-blue-600 px-5 py-1.5 rounded-lg tracking-widest">{label}</p>
-       </div>
-    </div>
+     {/* Pie de Receta / Firma Legal */}
+     <div className="mt-auto pt-6 border-t-2 border-slate-900 flex justify-between items-end">
+        <div className="space-y-3">
+           <div className="px-4 py-1.5 bg-slate-900 text-white rounded-xl text-[7px] font-black uppercase tracking-[0.2em] flex items-center gap-3 w-fit shadow-md">
+              <ShieldCheck size={14} className="text-blue-400" /> Receta Certificada Digitalmente
+           </div>
+           <p className="text-[8px] font-black text-slate-400 border-l-4 border-blue-600 pl-3 uppercase tracking-tighter">{label}</p>
+        </div>
+        <div className="text-center space-y-1 px-10">
+           <div className="w-56 h-[1px] bg-slate-900 mx-auto"></div>
+           <p className="text-[12px] font-black text-slate-900 uppercase leading-none mt-1">Dr. Alejandro Méndez Lozano</p>
+           <p className="text-[7px] font-bold text-slate-500 uppercase tracking-widest">Firma del Médico Prescriptor</p>
+        </div>
+     </div>
   </div>
 );
 

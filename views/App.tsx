@@ -39,6 +39,7 @@ import SocialWorkSheet from './views/SocialWorkSheet';
 import StomatologyExpedient from './views/StomatologyExpedient';
 import EpidemiologyStudy from './views/EpidemiologyStudy';
 import HospitalMonitor from './views/HospitalMonitor';
+import HistoryRegistries from './views/HistoryRegistries';
 
 // Editores Especializados
 import EvolutionNote from './views/notes/EvolutionNote';
@@ -130,7 +131,7 @@ const App: React.FC = () => {
           module: patient.assignedModule
         };
         setConsultations(prev => [record, ...prev]);
-        if (newNote.type.includes('Egreso') || newNote.type.includes('Alta') || newNote.type.includes('Defunción')) {
+        if (newNote.type.includes('Egreso') || newNote.type.includes('Alta') || newNote.type.includes('Defunción') || (newNote.type.includes('Reporte') && newNote.type.includes('Resultados'))) {
           updatePatientStatus(patient.id, PatientStatus.ATTENDED);
         }
       }
@@ -141,11 +142,12 @@ const App: React.FC = () => {
     <Router>
       <Layout currentModule={currentModule} onModuleChange={setCurrentModule}>
         <Routes>
-          <Route path="/" element={<Dashboard module={currentModule} patients={patients} notes={notes} onUpdateStatus={updatePatientStatus} onUpdatePriority={updatePatientPriority} onModuleChange={setCurrentModule} />} />
+          <Route path="/" element={<Dashboard module={currentModule} patients={patients} notes={notes} onUpdateStatus={updatePatientStatus} onUpdatePriority={updatePatientPriority} onModuleChange={setCurrentModule} onUpdatePatient={updatePatient} />} />
           <Route path="/monitor" element={<HospitalMonitor patients={patients} onUpdatePatient={updatePatient} />} />
           <Route path="/new-patient" element={<NewPatient onAdd={addPatient} patients={patients} />} />
           <Route path="/edit-patient/:id" element={<NewPatient onAdd={updatePatient} patients={patients} />} />
           <Route path="/patient/:id" element={<PatientProfile patients={patients} notes={notes} onUpdatePatient={updatePatient} onSaveNote={addNote} />} />
+          <Route path="/history-registry" element={<HistoryRegistries patients={patients} notes={notes} />} />
           
           <Route path="/patient/:id/note/evolution" element={<EvolutionNote patients={patients} notes={notes} onSaveNote={addNote} />} />
           <Route path="/patient/:id/note/evolution/:noteId" element={<EvolutionNote patients={patients} notes={notes} onSaveNote={addNote} />} />
@@ -163,10 +165,10 @@ const App: React.FC = () => {
           <Route path="/patient/:id/history" element={<MedicalHistory patients={patients} notes={notes} onUpdatePatient={updatePatient} onSaveNote={addNote} />} />
           <Route path="/patient/:id/nursing-sheet" element={<NursingSheet patients={patients} onSaveNote={addNote} />} />
           <Route path="/patient/:id/auxiliary-order" element={<AuxiliaryOrder patients={patients} onSaveNote={addNote} />} />
-          <Route path="/patient/:id/auxiliary-report" element={<AuxiliaryReport patients={patients} notes={notes} onSaveNote={addNote} />} />
-          <Route path="/patient/:id/auxiliary-report/:orderId" element={<AuxiliaryReport patients={patients} notes={notes} onSaveNote={addNote} />} />
+          <Route path="/patient/:id/auxiliary-report" element={<AuxiliaryReport patients={patients} notes={notes} onSaveNote={addNote} onUpdatePatient={updatePatient} />} />
+          <Route path="/patient/:id/auxiliary-report/:orderId" element={<AuxiliaryReport patients={patients} notes={notes} onSaveNote={addNote} onUpdatePatient={updatePatient} />} />
           
-          <Route path="/auxiliary-intake" element={<AuxiliaryIntake patients={patients} onSaveNote={addNote} onUpdatePatient={updatePatient} />} />
+          <Route path="/auxiliary-intake" element={<AuxiliaryIntake patients={patients} onSaveNote={addNote} onUpdatePatient={updatePatient} onAddPatient={addPatient} />} />
 
           <Route path="/patient/:id/consent" element={<InformedConsent patients={patients} onSaveNote={addNote} />} />
           <Route path="/patient/:id/telemedicine-consent" element={<TelemedicineConsent patients={patients} onSaveNote={addNote} />} />
@@ -195,9 +197,10 @@ const App: React.FC = () => {
 const Layout = ({ children, currentModule, onModuleChange }: any) => {
   const location = useLocation();
   const menuItems = [
-    { icon: <Users className="w-5 h-5" />, label: 'Pacientes', path: '/' },
+    { icon: <Users className="w-5 h-5" />, label: 'Monitor Activo', path: '/' },
     { icon: <MonitorIcon className="w-5 h-5" />, label: 'Centro de Mando', path: '/monitor' },
-    { icon: <Calendar className="w-5 h-5" />, label: 'Agenda', path: '/agenda' },
+    { icon: <History className="w-5 h-5" />, label: 'Archivo Histórico', path: '/history-registry' },
+    { icon: <Calendar className="w-5 h-5" />, label: 'Agenda Operativa', path: '/agenda' },
     { icon: <Package className="w-5 h-5" />, label: 'Farmacia / Stock', path: '/inventory' },
     { icon: <FileSpreadsheet className="w-5 h-5" />, label: 'Hoja Diaria (SUIVE)', path: '/daily-report' },
     { icon: <ClipboardList className="w-5 h-5" />, label: 'Bitácoras', path: '/logs' },

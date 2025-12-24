@@ -85,6 +85,7 @@ export interface Patient {
   status: PatientStatus;
   priority: PriorityLevel;
   lastVisit: string;
+  scheduledDate?: string; // Para programación a futuro
   reason: string;
   chronicDiseases: string[];
   assignedModule: ModuleType;

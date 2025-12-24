@@ -1,69 +1,123 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { 
-  ChevronLeft, ShieldCheck, Save, Activity, Stethoscope, BookOpen, UserCheck, Lock, Pill
+  ChevronLeft, ShieldCheck, Save, Activity, Stethoscope, BookOpen, 
+  Lock, Pill, HeartPulse, Droplet, Thermometer, Wind,
+  ClipboardList, Calendar, MessageSquare, AlertCircle, Info, 
+  Search, Trash2, PlusCircle, Quote, FlaskConical, Zap, Repeat, ShieldAlert,
+  Clock, Clipboard, X, Heart, AlertTriangle, CheckCircle2, Maximize2, Scale, Ruler
 } from 'lucide-react';
-import { Patient, ClinicalNote } from '../../types';
+import { Patient, ClinicalNote, Vitals, MedicationPrescription, MedicationStock } from '../../types';
+import { VADEMECUM_DB } from '../../constants';
 
 const EvolutionNote: React.FC<{ patients: Patient[], notes: ClinicalNote[], onSaveNote: (n: ClinicalNote) => void }> = ({ patients, notes, onSaveNote }) => {
   const { id, noteId } = useParams();
   const navigate = useNavigate();
   const patient = patients.find(p => p.id === id);
 
+  // Cargar inventario real desde LocalStorage para validar stock
+  const inventory: MedicationStock[] = useMemo(() => {
+    const saved = localStorage.getItem('med_inventory_v6');
+    return saved ? JSON.parse(saved) : [];
+  }, []);
+
   const [form, setForm] = useState({
-    subjective: '',
-    objective: '',
-    analysis: '',
-    diagnosis: '',
-    plan: '',
-    prognosisLife: 'Bueno',
-    prognosisFunction: 'Bueno'
+    mainProblem: '',
+    secondaryProblems: '',
+    cieCode: 'CIE-11: ',
+    subjectiveNarrative: '', 
+    objectivePhysical: '', 
+    objectiveResults: '', 
+    vitalsInterpretation: 'Estable / Sin eventualidades',
+    analysisReasoning: '', 
+    differentialDiagnosis: '', 
+    pronosticoVida: 'Bueno',
+    pronosticoFuncion: 'Bueno',
+    pronosticoRecuperacion: 'Bueno',
+    nursingInstructions: '',
+    nonPharmaPlan: '',
+    medConciliation: '',
+    pharmacovigilance: 'Vigilar reacciones adversas comunes.',
+    seguimiento: 'Cita de control en 7 días.',
   });
 
-  const [isNoteFinalized, setIsNoteFinalized] = useState(false);
+  const [medications, setMedications] = useState<MedicationPrescription[]>([]);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [suggestions, setSuggestions] = useState<(MedicationStock & { inStock: number })[]>([]);
+  const [vitals, setVitals] = useState<Vitals | null>(null);
+  
+  // Estado para secciones expandidas
+  const [fullScreenSection, setFullScreenSection] = useState<string | null>(null);
 
   useEffect(() => {
-    if (noteId) {
-      const existing = notes.find(n => n.id === noteId);
-      if (existing) {
-        if (existing.isSigned) setIsNoteFinalized(true);
-        // Fix: Cast existing.content to any to fix property mismatch with evolution form state
-        setForm(existing.content as any);
+    if (patient) {
+      setVitals(patient.currentVitals || null);
+      if (noteId) {
+        const existing = notes.find(n => n.id === noteId);
+        if (existing) {
+          setForm(existing.content as any);
+          setMedications(existing.content.prescriptions || []);
+        }
       }
     }
-  }, [noteId, notes]);
+  }, [patient, noteId, notes]);
 
-  if (!patient) return null;
-  
-  if (isNoteFinalized) return (
-    <div className="p-20 text-center space-y-6">
-       <Lock className="w-16 h-16 text-rose-600 mx-auto" />
-       <h2 className="text-2xl font-black uppercase">Nota Sellada e Inmutable</h2>
-       <p className="text-slate-500 max-w-md mx-auto font-medium">Esta nota ya ha sido certificada conforme a la NOM-004 y no permite ediciones.</p>
-       <button onClick={() => navigate(`/patient/${id}`)} className="px-8 py-3 bg-slate-900 text-white rounded-xl font-black uppercase text-xs">Volver al Perfil</button>
-    </div>
-  );
+  const handleSearchMed = (val: string) => {
+    setSearchTerm(val);
+    if (val.length > 1) {
+      // Cruzar Vademécum con Inventario Real
+      const filtered = VADEMECUM_DB.map(v => {
+        const stockItem = inventory.find(i => i.name === v.name || i.genericName === v.genericName);
+        return { ...v, inStock: stockItem ? stockItem.currentStock : 0 };
+      }).filter(m => 
+        m.name.toLowerCase().includes(val.toLowerCase()) || 
+        m.genericName.toLowerCase().includes(val.toLowerCase())
+      );
+      setSuggestions(filtered);
+    } else {
+      setSuggestions([]);
+    }
+  };
+
+  const addMed = (med?: MedicationStock & { inStock?: number }) => {
+    const newMed: MedicationPrescription = {
+      id: `MED-${Date.now()}`,
+      name: med?.name || 'NUEVO FÁRMACO / INSUMO',
+      genericName: med?.genericName || '',
+      dosage: med?.concentration || '',
+      frequency: 'Cada 8 horas',
+      duration: '7 días',
+      route: 'Oral',
+      instructions: med && med.inStock === 0 ? 'NOTA: SIN EXISTENCIAS EN FARMACIA.' : ''
+    };
+    setMedications([...medications, newMed]);
+    setSearchTerm('');
+    setSuggestions([]);
+  };
+
+  const removeMed = (mid: string) => {
+    setMedications(medications.filter(m => m.id !== mid));
+  };
+
+  const updateMed = (mid: string, field: keyof MedicationPrescription, value: string) => {
+    setMedications(medications.map(m => m.id === mid ? { ...m, [field]: value } : m));
+  };
 
   const handleSave = (finalize: boolean = false, goToPrescription: boolean = false) => {
-    if (!form.subjective || !form.objective || !form.diagnosis) {
-      alert("Los campos SOAP (Subjetivo, Objetivo, Diagnóstico) son obligatorios.");
+    if (!form.mainProblem || !form.analysisReasoning) {
+      alert("Diagnóstico Principal y Análisis Clínico son obligatorios.");
       return;
-    }
-
-    if (finalize) {
-      const legalMsg = "¿Desea finalizar la nota y generar el documento ahora o seguir editando?\n\n(Al finalizar, el registro será inmutable conforme a la NOM-004)";
-      if (!window.confirm(legalMsg)) return;
     }
 
     const currentNoteId = noteId || `EVO-${Date.now()}`;
     const newNote: ClinicalNote = {
       id: currentNoteId,
-      patientId: patient.id,
-      type: 'Nota de Evolución (SOAP)',
+      patientId: patient?.id || '',
+      type: 'Nota de Evolución PSOAP',
       date: new Date().toLocaleString('es-MX'),
       author: 'Dr. Alejandro Méndez',
-      content: { ...form },
+      content: { ...form, vitals, prescriptions: medications },
       isSigned: finalize,
       hash: finalize ? `CERT-EVO-${Math.random().toString(36).substr(2, 9).toUpperCase()}` : undefined
     };
@@ -71,83 +125,395 @@ const EvolutionNote: React.FC<{ patients: Patient[], notes: ClinicalNote[], onSa
     onSaveNote(newNote);
 
     if (goToPrescription) {
-      // Navegación inmediata a receta con diagnóstico
       navigate(`/patient/${id}/prescription`, { 
         state: { 
-          diagnosis: form.diagnosis, 
-          indicaciones: form.plan 
+          diagnosis: form.mainProblem, 
+          meds: medications,
+          generalPlan: form.nonPharmaPlan,
+          cieCode: form.cieCode
         } 
       });
     } else {
-      // Navegación inmediata al perfil y apertura del visor si está finalizada
-      navigate(`/patient/${id}`, { 
-        state: finalize ? { openNoteId: currentNoteId } : {} 
-      });
+      navigate(`/patient/${id}`, { state: finalize ? { openNoteId: currentNoteId } : {} });
     }
   };
 
+  const SectionHeader = ({ title, icon, onExpand }: { title: string, icon: React.ReactNode, onExpand?: () => void }) => (
+    <div className="flex justify-between items-center mb-2">
+      <label className="text-[11px] font-black text-slate-700 uppercase tracking-widest flex items-center gap-2">
+         {icon} {title}
+      </label>
+      {onExpand && (
+        <button onClick={onExpand} className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all" title="Expandir sección">
+          <Maximize2 size={14} />
+        </button>
+      )}
+    </div>
+  );
+
+  const FullScreenModal = ({ title, value, onChange, onClose }: any) => (
+    <div className="fixed inset-0 z-50 bg-white/95 backdrop-blur-sm flex flex-col p-6 animate-in fade-in">
+      <div className="flex justify-between items-center mb-4 border-b border-slate-200 pb-4">
+        <h2 className="text-2xl font-black text-slate-900 uppercase tracking-tight">{title}</h2>
+        <button onClick={onClose} className="p-3 bg-slate-100 rounded-full hover:bg-slate-200 transition-all"><X size={24} /></button>
+      </div>
+      <textarea 
+        className="flex-1 w-full p-6 text-lg font-medium leading-relaxed bg-white border border-slate-200 rounded-2xl outline-none focus:border-blue-500 resize-none shadow-inner text-slate-900"
+        value={value}
+        onChange={onChange}
+        autoFocus
+        placeholder="Escriba detalladamente..."
+      />
+      <div className="mt-4 flex justify-end">
+        <button onClick={onClose} className="px-8 py-3 bg-slate-900 text-white rounded-xl font-black uppercase text-sm shadow-lg hover:bg-blue-600 transition-all">Guardar y Cerrar</button>
+      </div>
+    </div>
+  );
+
+  if (!patient) return null;
+
   return (
-    <div className="max-w-4xl mx-auto pb-40 animate-in fade-in">
-      <div className="bg-white border-b-8 border-blue-600 p-8 rounded-t-[3rem] shadow-2xl mb-8 flex justify-between items-center">
-        <div className="flex items-center gap-6">
-          <button onClick={() => navigate(-1)} className="p-4 bg-slate-900 text-white rounded-2xl hover:bg-blue-600 transition-all shadow-xl">
+    <div className="max-w-full mx-auto pb-20 animate-in fade-in duration-500 text-slate-900">
+      {/* Header Compacto Profesional */}
+      <div className="bg-white border-b border-slate-200 p-4 shadow-sm mb-6 flex justify-between items-center no-print sticky top-0 z-40 backdrop-blur-md bg-white/90">
+        <div className="flex items-center gap-4">
+          <button onClick={() => navigate(-1)} className="p-2 bg-slate-100 text-slate-600 rounded-xl hover:bg-slate-900 hover:text-white transition-all">
             <ChevronLeft size={20} />
           </button>
           <div>
-            <h1 className="text-2xl font-black text-slate-900 uppercase tracking-tight">
-              {noteId ? 'Editando Nota' : 'Nueva Nota de Evolución'}
-            </h1>
-            <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest mt-1">Formato SOAP • NOM-004</p>
+            <h1 className="text-lg font-black text-slate-900 uppercase tracking-tight leading-none">Nota de Evolución</h1>
+            <div className="flex items-center gap-2 mt-1">
+               <span className="text-[9px] bg-slate-100 px-2 py-0.5 rounded text-slate-500 font-bold uppercase">PSOAP</span>
+               <span className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">NOM-004-SSA3</span>
+            </div>
           </div>
         </div>
+        <div className="text-right">
+           <p className="text-sm font-black text-slate-900 uppercase leading-none">{patient.name}</p>
+           <p className="text-[10px] text-slate-500 font-bold uppercase mt-0.5">Exp: {patient.id}</p>
+        </div>
       </div>
 
-      <div className="bg-white border border-slate-200 shadow-2xl rounded-[3rem] p-12 space-y-10">
-        <div className="space-y-6">
-           <div className="space-y-4">
-              <label className="text-[10px] font-black text-slate-900 uppercase tracking-widest flex items-center gap-3">
-                 <UserCheck className="text-blue-600 w-4 h-4" /> (S) Subjetivo
-              </label>
-              <textarea className="w-full p-6 bg-slate-50 border border-slate-200 rounded-2xl h-24 text-sm outline-none italic focus:bg-white" value={form.subjective} onChange={e => setForm({...form, subjective: e.target.value})} />
+      <div className="bg-white border border-slate-200 shadow-xl rounded-[2rem] overflow-hidden flex flex-col lg:flex-row print:border-none print:shadow-none print:rounded-none">
+        
+        {/* SIDEBAR IZQUIERDO: VITALES Y SEGURIDAD */}
+        <div className="w-full lg:w-80 bg-slate-50 border-r border-slate-200 flex flex-col print:hidden shrink-0">
+           
+           {/* SIGNOS VITALES COMPLETOS */}
+           <div className="p-6 border-b border-slate-200">
+              <h3 className="text-[10px] font-black uppercase tracking-widest text-slate-500 flex items-center gap-2 mb-4">
+                 <Activity size={14} className="text-slate-900" /> Signos Vitales
+              </h3>
+              <div className="grid grid-cols-2 gap-3">
+                 {[
+                   { l: 'T.A.', v: vitals?.bp || '--', u: 'mmHg', icon: <Activity size={12} className="text-blue-500" /> },
+                   { l: 'F.C.', v: vitals?.hr || '--', u: 'lpm', icon: <HeartPulse size={12} className="text-rose-500" /> },
+                   { l: 'F.R.', v: vitals?.rr || '--', u: 'rpm', icon: <Wind size={12} className="text-emerald-500" /> },
+                   { l: 'Temp', v: vitals?.temp || '--', u: '°C', icon: <Thermometer size={12} className="text-amber-500" /> },
+                   { l: 'SatO2', v: vitals?.o2 || '--', u: '%', icon: <Droplet size={12} className="text-cyan-500" /> },
+                   { l: 'Peso', v: vitals?.weight || '--', u: 'kg', icon: <Scale size={12} className="text-indigo-500" /> },
+                   { l: 'Talla', v: vitals?.height || '--', u: 'cm', icon: <Ruler size={12} className="text-violet-500" /> },
+                   { l: 'IMC', v: vitals?.bmi || '--', u: '', icon: <Activity size={12} className="text-slate-400" /> }
+                 ].map(item => (
+                   <div key={item.l} className="bg-white p-3 rounded-xl border border-slate-100 shadow-sm flex flex-col justify-between">
+                      <div className="flex items-center gap-2 mb-1">
+                         {item.icon}
+                         <span className="text-[8px] font-black text-slate-400 uppercase">{item.l}</span>
+                      </div>
+                      <p className="text-sm font-black text-slate-900 leading-none">
+                        {item.v} <span className="text-[8px] text-slate-400 font-medium">{item.u}</span>
+                      </p>
+                   </div>
+                 ))}
+              </div>
            </div>
 
-           <div className="space-y-4">
-              <label className="text-[10px] font-black text-slate-900 uppercase tracking-widest flex items-center gap-3">
-                 <Activity className="text-blue-600 w-4 h-4" /> (O) Objetivo
-              </label>
-              <textarea className="w-full p-6 bg-slate-50 border border-slate-200 rounded-2xl h-24 text-sm outline-none italic focus:bg-white" value={form.objective} onChange={e => setForm({...form, objective: e.target.value})} />
+           {/* SEGURIDAD FARMACOLÓGICA */}
+           <div className="p-6 space-y-6 border-b border-slate-200">
+              <div className="space-y-2">
+                 <h3 className="text-[9px] font-black uppercase tracking-widest text-slate-500 flex items-center gap-2">
+                    <Repeat size={12} /> Conciliación
+                 </h3>
+                 <textarea 
+                    className="w-full p-3 text-[10px] font-medium bg-white border border-slate-200 rounded-xl h-20 outline-none resize-none focus:border-slate-400 transition-all text-slate-900"
+                    placeholder="Medicamentos previos..."
+                    value={form.medConciliation}
+                    onChange={e => setForm({...form, medConciliation: e.target.value})}
+                 />
+              </div>
+              <div className="space-y-2">
+                 <h3 className="text-[9px] font-black uppercase tracking-widest text-slate-500 flex items-center gap-2">
+                    <ShieldAlert size={12} /> Farmacovigilancia
+                 </h3>
+                 <textarea 
+                    className="w-full p-3 text-[10px] font-medium bg-white border border-slate-200 rounded-xl h-20 outline-none resize-none focus:border-slate-400 transition-all text-slate-900"
+                    placeholder="Reacciones adversas..."
+                    value={form.pharmacovigilance}
+                    onChange={e => setForm({...form, pharmacovigilance: e.target.value})}
+                 />
+              </div>
            </div>
 
-           <div className="space-y-4">
-              <label className="text-[10px] font-black text-slate-900 uppercase tracking-widest flex items-center gap-3">
-                 <BookOpen className="text-blue-600 w-4 h-4" /> (A) Análisis y Diagnóstico
-              </label>
-              <textarea className="w-full p-6 bg-slate-900 text-white rounded-2xl h-24 text-xs font-black uppercase outline-none shadow-xl" value={form.diagnosis} onChange={e => setForm({...form, diagnosis: e.target.value})} />
+           {/* INDICACIONES ENFERMERÍA */}
+           <div className="p-6 border-b border-slate-200">
+              <h3 className="text-[9px] font-black uppercase tracking-widest text-slate-500 flex items-center gap-2 mb-2">
+                 <Clipboard size={12} /> Enfermería / Pendientes
+              </h3>
+              <textarea 
+                 className="w-full p-3 text-[10px] font-bold bg-white border border-slate-200 rounded-xl h-32 outline-none resize-none focus:border-slate-400 transition-all text-slate-900"
+                 value={form.nursingInstructions}
+                 onChange={e => setForm({...form, nursingInstructions: e.target.value})}
+              />
            </div>
 
-           <div className="space-y-4">
-              <label className="text-[10px] font-black text-slate-900 uppercase tracking-widest flex items-center gap-3">
-                 <Stethoscope className="text-blue-600 w-4 h-4" /> (P) Plan Terapéutico
-              </label>
-              <textarea className="w-full p-6 bg-slate-50 border border-slate-200 rounded-2xl h-24 text-sm outline-none focus:bg-white" value={form.plan} onChange={e => setForm({...form, plan: e.target.value})} />
+           {/* PRONÓSTICOS */}
+           <div className="p-6 space-y-4 bg-slate-50">
+              <h3 className="text-[9px] font-black uppercase tracking-widest text-slate-400">Pronósticos</h3>
+              {[
+                { l: 'Vida', k: 'pronosticoVida' },
+                { l: 'Función', k: 'pronosticoFuncion' },
+                { l: 'Recuperación', k: 'pronosticoRecuperacion' }
+              ].map(item => (
+                <div key={item.k} className="flex items-center justify-between">
+                   <span className="text-[10px] font-bold text-slate-600 uppercase">{item.l}</span>
+                   <select 
+                     className="bg-white border border-slate-200 rounded-lg py-1 px-2 text-[9px] font-black uppercase outline-none focus:border-slate-400 text-slate-900"
+                     value={(form as any)[item.k]}
+                     onChange={e => setForm({...form, [item.k]: e.target.value})}
+                   >
+                      <option>Bueno</option>
+                      <option>Reservado</option>
+                      <option>Malo</option>
+                   </select>
+                </div>
+              ))}
            </div>
         </div>
 
-        <div className="pt-10 border-t border-slate-100 flex flex-col md:flex-row justify-between items-center gap-6 no-print">
-           <button onClick={() => navigate(-1)} className="px-8 py-4 text-slate-400 font-black uppercase text-[10px]">Cancelar</button>
-           <div className="flex flex-wrap gap-4 w-full md:w-auto">
-              <button onClick={() => handleSave(false, false)} className="px-8 py-5 bg-slate-100 text-slate-900 border border-slate-200 rounded-[2rem] font-black text-[10px] uppercase tracking-widest hover:bg-slate-200 transition-all flex items-center gap-3">
-                 <Save size={16} /> Guardar Borrador
-              </button>
-              <button onClick={() => handleSave(true, false)} className="px-10 py-5 bg-slate-900 text-white rounded-[2rem] font-black text-[10px] uppercase tracking-widest shadow-xl hover:bg-blue-600 transition-all flex items-center gap-3">
-                 <ShieldCheck size={18} /> Finalizar y Sellar Nota
-              </button>
-              <button onClick={() => handleSave(true, true)} className="px-10 py-5 bg-blue-600 text-white rounded-[2rem] font-black text-[10px] uppercase tracking-[0.2em] shadow-2xl hover:bg-emerald-600 transition-all flex items-center gap-3">
-                 <Pill size={18} /> Sellar y Generar Receta
+        {/* CUERPO CENTRAL PSOAP */}
+        <div className="flex-1 flex flex-col bg-white overflow-hidden print:overflow-visible">
+           <div className="flex-1 overflow-y-auto p-8 lg:p-10 space-y-8 no-scrollbar print:p-0 print:overflow-visible">
+              
+              {/* P: PROBLEMAS (DIAGNÓSTICO) */}
+              <div className="bg-slate-50 border border-slate-200 p-6 rounded-2xl space-y-4 print:bg-white print:border-none print:p-0">
+                 <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
+                    <div className="md:col-span-9 space-y-1">
+                       <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Diagnóstico Principal</label>
+                       <input 
+                          className="w-full p-3 bg-white border border-slate-200 rounded-xl text-sm font-black uppercase outline-none focus:border-blue-500 shadow-sm transition-all text-slate-900" 
+                          placeholder="Escriba el diagnóstico..." 
+                          value={form.mainProblem} 
+                          onChange={e => setForm({...form, mainProblem: e.target.value})} 
+                       />
+                    </div>
+                    <div className="md:col-span-3 space-y-1">
+                       <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">CIE-11 / CIE-10</label>
+                       <input 
+                          className="w-full p-3 bg-slate-900 text-white border-none rounded-xl text-xs font-black uppercase outline-none text-center shadow-md" 
+                          placeholder="CÓDIGO" 
+                          value={form.cieCode} 
+                          onChange={e => setForm({...form, cieCode: e.target.value})} 
+                       />
+                    </div>
+                 </div>
+                 <div className="space-y-1">
+                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Diagnósticos Secundarios / Comorbilidades</label>
+                    <textarea 
+                       className="w-full p-3 bg-white border border-slate-200 rounded-xl text-xs font-bold uppercase outline-none focus:border-blue-500 shadow-sm h-16 resize-none text-slate-900"
+                       placeholder="Otros diagnósticos activos..."
+                       value={form.secondaryProblems}
+                       onChange={e => setForm({...form, secondaryProblems: e.target.value})}
+                    />
+                 </div>
+              </div>
+
+              {/* S: SUBJETIVO */}
+              <div>
+                 <SectionHeader 
+                    title="S: Subjetivo (Interrogatorio)" 
+                    icon={<MessageSquare size={16} className="text-blue-600" />} 
+                    onExpand={() => setFullScreenSection('S')}
+                 />
+                 <div className="bg-slate-50 border border-slate-200 rounded-2xl overflow-hidden shadow-sm hover:border-slate-300 transition-colors focus-within:bg-white focus-within:border-blue-400 focus-within:ring-4 focus-within:ring-blue-50">
+                    <textarea 
+                      className="w-full p-5 text-sm leading-relaxed outline-none h-40 resize-none text-slate-900 bg-white placeholder-slate-400"
+                      placeholder="Síntomas, evolución según paciente (ALICIA)..." 
+                      value={form.subjectiveNarrative} 
+                      onChange={e => setForm({...form, subjectiveNarrative: e.target.value})}
+                    />
+                 </div>
+              </div>
+
+              {/* O: OBJETIVO */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                 <div>
+                    <SectionHeader 
+                       title="O: Exploración Física" 
+                       icon={<Stethoscope size={16} className="text-indigo-600" />} 
+                       onExpand={() => setFullScreenSection('O1')}
+                    />
+                    <div className="bg-slate-50 border border-slate-200 rounded-2xl overflow-hidden shadow-sm hover:border-slate-300 transition-colors focus-within:bg-white focus-within:border-indigo-400 focus-within:ring-4 focus-within:ring-indigo-50">
+                       <textarea 
+                          className="w-full p-5 text-sm leading-relaxed outline-none h-48 resize-none text-slate-900 bg-white placeholder-slate-400" 
+                          placeholder="Hallazgos físicos relevantes..." 
+                          value={form.objectivePhysical} 
+                          onChange={e => setForm({...form, objectivePhysical: e.target.value})} 
+                       />
+                    </div>
+                 </div>
+                 <div>
+                    <SectionHeader 
+                       title="O: Resultados de Estudios" 
+                       icon={<FlaskConical size={16} className="text-indigo-600" />} 
+                       onExpand={() => setFullScreenSection('O2')}
+                    />
+                    <div className="bg-slate-50 border border-slate-200 rounded-2xl overflow-hidden shadow-sm hover:border-slate-300 transition-colors focus-within:bg-white focus-within:border-indigo-400 focus-within:ring-4 focus-within:ring-indigo-50">
+                       <textarea 
+                          className="w-full p-5 text-sm font-medium outline-none h-48 resize-none text-slate-900 uppercase bg-white placeholder-slate-400" 
+                          placeholder="Laboratorio y Gabinete..." 
+                          value={form.objectiveResults} 
+                          onChange={e => setForm({...form, objectiveResults: e.target.value})} 
+                       />
+                    </div>
+                 </div>
+              </div>
+
+              {/* A: ANÁLISIS */}
+              <div>
+                 <SectionHeader 
+                    title="A: Análisis y Juicio Clínico" 
+                    icon={<BookOpen size={16} className="text-amber-600" />} 
+                    onExpand={() => setFullScreenSection('A')}
+                 />
+                 <div className="bg-slate-50 border border-slate-200 rounded-2xl overflow-hidden shadow-sm hover:border-amber-300 transition-colors focus-within:bg-white focus-within:border-amber-400 focus-within:ring-4 focus-within:ring-amber-50">
+                    <textarea 
+                        className="w-full p-5 text-sm font-medium leading-relaxed outline-none h-32 resize-none text-slate-900 bg-white placeholder-slate-400" 
+                        placeholder="Integración diagnóstica, justificación terapéutica..." 
+                        value={form.analysisReasoning} 
+                        onChange={e => setForm({...form, analysisReasoning: e.target.value})} 
+                    />
+                 </div>
+              </div>
+
+              {/* P: PLAN (Rp.) */}
+              <div className="pt-6 border-t-2 border-slate-100">
+                 <div className="flex justify-between items-center mb-4">
+                    <label className="text-[11px] font-black text-emerald-700 uppercase tracking-widest flex items-center gap-2">
+                       <Pill size={16} /> P: Plan Terapéutico (Rp.)
+                    </label>
+                    <div className="flex gap-2">
+                       <div className="relative">
+                          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-3.5 h-3.5" />
+                          <input 
+                            className="pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-[10px] font-black uppercase outline-none focus:bg-white focus:border-blue-400 w-64 shadow-sm transition-all"
+                            placeholder="Buscar Fármaco (Vademécum)..."
+                            value={searchTerm}
+                            onChange={e => handleSearchMed(e.target.value)}
+                          />
+                          {suggestions.length > 0 && (
+                            <div className="absolute top-full right-0 w-80 mt-2 bg-white border border-slate-200 rounded-xl shadow-2xl z-50 max-h-60 overflow-y-auto animate-in fade-in zoom-in-95">
+                               {suggestions.map(s => (
+                                  <button key={s.id} onClick={() => addMed(s)} className="w-full text-left p-3 hover:bg-slate-50 border-b border-slate-50 last:border-0 transition-colors flex justify-between items-center group">
+                                     <div>
+                                        <p className="text-[10px] font-black uppercase text-slate-900">{s.name}</p>
+                                        <p className="text-[9px] text-slate-500 font-bold uppercase">{s.genericName}</p>
+                                     </div>
+                                     <span className={`px-2 py-1 rounded-lg text-[8px] font-black uppercase ${s.inStock > 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'}`}>
+                                        {s.inStock > 0 ? `Stock: ${s.inStock}` : 'Agotado'}
+                                     </span>
+                                  </button>
+                               ))}
+                            </div>
+                          )}
+                       </div>
+                       <button onClick={() => addMed()} className="px-4 py-2 bg-white border border-slate-200 text-slate-600 rounded-xl text-[10px] font-black uppercase flex items-center gap-2 hover:bg-slate-50 transition-all shadow-sm">
+                          <PlusCircle size={14} /> Libre
+                       </button>
+                    </div>
+                 </div>
+
+                 <div className="space-y-3">
+                    {medications.map((m, idx) => (
+                       <div key={m.id} className="p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-3 relative group hover:shadow-md transition-all">
+                          <div className="flex justify-between items-center">
+                             <div className="flex-1 flex items-center gap-3">
+                                <span className="w-6 h-6 bg-slate-200 text-slate-500 rounded-lg flex items-center justify-center font-black text-[10px]">{idx + 1}</span>
+                                <input className="bg-transparent border-none p-0 text-sm font-black text-slate-900 uppercase w-full outline-none focus:ring-0" value={m.name} onChange={e => updateMed(m.id, 'name', e.target.value.toUpperCase())} />
+                             </div>
+                             <button onClick={() => removeMed(m.id)} className="text-slate-300 hover:text-rose-600 transition-colors p-2"><X size={16} /></button>
+                          </div>
+                          
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                             {['dosage', 'frequency', 'route', 'duration'].map(f => (
+                               <div key={f} className="space-y-1">
+                                  <label className="text-[8px] text-slate-400 font-black uppercase block ml-1">{f === 'dosage' ? 'Dosis' : f === 'frequency' ? 'Frecuencia' : f === 'route' ? 'Vía' : 'Duración'}</label>
+                                  <input className="w-full p-2 bg-white border border-slate-200 rounded-lg text-[10px] font-bold uppercase outline-none focus:border-blue-400 shadow-sm text-slate-900" value={(m as any)[f]} onChange={e => updateMed(m.id, f as any, e.target.value)} />
+                               </div>
+                             ))}
+                          </div>
+                          
+                          <input className="w-full p-2 bg-white border border-slate-200 rounded-lg text-[10px] font-medium italic outline-none focus:border-emerald-300 shadow-sm text-slate-600" placeholder="Instrucciones adicionales..." value={m.instructions} onChange={e => updateMed(m.id, 'instructions', e.target.value)} />
+                       </div>
+                    ))}
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+                       <div className="space-y-2">
+                          <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1 flex items-center gap-2"><ClipboardList size={14} /> Plan No Farmacológico</label>
+                          <textarea 
+                             className="w-full p-4 text-[11px] bg-slate-50 border border-slate-200 rounded-2xl outline-none h-24 resize-none focus:bg-white focus:border-blue-400 transition-all text-slate-900 bg-white" 
+                             placeholder="Dieta, medidas generales, cuidados..." 
+                             value={form.nonPharmaPlan} 
+                             onChange={e => setForm({...form, nonPharmaPlan: e.target.value})} 
+                          />
+                       </div>
+                       <div className="space-y-2">
+                          <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1 flex items-center gap-2"><Clock size={14} /> Pronóstico y Seguimiento</label>
+                          <textarea 
+                             className="w-full p-4 text-[11px] bg-slate-50 border border-slate-200 rounded-2xl outline-none h-24 resize-none focus:bg-white focus:border-blue-400 transition-all text-slate-900 bg-white" 
+                             value={form.seguimiento} 
+                             onChange={e => setForm({...form, seguimiento: e.target.value})} 
+                          />
+                       </div>
+                    </div>
+                 </div>
+              </div>
+           </div>
+
+           {/* ACCIONES FINALES */}
+           <div className="p-6 bg-white border-t border-slate-100 flex flex-wrap justify-between items-center gap-4 no-print sticky bottom-0 z-30">
+              <div className="flex gap-3">
+                 <button onClick={() => handleSave(false, false)} className="px-6 py-3 bg-slate-100 text-slate-600 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-200 transition-all">Guardar Borrador</button>
+                 <button onClick={() => handleSave(true, false)} className="px-6 py-3 bg-slate-800 text-white rounded-xl font-black text-[10px] uppercase tracking-widest shadow-lg hover:bg-slate-900 transition-all">Certificar Nota</button>
+              </div>
+              <button 
+                onClick={() => handleSave(true, true)} 
+                className="px-8 py-4 bg-blue-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-[0.15em] shadow-xl hover:bg-blue-700 transition-all flex items-center gap-3"
+              >
+                 <Pill size={18} /> Finalizar y Recetar
               </button>
            </div>
         </div>
       </div>
+
+      {/* MODALES DE PANTALLA COMPLETA */}
+      {fullScreenSection && (
+        <FullScreenModal 
+          title={fullScreenSection === 'S' ? 'Subjetivo' : fullScreenSection === 'O1' ? 'Exploración Física' : fullScreenSection === 'O2' ? 'Resultados' : 'Análisis Clínico'}
+          value={
+            fullScreenSection === 'S' ? form.subjectiveNarrative : 
+            fullScreenSection === 'O1' ? form.objectivePhysical : 
+            fullScreenSection === 'O2' ? form.objectiveResults : 
+            form.analysisReasoning
+          }
+          onChange={(e: any) => {
+             if (fullScreenSection === 'S') setForm({...form, subjectiveNarrative: e.target.value});
+             if (fullScreenSection === 'O1') setForm({...form, objectivePhysical: e.target.value});
+             if (fullScreenSection === 'O2') setForm({...form, objectiveResults: e.target.value});
+             if (fullScreenSection === 'A') setForm({...form, analysisReasoning: e.target.value});
+          }}
+          onClose={() => setFullScreenSection(null)}
+        />
+      )}
     </div>
   );
 };
