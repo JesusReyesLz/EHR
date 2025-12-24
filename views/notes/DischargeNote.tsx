@@ -7,7 +7,8 @@ import {
 } from 'lucide-react';
 import { Patient, ClinicalNote } from '../../types';
 
-const DischargeNote: React.FC<{ patients: Patient[], onSaveNote: (n: ClinicalNote) => void }> = ({ patients, onSaveNote }) => {
+// Fix: Add notes to props interface to satisfy App.tsx and fix property missing errors
+const DischargeNote: React.FC<{ patients: Patient[], notes: ClinicalNote[], onSaveNote: (n: ClinicalNote) => void }> = ({ patients, notes, onSaveNote }) => {
   const { id, noteId } = useParams();
   const navigate = useNavigate();
   const patient = patients.find(p => p.id === id);
@@ -24,13 +25,13 @@ const DischargeNote: React.FC<{ patients: Patient[], onSaveNote: (n: ClinicalNot
     dischargePlan: ''
   });
 
+  // Fix: Use notes prop instead of local storage for consistent app state
   useEffect(() => {
     if (noteId) {
-      const savedNotes = JSON.parse(localStorage.getItem('med_notes_v5') || '[]');
-      const noteToEdit = savedNotes.find((n: ClinicalNote) => n.id === noteId);
-      if (noteToEdit) setForm(noteToEdit.content);
+      const noteToEdit = notes.find((n: ClinicalNote) => n.id === noteId);
+      if (noteToEdit) setForm(noteToEdit.content as any);
     }
-  }, [noteId]);
+  }, [noteId, notes]);
 
   if (!patient) return null;
 

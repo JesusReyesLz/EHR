@@ -2,11 +2,12 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { 
-  ChevronLeft, ShieldCheck, Save, Scissors, Activity, HeartPulse, ClipboardCheck, Info, Droplets, UserCheck
+  ChevronLeft, ShieldCheck, Save, Scissors, Activity, HeartPulse, ClipboardCheck, Info, Droplets, UserCheck, Lock
 } from 'lucide-react';
 import { Patient, ClinicalNote } from '../../types';
 
-const SurgicalNote: React.FC<{ patients: Patient[], onSaveNote: (n: ClinicalNote) => void }> = ({ patients, onSaveNote }) => {
+// Fix: Add notes to props interface to match routing in App.tsx
+const SurgicalNote: React.FC<{ patients: Patient[], notes: ClinicalNote[], onSaveNote: (n: ClinicalNote) => void }> = ({ patients, notes, onSaveNote }) => {
   const { id, noteId } = useParams();
   const location = useLocation();
   const navigate = useNavigate();
@@ -14,6 +15,7 @@ const SurgicalNote: React.FC<{ patients: Patient[], onSaveNote: (n: ClinicalNote
   const type = location.state?.noteType || 'Nota Post-operatoria';
 
   const isPost = type.includes('Post');
+  const [isNoteFinalized, setIsNoteFinalized] = useState(false);
 
   const [form, setForm] = useState({
     diagnosisPre: '',
@@ -30,29 +32,46 @@ const SurgicalNote: React.FC<{ patients: Patient[], onSaveNote: (n: ClinicalNote
     technique: ''
   });
 
+  // Fix: Use notes prop instead of direct localStorage to resolve note to edit
   useEffect(() => {
     if (noteId) {
-      const savedNotes = JSON.parse(localStorage.getItem('med_notes_v5') || '[]');
-      const noteToEdit = savedNotes.find((n: ClinicalNote) => n.id === noteId);
-      if (noteToEdit) setForm(noteToEdit.content);
+      const noteToEdit = notes.find((n: ClinicalNote) => n.id === noteId);
+      if (noteToEdit) {
+        if (noteToEdit.isSigned) setIsNoteFinalized(true);
+        setForm(noteToEdit.content as any);
+      }
     }
-  }, [noteId]);
+  }, [noteId, notes]);
 
   if (!patient) return null;
+  if (isNoteFinalized) return (
+    <div className="p-20 text-center space-y-6">
+       <Lock className="w-16 h-16 text-rose-600 mx-auto" />
+       <h2 className="text-2xl font-black uppercase">Registro Quirúrgico Inmutable</h2>
+       <p className="text-slate-500 max-w-md mx-auto font-medium">Este documento ya ha sido sellado legalmente y forma parte inalterable del expediente clínico.</p>
+       <button onClick={() => navigate(`/patient/${id}`)} className="px-8 py-3 bg-slate-900 text-white rounded-xl font-black uppercase text-xs">Cerrar</button>
+    </div>
+  );
 
-  const handleSave = () => {
+  const handleSave = (finalize: boolean) => {
+    if (finalize) {
+      const legalMsg = "Atención: Al finalizar este registro médico quirúrgico, se integrará de forma permanente al expediente clínico conforme a la NOM-004-SSA3-2012. Una vez certificado, NO podrá ser editado ni eliminado. ¿Desea proceder?";
+      if (!window.confirm(legalMsg)) return;
+    }
+
+    const currentNoteId = noteId || `SURG-${Date.now()}`;
     const newNote: ClinicalNote = {
-      id: noteId || `SURG-${Date.now()}`,
+      id: currentNoteId,
       patientId: patient.id,
       type: type,
       date: new Date().toLocaleString('es-MX'),
       author: form.surgeon,
       content: { ...form },
-      isSigned: true,
-      hash: `CERT-SURG-${Math.random().toString(36).substr(2, 9).toUpperCase()}`
+      isSigned: finalize,
+      hash: finalize ? `CERT-SURG-${Math.random().toString(36).substr(2, 9).toUpperCase()}` : undefined
     };
     onSaveNote(newNote);
-    navigate(`/patient/${id}`);
+    navigate(`/patient/${id}`, { state: finalize ? { openNoteId: currentNoteId } : {} });
   };
 
   return (
@@ -110,13 +129,14 @@ const SurgicalNote: React.FC<{ patients: Patient[], onSaveNote: (n: ClinicalNote
            )}
         </div>
 
-        <div className="pt-10 border-t border-slate-100 flex justify-end">
-           <div className="flex gap-4">
-              <button onClick={() => navigate(-1)} className="px-8 py-4 text-slate-400 font-black uppercase text-[10px]">Descartar</button>
-              <button onClick={handleSave} className="px-12 py-5 bg-indigo-600 text-white rounded-[2rem] font-black text-[11px] uppercase tracking-[0.2em] shadow-2xl hover:bg-slate-900 transition-all flex items-center gap-4">
-                 <Save size={20} /> Guardar Nota
-              </button>
-           </div>
+        <div className="pt-10 border-t border-slate-100 flex justify-end gap-4">
+            <button onClick={() => navigate(-1)} className="px-8 py-4 text-slate-400 font-black uppercase text-[10px]">Descartar</button>
+            <button onClick={() => handleSave(false)} className="px-10 py-5 bg-slate-100 text-slate-900 border border-slate-200 rounded-[2rem] font-black text-[10px] uppercase tracking-widest">
+               <Save size={18} className="inline mr-2" /> Guardar Avance
+            </button>
+            <button onClick={() => handleSave(true)} className="px-12 py-5 bg-indigo-600 text-white rounded-[2rem] font-black text-[10px] uppercase tracking-[0.2em] shadow-2xl hover:bg-slate-900 transition-all flex items-center gap-4">
+               <ShieldCheck size={20} /> Certificar y Finalizar
+            </button>
         </div>
       </div>
     </div>

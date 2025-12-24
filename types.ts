@@ -5,15 +5,30 @@ export enum ModuleType {
   HOSPITALIZATION = 'Hospitalización',
   AUXILIARY = 'Auxiliares',
   ADMIN = 'Gestión y Normatividad',
-  INVENTORY = 'Inventario Farmacéutico'
+  INVENTORY = 'Inventario Farmacéutico',
+  MONITOR = 'Monitor Hospitalario'
 }
 
 export enum PatientStatus {
-  TRIAGE = 'Triage',
-  WAITING = 'En espera',
+  TRIAGE = 'En Triage',
+  WAITING = 'En sala de espera',
+  TRANSIT = 'En camino a sala',
+  IN_ROOM = 'En sala (Listo)',
   IN_CONSULTATION = 'En consulta',
+  PROCEDURE = 'En procedimiento',
+  RECOVERY = 'En recuperación',
   ADMITTED = 'Ingresado',
-  ATTENDED = 'Atendido'
+  ATTENDED = 'Atendido',
+  WAITING_RESULTS = 'Esperando Resultados',
+  SAMPLE_TAKEN = 'Muestra Tomada'
+}
+
+export enum PriorityLevel {
+  CRITICAL = '1 - Crítico (Rojo)',
+  HIGH = '2 - Emergencia (Naranja)',
+  MEDIUM = '3 - Urgencia (Amarillo)',
+  LOW = '4 - No Urgente (Verde)',
+  ROUTINE = '5 - Rutina (Azul)'
 }
 
 export enum MedicationCategory {
@@ -39,7 +54,6 @@ export interface Vitals {
 export interface MedicationPrescription {
   id: string;
   name: string;
-  // Añadiendo campos para compatibilidad con vademécum en recetas
   genericName?: string;
   presentation?: string;
   dosage: string;
@@ -67,6 +81,7 @@ export interface Patient {
   bloodType: string;
   allergies: string[];
   status: PatientStatus;
+  priority: PriorityLevel;
   lastVisit: string;
   reason: string;
   chronicDiseases: string[];
@@ -85,11 +100,13 @@ export interface Patient {
   occupation?: string;
   religion?: string;
   education?: string;
-  // Fix: added missing properties to support NewPatient form and resolve residence property error
   residence?: string;
   ethnicGroup?: string;
   indigenousLanguage?: boolean;
   medicalInsurance?: string;
+  attendingDoctor?: string; 
+  triageLevel?: 'Rojo' | 'Amarillo' | 'Verde'; 
+  waitingStartTime?: string;
 }
 
 export interface ClinicalNote {
@@ -104,25 +121,8 @@ export interface ClinicalNote {
     analysis?: string;
     plan?: string;
     diagnosis?: string;
-    prognosisLife?: string;
-    prognosisFunction?: string;
-    prognosisRecovery?: string;
     vitals?: Vitals;
     prescriptions?: MedicationPrescription[];
-    // Campos quirúrgicos
-    operationPlanned?: string;
-    operationRealized?: string;
-    technique?: string;
-    findings?: string;
-    gasasCount?: boolean;
-    bleeding?: string;
-    incidentes?: string;
-    participants?: string;
-    // Campos Urgencias/Egreso
-    triage?: string;
-    mentalState?: string;
-    dischargeReason?: string;
-    pendingProblems?: string;
     [key: string]: any;
   };
   attachments?: Attachment[];

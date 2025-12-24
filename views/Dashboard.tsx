@@ -2,240 +2,251 @@
 import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
-  Search, 
-  UserPlus,
-  Clock,
-  Activity,
-  ArrowRightCircle,
-  Stethoscope,
-  Filter,
-  MoreVertical,
-  MapPin,
-  AlertCircle,
-  Microscope,
-  LayoutGrid,
-  ChevronRight as ChevronRightIcon
+  Search, UserPlus, Users, Clock, Activity, Microscope, 
+  ChevronRight, FlaskConical, ImageIcon, ClipboardList, Timer, 
+  Zap, User, FlaskRound as Flask, PlayCircle, CheckCircle
 } from 'lucide-react';
-import { ModuleType, Patient, PatientStatus } from '../types';
+import { ModuleType, Patient, PatientStatus, PriorityLevel, ClinicalNote } from '../types';
 
 interface DashboardProps {
   module: ModuleType;
   patients: Patient[];
+  notes?: ClinicalNote[];
   onUpdateStatus: (id: string, status: PatientStatus) => void;
+  onUpdatePriority: (id: string, priority: PriorityLevel) => void;
   onModuleChange: (mod: ModuleType) => void;
 }
 
-const Dashboard: React.FC<DashboardProps> = ({ module, patients, onUpdateStatus, onModuleChange }) => {
+const Dashboard: React.FC<DashboardProps> = ({ module, patients, notes = [], onUpdateStatus, onUpdatePriority, onModuleChange }) => {
   const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState('');
 
-  const modules = Object.values(ModuleType).filter(m => m !== ModuleType.ADMIN);
+  const modules = (Object.values(ModuleType) as ModuleType[]).filter(m => m !== ModuleType.ADMIN && m !== ModuleType.MONITOR && m !== ModuleType.INVENTORY);
 
-  // Pesos de prioridad por estatus para ordenamiento
-  const statusPriority = useMemo(() => ({
-    [PatientStatus.TRIAGE]: 0,
-    [PatientStatus.IN_CONSULTATION]: 1,
-    [PatientStatus.WAITING]: 2,
-    [PatientStatus.ADMITTED]: 3,
-    [PatientStatus.ATTENDED]: 4,
-  }), []);
+  // Pacientes Físicos en el módulo (En sala de espera de toma)
+  const patientsInAux = useMemo(() => {
+    return patients.filter(p => 
+      p.assignedModule === ModuleType.AUXILIARY && 
+      p.status !== PatientStatus.ATTENDED &&
+      (p.name.toLowerCase().includes(searchTerm.toLowerCase()) || p.curp.toLowerCase().includes(searchTerm.toLowerCase()))
+    );
+  }, [patients, searchTerm, module]);
 
-  const activePatients = useMemo(() => {
-    return patients
-      .filter(p => 
-        p.assignedModule === module &&
-        p.status !== PatientStatus.ATTENDED &&
-        (p.name.toLowerCase().includes(searchTerm.toLowerCase()) || p.curp.toLowerCase().includes(searchTerm.toLowerCase()))
-      )
-      .sort((a, b) => statusPriority[a.status] - statusPriority[b.status]);
-  }, [patients, module, searchTerm, statusPriority]);
+  // Órdenes pendientes de resultados (Ya se tomó la muestra o está solicitada)
+  const activeOrders = useMemo(() => {
+    return notes.filter(n => 
+      n.type === 'Solicitud de Estudios Auxiliares' && 
+      !notes.some(r => r.type.includes('Reporte') && r.content.orderId === n.id)
+    );
+  }, [notes]);
 
-  const getStatusStyle = (status: PatientStatus) => {
-    switch (status) {
-      case PatientStatus.TRIAGE: return 'bg-rose-50 text-rose-800 border-rose-200 animate-pulse';
-      case PatientStatus.IN_CONSULTATION: return 'bg-blue-50 text-blue-800 border-blue-200';
-      case PatientStatus.WAITING: return 'bg-amber-50 text-amber-800 border-amber-200';
-      case PatientStatus.ADMITTED: return 'bg-indigo-50 text-indigo-800 border-indigo-200';
-      default: return 'bg-slate-50 text-slate-700 border-slate-200';
-    }
-  };
-
-  const getSecondaryHeader = () => {
-    switch (module) {
-      case ModuleType.OUTPATIENT: return "Horario de Cita";
-      case ModuleType.EMERGENCY:
-      case ModuleType.HOSPITALIZATION: return "Cama / Ubicación";
-      case ModuleType.AUXILIARY: return "Estudio / Servicio";
-      default: return "Referencia";
-    }
-  };
-
-  const getModuleIcon = (mod: ModuleType) => {
-    switch (mod) {
-      case ModuleType.OUTPATIENT: return <Clock className="w-4 h-4" />;
-      case ModuleType.EMERGENCY: return <Activity className="w-4 h-4" />;
-      case ModuleType.HOSPITALIZATION: return <MapPin className="w-4 h-4" />;
-      case ModuleType.AUXILIARY: return <Microscope className="w-4 h-4" />;
-      default: return <LayoutGrid className="w-4 h-4" />;
+  const getPriorityStyle = (level: PriorityLevel | undefined) => {
+    const currentLevel = level ?? PriorityLevel.MEDIUM;
+    switch (currentLevel) {
+      case PriorityLevel.CRITICAL: return 'bg-rose-600 text-white animate-pulse';
+      case PriorityLevel.HIGH: return 'bg-orange-500 text-white';
+      case PriorityLevel.MEDIUM: return 'bg-amber-400 text-slate-900';
+      case PriorityLevel.LOW: return 'bg-emerald-50 text-emerald-700 border-emerald-200';
+      default: return 'bg-blue-500 text-white';
     }
   };
 
   return (
-    <div className="max-w-7xl mx-auto space-y-6 animate-in fade-in duration-500">
-      {/* Header Bar con Breadcrumb Operativo */}
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
-        <div className="space-y-1">
-          <div className="flex items-center space-x-2 text-slate-500 uppercase text-[10px] font-black tracking-[0.2em]">
-            <Activity className="w-3.5 h-3.5 text-blue-600" />
-            <span>Panel de Gestión Clínica</span>
-            <ChevronRightIcon className="w-3 h-3" />
+    <div className="max-w-full space-y-10 animate-in fade-in duration-700">
+      
+      {/* Header */}
+      <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-8">
+        <div className="space-y-2">
+          <div className="flex items-center space-x-2 text-slate-400 uppercase text-[10px] font-black tracking-[0.3em]">
+            <Activity className="w-4 h-4 text-blue-600" />
+            <span>Centro de Control Operativo</span>
+            <ChevronRight className="w-3 h-3" />
             <span className="text-slate-900">{module}</span>
           </div>
-          <h1 className="text-4xl font-black text-slate-900 tracking-tight uppercase">{module}</h1>
-          <p className="text-slate-600 text-sm font-medium">Control de pacientes activos y cola de atención priorizada.</p>
+          <h1 className="text-5xl font-black text-slate-900 tracking-tighter uppercase leading-none">
+            {module === ModuleType.AUXILIARY ? 'Unidad de ' : ''}
+            <span className={module === ModuleType.AUXILIARY ? 'text-indigo-600' : 'text-slate-900'}>
+               {module === ModuleType.AUXILIARY ? 'Diagnóstico' : module}
+            </span>
+          </h1>
         </div>
-        <div className="flex items-center space-x-3">
-          <button className="p-3 bg-white border border-slate-200 rounded-2xl text-slate-500 hover:text-slate-900 transition-all shadow-sm hover:border-slate-300">
-            <Filter className="w-5 h-5" />
-          </button>
+        
+        <div className="flex items-center gap-3">
           <button 
-            onClick={() => navigate('/new-patient')}
-            className="flex items-center px-8 py-3 bg-blue-600 text-white rounded-2xl font-black shadow-xl shadow-blue-100 hover:bg-slate-900 transition-all active:scale-95"
+            onClick={() => navigate(module === ModuleType.AUXILIARY ? '/auxiliary-intake' : '/new-patient')}
+            className={`flex items-center px-10 py-5 text-white rounded-[1.5rem] font-black text-xs uppercase tracking-widest shadow-2xl transition-all active:scale-95 group ${module === ModuleType.AUXILIARY ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-slate-900 hover:bg-blue-600'}`}
           >
-            <UserPlus className="w-5 h-5 mr-3" />
-            Ingresar Paciente
+            <UserPlus className="w-5 h-5 mr-3 group-hover:scale-110 transition-transform" />
+            {module === ModuleType.AUXILIARY ? 'Ingresar Paciente a Toma' : 'Ingresar Paciente'}
           </button>
         </div>
       </div>
 
-      {/* Navegación Interna de Módulos (Tabs) */}
-      <div className="flex items-center space-x-2 bg-white p-2 rounded-3xl border border-slate-200 shadow-sm overflow-x-auto no-scrollbar">
+      {/* Selector de Módulo */}
+      <div className="flex items-center space-x-2 bg-white p-2 rounded-[2rem] border border-slate-200 shadow-sm overflow-x-auto no-scrollbar">
         {modules.map((mod) => (
           <button
             key={mod}
             onClick={() => onModuleChange(mod)}
-            className={`flex items-center px-5 py-2.5 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${
-              module === mod 
-              ? 'bg-slate-900 text-white shadow-lg' 
-              : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+            className={`flex items-center px-8 py-3.5 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${
+              module === mod ? 'bg-slate-900 text-white shadow-2xl scale-105' : 'text-slate-600 hover:bg-slate-50'
             }`}
           >
-            <span className="mr-2.5">{getModuleIcon(mod)}</span>
             {mod}
-            {module === mod && (
-              <span className="ml-2.5 bg-blue-500 text-white w-5 h-5 rounded-full flex items-center justify-center text-[8px]">
-                {patients.filter(p => p.assignedModule === mod && p.status !== PatientStatus.ATTENDED).length}
-              </span>
-            )}
+            <span className={`ml-3 px-2 py-0.5 rounded-lg text-[8px] ${module === mod ? 'bg-blue-500 text-white' : 'bg-slate-100 text-slate-400'}`}>
+              {mod === ModuleType.AUXILIARY ? activeOrders.length : patients.filter(p => p.assignedModule === mod && p.status !== PatientStatus.ATTENDED).length}
+            </span>
           </button>
         ))}
       </div>
 
-      <div className="bg-white p-2 rounded-[2rem] shadow-sm border border-slate-200 flex flex-col md:flex-row gap-2">
-        <div className="relative flex-1">
-          <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-500 w-5 h-5" />
-          <input 
-            type="text" 
-            placeholder={`Buscar en ${module}...`}
-            className="w-full pl-14 pr-6 py-4 bg-slate-50 border border-transparent rounded-2xl focus:bg-white focus:border-blue-200 outline-none transition-all text-sm font-bold text-slate-900 placeholder:text-slate-500"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
-        </div>
-      </div>
+      {/* VISTA AUXILIARES */}
+      {module === ModuleType.AUXILIARY ? (
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
+           
+           {/* Sidebar: Sala de Espera (Pacientes Físicos) */}
+           <div className="lg:col-span-4 space-y-6">
+              <div className="bg-white border border-slate-200 rounded-[2.5rem] p-8 shadow-sm h-full flex flex-col">
+                 <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-8 flex items-center gap-3">
+                    <Clock className="text-amber-500" /> Pacientes en Sala de Toma
+                 </h3>
+                 <div className="space-y-4 flex-1 overflow-y-auto no-scrollbar">
+                    {patientsInAux.map(p => (
+                       <div key={p.id} className="p-6 bg-slate-50 border border-slate-100 rounded-[2rem] hover:border-indigo-400 transition-all shadow-sm">
+                          <div className="flex justify-between items-start mb-2">
+                             <p className="text-xs font-black text-slate-900 uppercase">{p.name}</p>
+                             <span className={`px-2 py-0.5 rounded text-[7px] font-black uppercase ${getPriorityStyle(p.priority)}`}>{p.priority.split(' ')[0]}</span>
+                          </div>
+                          <p className="text-[9px] text-slate-400 font-bold uppercase truncate">{p.reason}</p>
+                          <div className="flex gap-2 mt-4">
+                             <button 
+                               onClick={() => onUpdateStatus(p.id, PatientStatus.SAMPLE_TAKEN)}
+                               className="flex-1 py-2 bg-indigo-600 text-white rounded-xl text-[8px] font-black uppercase"
+                             >
+                               Llamar a Toma
+                             </button>
+                             <button onClick={() => navigate(`/patient/${p.id}`)} className="p-2 bg-white text-slate-400 border border-slate-200 rounded-xl hover:text-indigo-600"><ChevronRight size={14} /></button>
+                          </div>
+                       </div>
+                    ))}
+                    {patientsInAux.length === 0 && (
+                      <div className="py-20 text-center opacity-30 flex flex-col items-center">
+                         <Users className="mb-4 w-12 h-12" />
+                         <p className="text-[10px] font-black uppercase tracking-widest">Sin pacientes en sala</p>
+                      </div>
+                    )}
+                 </div>
+              </div>
+           </div>
 
-      <div className="bg-white rounded-[2.5rem] shadow-2xl shadow-slate-200/50 border border-slate-200 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="bg-slate-50/50 border-b border-slate-100 text-slate-600 uppercase text-[9px] font-black tracking-[0.2em]">
-                <th className="px-10 py-6">Identificación y Datos Generales</th>
-                <th className="px-10 py-6">{getSecondaryHeader()}</th>
-                <th className="px-10 py-6">Prioridad / Estatus</th>
-                <th className="px-10 py-6 text-right">Manejo Clínico</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {activePatients.map((p) => (
-                <tr key={p.id} className="hover:bg-blue-50/30 transition-all group">
-                  <td className="px-10 py-6">
-                    <div className="flex items-center">
-                      <div className="w-12 h-12 rounded-2xl bg-slate-900 text-white flex items-center justify-center font-black mr-5 border-2 border-white shadow-md group-hover:bg-blue-600 transition-colors">
-                        {p.name.charAt(0)}
-                      </div>
-                      <div>
-                        <p className="font-black text-slate-900 text-sm tracking-tight uppercase">{p.name}</p>
-                        <div className="flex items-center space-x-3 mt-1">
-                           <span className="text-[10px] text-slate-600 font-mono font-bold">{p.curp}</span>
-                           <span className="w-1 h-1 bg-slate-300 rounded-full"></span>
-                           <span className="text-[10px] text-blue-700 font-black uppercase tracking-widest">{p.age}A • {p.sex}</span>
-                        </div>
-                      </div>
+           {/* Principal: Cola de Procesamiento (Órdenes) */}
+           <div className="lg:col-span-8 space-y-6">
+              <div className="bg-white border border-slate-200 rounded-[3rem] shadow-xl overflow-hidden flex flex-col min-h-[600px]">
+                 <div className="p-8 bg-slate-900 text-white flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                       <div className="w-12 h-12 bg-indigo-600 rounded-2xl flex items-center justify-center shadow-lg"><ClipboardList size={24} /></div>
+                       <h3 className="text-sm font-black uppercase tracking-widest">Cola de Análisis y Resultados</h3>
                     </div>
-                  </td>
-                  <td className="px-10 py-6">
-                    {module === ModuleType.OUTPATIENT && (
-                      <div className="flex items-center text-xs font-black text-slate-800">
-                        <Clock className="w-4 h-4 mr-2.5 text-blue-600" />
-                        {p.appointmentTime || '--:--'}
-                      </div>
+                    <span className="text-[9px] font-black uppercase bg-white/10 px-4 py-2 rounded-xl">Analítica en Tiempo Real</span>
+                 </div>
+                 
+                 <div className="flex-1 divide-y divide-slate-100 overflow-y-auto">
+                    {activeOrders.map(order => {
+                       const p = patients.find(pat => pat.id === order.patientId);
+                       const studies = [...(order.content.labStudies || []), ...(order.content.imagingStudies || [])];
+                       const isLab = order.content.labStudies?.length > 0;
+                       
+                       return (
+                          <div key={order.id} className="p-10 flex flex-col md:flex-row items-center justify-between hover:bg-indigo-50/20 transition-all gap-8">
+                             <div className="flex items-center gap-8 flex-1">
+                                <div className={`w-20 h-20 rounded-[2rem] flex items-center justify-center text-white shadow-2xl ${isLab ? 'bg-indigo-600' : 'bg-blue-500'}`}>
+                                   {isLab ? <Flask size={32} /> : <ImageIcon size={32} />}
+                                </div>
+                                <div className="space-y-3">
+                                   <div className="flex items-center gap-4">
+                                      <p className="text-lg font-black text-slate-900 uppercase tracking-tight">{p?.name || 'Paciente Externo'}</p>
+                                      <span className="px-3 py-1 bg-slate-900 text-white rounded-lg text-[8px] font-black uppercase">{order.content.urgency}</span>
+                                   </div>
+                                   <div className="flex flex-wrap gap-2">
+                                      {studies.map(s => <span key={s} className="px-2 py-1 bg-white border border-slate-200 rounded-lg text-[8px] font-bold text-indigo-700 uppercase">{s}</span>)}
+                                   </div>
+                                   <p className="text-[9px] text-slate-400 font-bold uppercase flex items-center gap-2">
+                                      <Timer size={12} /> Solicitado: {order.date}
+                                   </p>
+                                </div>
+                             </div>
+                             <button 
+                                onClick={() => navigate(`/patient/${order.patientId}/auxiliary-report/${order.id}`)}
+                                className="px-10 py-5 bg-indigo-600 text-white rounded-[1.5rem] text-[10px] font-black uppercase tracking-widest shadow-xl hover:bg-slate-900 transition-all flex items-center gap-4"
+                             >
+                                <PlayCircle size={18} /> Cargar Resultados
+                             </button>
+                          </div>
+                       );
+                    })}
+                    {activeOrders.length === 0 && (
+                       <div className="h-full flex flex-col items-center justify-center text-slate-300 py-48">
+                          <Zap size={80} className="mb-6 opacity-10" />
+                          <p className="text-xs font-black uppercase tracking-widest">No hay órdenes pendientes de resultados</p>
+                       </div>
                     )}
-                    {(module === ModuleType.EMERGENCY || module === ModuleType.HOSPITALIZATION) && (
-                      <div className="flex items-center text-xs font-black text-slate-800">
-                        <MapPin className="w-4 h-4 mr-2.5 text-indigo-600" />
-                        {p.bedNumber || 'BOX-00'}
-                      </div>
-                    )}
-                    {module === ModuleType.AUXILIARY && (
-                      <div className="flex items-center text-xs font-black text-slate-800">
-                        <Microscope className="w-4 h-4 mr-2.5 text-emerald-600" />
-                        {p.reason || 'ESTUDIO GENERAL'}
-                      </div>
-                    )}
-                  </td>
-                  <td className="px-10 py-6">
-                    <span className={`inline-flex items-center px-4 py-1.5 rounded-xl text-[9px] font-black border uppercase tracking-widest ${getStatusStyle(p.status)}`}>
-                      <span className={`w-1.5 h-1.5 rounded-full mr-2.5 ${p.status === PatientStatus.TRIAGE ? 'bg-rose-500 animate-pulse' : 'bg-current'}`}></span>
-                      {p.status}
-                    </span>
-                  </td>
-                  <td className="px-10 py-6 text-right">
-                    <div className="flex items-center justify-end space-x-3 opacity-0 group-hover:opacity-100 transition-all translate-x-4 group-hover:translate-x-0">
-                      <button 
-                        onClick={() => navigate(`/patient/${p.id}`)}
-                        className="flex items-center px-5 py-2.5 bg-slate-900 text-white rounded-xl hover:bg-blue-600 transition-all text-[10px] font-black uppercase tracking-widest shadow-lg"
-                      >
-                        Ver Expediente
-                        <ArrowRightCircle className="w-4 h-4 ml-2.5" />
-                      </button>
-                      <button className="p-2.5 text-slate-500 hover:text-slate-900 hover:bg-white rounded-xl transition-all border border-transparent hover:border-slate-200">
-                         <MoreVertical className="w-5 h-5" />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-              {activePatients.length === 0 && (
-                <tr>
-                   <td colSpan={4} className="py-32 text-center">
-                      <div className="w-24 h-24 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-6 border-2 border-dashed border-slate-200">
-                         <AlertCircle className="w-10 h-10 text-slate-300" />
-                      </div>
-                      <p className="text-slate-900 font-black text-lg uppercase tracking-tight">No hay pacientes activos en {module}</p>
-                      <p className="text-sm text-slate-500 mt-2 font-medium">Todos los servicios programados para este módulo han sido atendidos.</p>
-                      <button 
-                        onClick={() => navigate('/new-patient')}
-                        className="mt-6 text-blue-700 font-black text-[10px] uppercase tracking-widest hover:underline"
-                      >
-                        Registrar nueva atención
-                      </button>
-                   </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+                 </div>
+              </div>
+           </div>
         </div>
-      </div>
+      ) : (
+        /* VISTA ESTÁNDAR (CONSULTA / URGENCIAS) */
+        <div className="bg-white rounded-[3.5rem] shadow-2xl border border-slate-200 overflow-hidden">
+           <div className="p-10 border-b border-slate-100 flex flex-col md:flex-row justify-between items-center gap-6">
+             <div className="relative flex-1 w-full max-w-2xl">
+                <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5" />
+                <input 
+                  type="text" 
+                  placeholder={`Buscar pacientes en ${module}...`}
+                  className="w-full pl-16 pr-8 py-5 bg-slate-50 border border-transparent rounded-[1.5rem] focus:bg-white focus:border-blue-200 outline-none transition-all text-sm font-bold text-slate-900 shadow-inner"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                />
+             </div>
+          </div>
+          <div className="overflow-x-auto">
+             <table className="w-full text-left">
+                <thead>
+                   <tr className="bg-slate-50/50 text-[9px] font-black uppercase text-slate-400 tracking-widest border-b border-slate-100">
+                      <th className="px-10 py-6">Paciente</th>
+                      <th className="px-10 py-6 text-center">Estatus</th>
+                      <th className="px-10 py-6">Motivo</th>
+                      <th className="px-10 py-6 text-right">Acción</th>
+                   </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                   {patients.filter(p => p.assignedModule === module && p.status !== PatientStatus.ATTENDED).map(p => (
+                      <tr key={p.id} className="hover:bg-slate-50 transition-all group">
+                         <td className="px-10 py-8">
+                            <div className="flex items-center">
+                               <div className="w-12 h-12 rounded-xl bg-slate-900 text-white flex items-center justify-center font-black mr-6 border-2 border-white shadow-lg group-hover:bg-blue-600 transition-colors">{p.name.charAt(0)}</div>
+                               <div>
+                                  <p className="font-black text-slate-900 text-sm uppercase leading-none mb-1">{p.name}</p>
+                                  <span className="text-[9px] text-slate-400 font-mono tracking-widest">{p.curp}</span>
+                               </div>
+                            </div>
+                         </td>
+                         <td className="px-10 py-8 text-center">
+                            <span className="px-4 py-2 rounded-xl text-[9px] font-black uppercase bg-blue-50 text-blue-600 border border-blue-100">{p.status}</span>
+                         </td>
+                         <td className="px-10 py-8">
+                            <p className="text-[10px] font-bold text-slate-600 uppercase italic truncate max-w-[250px]">{p.reason}</p>
+                         </td>
+                         <td className="px-10 py-8 text-right">
+                            <button onClick={() => navigate(`/patient/${p.id}`)} className="p-4 bg-slate-900 text-white rounded-2xl hover:bg-blue-600 transition-all shadow-md group-hover:scale-110"><ChevronRight size={20} /></button>
+                         </td>
+                      </tr>
+                   ))}
+                </tbody>
+             </table>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

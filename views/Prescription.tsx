@@ -184,17 +184,6 @@ const Prescription: React.FC<{ patients: Patient[] }> = ({ patients }) => {
           label="COPIA EXPEDIENTE"
         />
       </div>
-
-      <style>{`
-        @media print {
-          body, html { background: white !important; margin: 0 !important; padding: 0 !important; }
-          nav, aside, header, .no-print, .sticky { display: none !important; }
-          main { margin: 0 !important; padding: 0 !important; width: 100% !important; left: 0 !important; top: 0 !important; position: static !important; }
-          .max-w-5xl { max-width: 100% !important; margin: 0 !important; }
-          .bg-white { box-shadow: none !important; border: none !important; }
-          @page { margin: 0.5cm; size: A4; }
-        }
-      `}</style>
     </div>
   );
 };
@@ -258,7 +247,7 @@ const PrescriptionDocument = ({ patient, medications, prescriptionData, updateMe
 
     <div className="relative z-10 space-y-10 flex-1 min-h-[400px]">
       <div className="space-y-6">
-         <div className="flex justify-between items-center">
+         <div className="flex justify-between items-center no-print">
             <label className="text-[10px] font-black text-slate-900 uppercase tracking-[0.2em] flex items-center">
                <Stethoscope size={16} className="text-blue-600 mr-2" /> Tratamiento Farmacológico (Rp.)
             </label>
@@ -280,7 +269,7 @@ const PrescriptionDocument = ({ patient, medications, prescriptionData, updateMe
                               <div className="flex gap-3">
                                 <input 
                                   className="flex-[2] bg-slate-100 border-b-2 border-slate-200 p-3 text-xs font-black uppercase outline-none focus:bg-blue-50 focus:border-blue-600 transition-all" 
-                                  placeholder="Nombre del Medicamento (Genérico / Comercial)" 
+                                  placeholder="Nombre del Medicamento" 
                                   value={med.genericName || med.name} 
                                   onChange={e => updateMedication(med.id, 'genericName', e.target.value)} 
                                 />
@@ -298,7 +287,7 @@ const PrescriptionDocument = ({ patient, medications, prescriptionData, updateMe
                            )}
                         </div>
                         {!isPreview && (
-                           <button onClick={() => removeMedication(med.id)} className="text-slate-300 hover:text-rose-600 p-2 transition-colors"><Trash2 size={18} /></button>
+                           <button onClick={() => removeMedication(med.id)} className="text-slate-300 hover:text-rose-600 p-2 transition-colors no-print"><Trash2 size={18} /></button>
                         )}
                      </div>
                      
@@ -331,30 +320,9 @@ const PrescriptionDocument = ({ patient, medications, prescriptionData, updateMe
                            )}
                         </div>
                      </div>
-                     
-                     <div className="pt-1">
-                        <label className="text-[8px] font-black text-blue-600 uppercase block mb-1">Indicaciones Adicionales</label>
-                        {!isPreview ? (
-                           <input 
-                              className="w-full bg-transparent border-b border-dashed border-slate-200 p-2 text-[10px] font-medium italic text-slate-600 outline-none focus:border-blue-400" 
-                              value={med.instructions} 
-                              onChange={e => updateMedication(med.id, 'instructions', e.target.value)} 
-                              placeholder="Ej: Tomar después de alimentos..." 
-                           />
-                        ) : (
-                           <p className="text-[10px] font-medium italic text-slate-600 border-l-2 border-slate-100 pl-4">{med.instructions || 'Sin instrucciones adicionales'}</p>
-                        )}
-                     </div>
                   </div>
                </div>
             ))}
-            {!isPreview && medications.length === 0 && (
-               <div className="flex flex-col items-center justify-center py-12 bg-slate-50 border-2 border-dashed border-slate-200 rounded-[2.5rem] text-slate-400 space-y-4">
-                  <Pill size={32} className="opacity-20" />
-                  <p className="text-[10px] font-black uppercase tracking-widest">No hay medicamentos en la receta</p>
-                  <button onClick={addMedicationManual} className="text-[9px] font-black text-blue-600 hover:underline uppercase">Comenzar a agregar</button>
-               </div>
-            )}
          </div>
       </div>
 

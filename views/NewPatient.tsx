@@ -11,9 +11,12 @@ import {
   Heart, 
   Save,
   AlertTriangle,
-  Fingerprint
+  Fingerprint,
+  AlertCircle,
+  // Fix: Added missing CheckCircle2 import
+  CheckCircle2
 } from 'lucide-react';
-import { Patient, PatientStatus, ModuleType } from '../types';
+import { Patient, PatientStatus, ModuleType, PriorityLevel } from '../types';
 
 interface NewPatientProps {
   onAdd: (p: Patient) => void;
@@ -35,6 +38,7 @@ const NewPatient: React.FC<NewPatientProps> = ({ onAdd, patients }) => {
     bloodType: 'O+',
     allergies: [],
     status: PatientStatus.WAITING,
+    priority: PriorityLevel.MEDIUM,
     assignedModule: ModuleType.OUTPATIENT,
     phone: '',
     birthDate: '',
@@ -48,7 +52,8 @@ const NewPatient: React.FC<NewPatientProps> = ({ onAdd, patients }) => {
     ethnicGroup: '',
     indigenousLanguage: false,
     medicalInsurance: '',
-    chronicDiseases: []
+    chronicDiseases: [],
+    reason: ''
   });
 
   useEffect(() => {
@@ -68,8 +73,9 @@ const NewPatient: React.FC<NewPatientProps> = ({ onAdd, patients }) => {
       id: isEditing ? (id as string) : Math.random().toString(36).substr(2, 7).toUpperCase(),
       name: form.name?.toUpperCase() || '',
       curp: form.curp?.toUpperCase() || '',
-      lastVisit: isEditing ? (existingPatient?.lastVisit || '') : 'Registro Inicial',
-      reason: form.reason || 'Ingreso a sistema'
+      lastVisit: isEditing ? (existingPatient?.lastVisit || new Date().toISOString().split('T')[0]) : new Date().toISOString().split('T')[0],
+      reason: form.reason || 'Ingreso a sistema',
+      priority: form.priority || PriorityLevel.MEDIUM
     };
 
     onAdd(patientData);
@@ -126,12 +132,13 @@ const NewPatient: React.FC<NewPatientProps> = ({ onAdd, patients }) => {
                 />
               </div>
               <div>
-                <label className="text-[10px] font-black text-slate-400 uppercase mb-2 block">Teléfono de Contacto</label>
+                <label className="text-[10px] font-black text-slate-400 uppercase mb-2 block">Motivo de Atención / Ingreso</label>
                 <input 
-                  type="tel" 
-                  className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-sm"
-                  value={form.phone}
-                  onChange={e => setForm({...form, phone: e.target.value})}
+                  type="text" 
+                  className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold"
+                  value={form.reason}
+                  onChange={e => setForm({...form, reason: e.target.value})}
+                  placeholder="Ej: Control prenatal, Dolor agudo..."
                 />
               </div>
               <div className="grid grid-cols-2 gap-4">
@@ -155,38 +162,44 @@ const NewPatient: React.FC<NewPatientProps> = ({ onAdd, patients }) => {
             </div>
           </div>
 
-          {/* SECCIÓN 2: LOCALIZACIÓN Y SOCIAL */}
+          {/* SECCIÓN 2: PRIORIDAD Y CLASIFICACIÓN */}
           <div className="bg-white border border-slate-200 rounded-[2.5rem] p-10 shadow-sm">
             <h3 className="text-xs font-black text-slate-900 uppercase tracking-widest mb-8 flex items-center gap-3">
-              <MapPin className="w-5 h-5 text-blue-600" /> 2. Localización y Nivel Socioeconómico
+              <AlertCircle className="w-5 h-5 text-rose-600" /> 2. Clasificación Médica (Triage)
             </h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="col-span-full">
-                <label className="text-[10px] font-black text-slate-400 uppercase mb-2 block">Domicilio Actual (Calle, Número, Localidad)</label>
-                <input type="text" className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-sm" value={form.address} onChange={e => setForm({...form, address: e.target.value})}/>
-              </div>
-              <div>
-                <label className="text-[10px] font-black text-slate-400 uppercase mb-2 block">Lugar de Nacimiento</label>
-                <input type="text" className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-sm" value={form.birthPlace} onChange={e => setForm({...form, birthPlace: e.target.value})}/>
-              </div>
-              <div>
-                <label className="text-[10px] font-black text-slate-400 uppercase mb-2 block">Municipio de Residencia Actual</label>
-                <input type="text" className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-sm" value={form.residence} onChange={e => setForm({...form, residence: e.target.value})}/>
-              </div>
-              <div>
-                <label className="text-[10px] font-black text-slate-400 uppercase mb-2 block">Estado Civil</label>
-                <select className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-sm" value={form.civilStatus} onChange={e => setForm({...form, civilStatus: e.target.value})}>
-                  <option>Soltero(a)</option>
-                  <option>Casado(a)</option>
-                  <option>Unión Libre</option>
-                  <option>Divorciado(a)</option>
-                  <option>Viudo(a)</option>
-                </select>
-              </div>
-              <div>
-                <label className="text-[10px] font-black text-slate-400 uppercase mb-2 block">Ocupación</label>
-                <input type="text" className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-sm" value={form.occupation} onChange={e => setForm({...form, occupation: e.target.value})}/>
-              </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+               <div className="space-y-4">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Nivel de Prioridad</label>
+                  <div className="grid grid-cols-1 gap-2">
+                     {Object.values(PriorityLevel).map(lvl => (
+                        <button 
+                           key={lvl}
+                           onClick={() => setForm({...form, priority: lvl})}
+                           className={`p-4 rounded-xl border-2 text-[10px] font-black uppercase text-left transition-all flex items-center justify-between ${form.priority === lvl ? 'bg-slate-900 text-white border-slate-900 shadow-lg scale-105' : 'bg-slate-50 border-slate-100 text-slate-500 hover:bg-white hover:border-slate-300'}`}
+                        >
+                           {lvl}
+                           {form.priority === lvl && <CheckCircle2 size={16} />}
+                        </button>
+                     ))}
+                  </div>
+               </div>
+               <div className="space-y-4">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Módulo Destino</label>
+                  <select 
+                    className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl text-xs font-black uppercase outline-none focus:border-blue-600"
+                    value={form.assignedModule}
+                    onChange={e => setForm({...form, assignedModule: e.target.value as ModuleType})}
+                  >
+                    {Object.values(ModuleType).filter(m => m !== ModuleType.ADMIN && m !== ModuleType.MONITOR).map(m => (
+                      <option key={m} value={m}>{m}</option>
+                    ))}
+                  </select>
+                  <div className="p-6 bg-blue-50 border border-blue-100 rounded-2xl mt-4">
+                     <p className="text-[9px] text-blue-800 font-bold uppercase leading-relaxed">
+                        * La prioridad determina el orden de visualización en el centro de mando y las alertas de tiempo de espera.
+                     </p>
+                  </div>
+               </div>
             </div>
           </div>
         </div>
@@ -219,18 +232,6 @@ const NewPatient: React.FC<NewPatientProps> = ({ onAdd, patients }) => {
                     onChange={e => setForm({...form, allergies: e.target.value.split(',').map(s => s.trim()).filter(s => s !== '')})}
                   />
                 </div>
-                <div>
-                  <label className="text-[10px] font-black text-slate-400 uppercase mb-2 block">Unidad de Atención Asignada</label>
-                  <select 
-                    className="w-full p-4 bg-white/5 border border-white/10 rounded-2xl text-sm font-bold text-blue-400"
-                    value={form.assignedModule}
-                    onChange={e => setForm({...form, assignedModule: e.target.value as ModuleType})}
-                  >
-                    {Object.values(ModuleType).filter(m => m !== ModuleType.ADMIN).map(m => (
-                      <option key={m} value={m} className="text-slate-900">{m}</option>
-                    ))}
-                  </select>
-                </div>
              </div>
           </div>
 
@@ -239,17 +240,7 @@ const NewPatient: React.FC<NewPatientProps> = ({ onAdd, patients }) => {
             <div className="ml-4">
               <p className="text-[10px] font-black text-amber-900 uppercase">Validación Normativa</p>
               <p className="text-[10px] text-amber-700 mt-1 font-medium leading-relaxed">
-                Asegúrese de que el nombre coincida exactamente con la identificación oficial del paciente para evitar duplicidad en la base de datos SUIVE.
-              </p>
-            </div>
-          </div>
-
-          <div className="bg-blue-50 border border-blue-200 rounded-[2rem] p-8 flex items-start">
-            <ShieldCheck className="w-6 h-6 text-blue-600 mt-1 flex-shrink-0" />
-            <div className="ml-4">
-              <p className="text-[10px] font-black text-blue-900 uppercase">Seguridad de Datos</p>
-              <p className="text-[10px] text-blue-700 mt-1 font-medium leading-relaxed">
-                Este registro cumple con el Aviso de Privacidad Integral conforme a la LFPDPPP.
+                Asegúrese de que el nombre coincida exactamente con la identificación oficial del paciente.
               </p>
             </div>
           </div>

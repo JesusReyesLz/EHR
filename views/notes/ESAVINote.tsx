@@ -7,7 +7,8 @@ import {
 } from 'lucide-react';
 import { Patient, ClinicalNote } from '../../types';
 
-const ESAVINote: React.FC<{ patients: Patient[], onSaveNote: (n: ClinicalNote) => void }> = ({ patients, onSaveNote }) => {
+// Fix: Add notes to props interface to satisfy compiler requirements from App.tsx
+const ESAVINote: React.FC<{ patients: Patient[], notes: ClinicalNote[], onSaveNote: (n: ClinicalNote) => void }> = ({ patients, notes, onSaveNote }) => {
   const { id } = useParams();
   const navigate = useNavigate();
   const patient = patients.find(p => p.id === id);

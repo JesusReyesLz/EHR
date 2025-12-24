@@ -1,5 +1,5 @@
 
-import { Patient, PatientStatus, ModuleType, MedicationStock, MedicationCategory } from './types';
+import { Patient, PatientStatus, ModuleType, MedicationStock, MedicationCategory, PriorityLevel } from './types';
 
 export const INITIAL_PATIENTS: Patient[] = [
   {
@@ -9,16 +9,65 @@ export const INITIAL_PATIENTS: Patient[] = [
     age: 38,
     sex: 'M',
     bloodType: 'O+',
-    allergies: ['PENICILINA', 'SULMAS'],
+    allergies: ['PENICILINA'],
     status: PatientStatus.IN_CONSULTATION,
+    priority: PriorityLevel.MEDIUM,
     lastVisit: '2023-10-25',
     reason: 'Control de Diabetes Tipo 2',
     chronicDiseases: ['Diabetes Mellitus 2'],
     assignedModule: ModuleType.OUTPATIENT,
     appointmentTime: '10:30 AM',
+    waitingStartTime: '2023-10-25 10:15:00',
     currentVitals: { bp: '125/82', temp: 36.6, hr: 72, rr: 16, o2: 98, weight: 82, height: 175, bmi: 26.8, date: '2023-10-25 10:45:12' }
+  },
+  {
+    id: '2',
+    name: 'MARÍA RODRÍGUEZ LÓPEZ',
+    curp: 'ROLM920512MDFXYZ02',
+    age: 31,
+    sex: 'F',
+    bloodType: 'A+',
+    allergies: [],
+    status: PatientStatus.WAITING,
+    priority: PriorityLevel.CRITICAL,
+    lastVisit: '2023-10-26',
+    reason: 'Dolor precordial intenso',
+    chronicDiseases: [],
+    assignedModule: ModuleType.EMERGENCY,
+    bedNumber: 'BOX-04',
+    waitingStartTime: new Date().toISOString()
   }
 ];
+
+export interface StudyMetadata {
+  name: string;
+  preparation: string;
+  indications: string;
+}
+
+export const LAB_CATALOG: StudyMetadata[] = [
+  { name: 'Biometría Hemática Completa', preparation: 'Ayuno mínimo de 4 horas.', indications: 'Muestra de sangre venosa.' },
+  { name: 'Química Sanguínea (6 elementos)', preparation: 'Ayuno estricto de 8 a 12 horas.', indications: 'No ingerir alcohol 24 horas antes.' },
+  { name: 'Examen General de Orina (EGO)', preparation: 'Aseo previo de zona genital.', indications: 'Recolectar el primer chorro de la primera orina de la mañana.' },
+  { name: 'Perfil de Lípidos', preparation: 'Ayuno estricto de 12 horas.', indications: 'Cena ligera libre de grasas el día anterior.' },
+  { name: 'Glucosa en ayuno', preparation: 'Ayuno de 8 a 10 horas.', indications: 'No realizar ejercicio intenso antes de la toma.' },
+  { name: 'Tiempos de Coagulación (TP, TPT)', preparation: 'Ayuno mínimo de 4 horas.', indications: 'Informar si toma anticoagulantes.' },
+  { name: 'Grupo Sanguíneo y Factor Rh', preparation: 'No requiere ayuno.', indications: 'Identificación oficial requerida.' },
+  { name: 'Hemoglobina Glicosilada (HbA1c)', preparation: 'No requiere ayuno.', indications: 'Útil para control de diabetes.' }
+];
+
+export const IMAGING_CATALOG: StudyMetadata[] = [
+  { name: 'Radiografía de Tórax', preparation: 'Retirar objetos metálicos del cuello y tórax.', indications: 'No apto para pacientes con sospecha de embarazo.' },
+  { name: 'Ultrasonido Abdominal Integral', preparation: 'Ayuno de 6 a 8 horas. Beber 1 litro de agua 1 hora antes.', indications: 'No orinar hasta terminar el estudio.' },
+  { name: 'Mastografía Bilateral', preparation: 'No aplicar desodorante, talco o perfume en axilas.', indications: 'Recomendado del día 7 al 10 del ciclo menstrual.' },
+  { name: 'Tomografía (TAC) con Contraste', preparation: 'Ayuno de 6 horas. Traer estudios de Creatinina recientes.', indications: 'Informar sobre alergias al yodo o mariscos.' },
+  { name: 'Resonancia Magnética (RMN)', preparation: 'Sin objetos metálicos, marcapasos o prótesis ferrosas.', indications: 'Llegar 20 minutos antes para cuestionario de seguridad.' },
+  { name: 'Electrocardiograma (EKG)', preparation: 'Piel limpia, sin cremas o aceites.', indications: 'Reposo de 5 minutos previo a la toma.' }
+];
+
+// Mantenemos compatibilidad con los arreglos simples si se usan en otros lados
+export const LAB_STUDIES = LAB_CATALOG.map(s => s.name);
+export const IMAGING_STUDIES = IMAGING_CATALOG.map(s => s.name);
 
 export const VADEMECUM_DB: MedicationStock[] = [
   {
@@ -50,25 +99,9 @@ export const VADEMECUM_DB: MedicationStock[] = [
     supplier: 'Genérico',
     registroCofepris: 'N/A',
     category: MedicationCategory.GENERAL
-  },
-  {
-    id: 'DB-003',
-    name: 'AMOXIL (AMOXICILINA)',
-    genericName: 'AMOXICILINA',
-    presentation: 'Cápsulas',
-    concentration: '500mg',
-    batch: 'N/A',
-    expiryDate: '2030-01-01',
-    currentStock: 999,
-    minStock: 0,
-    unit: 'Cápsulas',
-    supplier: 'Genérico',
-    registroCofepris: 'N/A',
-    category: MedicationCategory.ANTIBIOTIC
   }
 ];
 
-// Initial stock for the inventory view
 export const INITIAL_STOCK: MedicationStock[] = [
   {
     id: 'S-001',
@@ -83,21 +116,6 @@ export const INITIAL_STOCK: MedicationStock[] = [
     unit: 'Cajas',
     supplier: 'Genérico Pharma',
     registroCofepris: '123M2015 SSA',
-    category: MedicationCategory.GENERAL
-  },
-  {
-    id: 'S-002',
-    name: 'GLAFORNIL (METFORMINA)',
-    genericName: 'METFORMINA',
-    presentation: 'Tabletas',
-    concentration: '850mg',
-    batch: 'XW-2023',
-    expiryDate: '2024-12-12',
-    currentStock: 8,
-    minStock: 15,
-    unit: 'Cajas',
-    supplier: 'Sandoz',
-    registroCofepris: '456M2018 SSA',
     category: MedicationCategory.GENERAL
   }
 ];
@@ -124,44 +142,15 @@ export const NOTE_CATEGORIES = [
     ]
   },
   {
-    title: 'Vigilancia Epidemiológica',
+    title: 'Auxiliares y Órdenes',
     notes: [
-      'Estudio Epidemiológico de Caso',
-      'Notificación de Brote',
-      'Reporte de ESAVI (Vacunas)'
-    ]
-  },
-  {
-    title: 'Especialidades',
-    notes: [
-      'Expediente Estomatológico (Odontograma)',
-      'Nota de Nutrición',
-      'Nota de Psicología'
-    ]
-  },
-  {
-    title: 'Enfermería y Otros',
-    notes: [
+      'Solicitud de Estudios Auxiliares',
+      'Reporte de Resultados Lab/Imagen',
       'Hoja de Enfermería',
-      'Reporte de Auxiliares (Lab/Imagen)',
-      'Hoja de Trabajo Social',
       'Consentimiento Informado',
-      'Consentimiento Telemedicina',
-      'Hoja de Egreso Voluntario',
-      'Notificación Ministerio Público',
-      'Certificado de Defunción',
-      'Registro de Transfusión',
       'Receta Médica'
     ]
   }
-];
-
-export const APARATOS_SISTEMAS = [
-  { id: 'general', name: 'Síntomas Generales', symptoms: ['Astenia', 'Adinamia', 'Fiebre', 'Pérdida de peso'] },
-  { id: 'resp', name: 'Respiratorio', symptoms: ['Tos', 'Disnea', 'Dolor torácico'] },
-  { id: 'digest', name: 'Digestivo', symptoms: ['Náusea', 'Vómito', 'Diarrea', 'Dolor abdominal'] },
-  { id: 'cardio', name: 'Cardiovascular', symptoms: ['Palpitaciones', 'Edema', 'Síncope'] },
-  { id: 'neuro', name: 'Neurológico', symptoms: ['Cefalea', 'Mareo', 'Convulsiones'] }
 ];
 
 export const BITACORAS = [

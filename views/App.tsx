@@ -27,7 +27,6 @@ import MedicalHistory from './views/MedicalHistory';
 import Inventory from './views/Inventory';
 import NursingSheet from './views/NursingSheet';
 import AuxiliaryReport from './views/AuxiliaryReport';
-// Fix: Added missing component imports to root App
 import AuxiliaryOrder from './views/AuxiliaryOrder';
 import AuxiliaryIntake from './views/AuxiliaryIntake';
 import InformedConsent from './views/InformedConsent';
@@ -142,7 +141,6 @@ const App: React.FC = () => {
     <Router>
       <Layout currentModule={currentModule} onModuleChange={setCurrentModule}>
         <Routes>
-          {/* Fix: Added notes={notes} prop to Dashboard for pending orders calculation */}
           <Route path="/" element={<Dashboard module={currentModule} patients={patients} notes={notes} onUpdateStatus={updatePatientStatus} onUpdatePriority={updatePatientPriority} onModuleChange={setCurrentModule} />} />
           <Route path="/monitor" element={<HospitalMonitor patients={patients} onUpdatePatient={updatePatient} />} />
           <Route path="/new-patient" element={<NewPatient onAdd={addPatient} patients={patients} />} />
@@ -164,12 +162,10 @@ const App: React.FC = () => {
 
           <Route path="/patient/:id/history" element={<MedicalHistory patients={patients} notes={notes} onUpdatePatient={updatePatient} onSaveNote={addNote} />} />
           <Route path="/patient/:id/nursing-sheet" element={<NursingSheet patients={patients} onSaveNote={addNote} />} />
-          
-          {/* Fix: Added missing routes for Auxiliary diagnostics workflow */}
           <Route path="/patient/:id/auxiliary-order" element={<AuxiliaryOrder patients={patients} onSaveNote={addNote} />} />
           <Route path="/patient/:id/auxiliary-report" element={<AuxiliaryReport patients={patients} notes={notes} onSaveNote={addNote} />} />
           <Route path="/patient/:id/auxiliary-report/:orderId" element={<AuxiliaryReport patients={patients} notes={notes} onSaveNote={addNote} />} />
-          {/* Fix: Added missing onAddPatient prop on line 172 to satisfy AuxiliaryIntakeProps requirements */}
+          
           <Route path="/auxiliary-intake" element={<AuxiliaryIntake patients={patients} onSaveNote={addNote} onUpdatePatient={updatePatient} onAddPatient={addPatient} />} />
 
           <Route path="/patient/:id/consent" element={<InformedConsent patients={patients} onSaveNote={addNote} />} />
