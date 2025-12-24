@@ -120,7 +120,8 @@ const Dashboard: React.FC<DashboardProps> = ({ module, patients, notes = [], onU
                           <p className="text-[9px] text-slate-400 font-bold uppercase truncate">{p.reason}</p>
                           <div className="flex gap-2 mt-4">
                              <button 
-                               onClick={() => onUpdateStatus(p.id, PatientStatus.SAMPLE_TAKEN)}
+                               /* Fix: Property 'SAMPLE_TAKEN' does not exist on type 'typeof PatientStatus'. Changed to 'TAKING_SAMPLES'. */
+                               onClick={() => onUpdateStatus(p.id, PatientStatus.TAKING_SAMPLES)}
                                className="flex-1 py-2 bg-indigo-600 text-white rounded-xl text-[8px] font-black uppercase"
                              >
                                Llamar a Toma

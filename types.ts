@@ -12,15 +12,17 @@ export enum ModuleType {
 export enum PatientStatus {
   TRIAGE = 'En Triage',
   WAITING = 'En sala de espera',
-  TRANSIT = 'En camino a sala',
   IN_ROOM = 'En sala (Listo)',
   IN_CONSULTATION = 'En consulta',
   PROCEDURE = 'En procedimiento',
   RECOVERY = 'En recuperación',
   ADMITTED = 'Ingresado',
   ATTENDED = 'Atendido',
-  WAITING_RESULTS = 'Esperando Resultados',
-  SAMPLE_TAKEN = 'Muestra Tomada'
+  WAITING_FOR_SAMPLES = 'En Sala de Toma',
+  TAKING_SAMPLES = 'En Toma de Muestra',
+  PROCESSING_RESULTS = 'En Procesamiento',
+  READY_RESULTS = 'Resultados Listos',
+  TRANSIT = 'En camino a sala'
 }
 
 export enum PriorityLevel {
@@ -104,7 +106,6 @@ export interface Patient {
   ethnicGroup?: string;
   indigenousLanguage?: boolean;
   medicalInsurance?: string;
-  attendingDoctor?: string; 
   triageLevel?: 'Rojo' | 'Amarillo' | 'Verde'; 
   waitingStartTime?: string;
 }

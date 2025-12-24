@@ -91,7 +91,8 @@ const AuxiliaryReport: React.FC<AuxiliaryReportProps> = ({ patients, notes = [],
     }
 
     onSaveNote(newNote);
-    navigate(`/patient/${id}`, { state: { openNoteId: newNoteId } });
+    alert("Resultados guardados y certificados. El paciente ha sido dado de alta del módulo de auxiliares.");
+    navigate(`/`);
   };
 
   return (
@@ -232,11 +233,11 @@ const AuxiliaryReport: React.FC<AuxiliaryReportProps> = ({ patients, notes = [],
               <div className="space-y-8">
                  <div className="space-y-2">
                     <label className="text-[8px] font-black text-slate-500 uppercase">Químico / Técnico Responsable</label>
-                    <input className="w-full p-4 bg-white/5 border border-white/10 rounded-xl text-[10px] font-black uppercase focus:ring-2 focus:ring-indigo-500 outline-none" value={form.performedBy} onChange={e => setForm({...form, performedBy: e.target.value})} />
+                    <input className="w-full p-4 bg-white/5 border border-white/10 rounded-xl text-[10px] font-black uppercase focus:ring-2 focus:ring-indigo-50 outline-none" value={form.performedBy} onChange={e => setForm({...form, performedBy: e.target.value})} />
                  </div>
                  <div className="space-y-2">
                     <label className="text-[8px] font-black text-slate-500 uppercase">Validado por (Cédula Prof.)</label>
-                    <input className="w-full p-4 bg-white/5 border border-white/10 rounded-xl text-[10px] font-black uppercase focus:ring-2 focus:ring-indigo-500 outline-none" value={form.validatedBy} onChange={e => setForm({...form, validatedBy: e.target.value})} />
+                    <input className="w-full p-4 bg-white/5 border border-white/10 rounded-xl text-[10px] font-black uppercase focus:ring-2 focus:ring-indigo-50 outline-none" value={form.validatedBy} onChange={e => setForm({...form, validatedBy: e.target.value})} />
                  </div>
               </div>
 

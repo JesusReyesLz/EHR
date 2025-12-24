@@ -166,7 +166,7 @@ const App: React.FC = () => {
           <Route path="/patient/:id/auxiliary-report" element={<AuxiliaryReport patients={patients} notes={notes} onSaveNote={addNote} />} />
           <Route path="/patient/:id/auxiliary-report/:orderId" element={<AuxiliaryReport patients={patients} notes={notes} onSaveNote={addNote} />} />
           
-          <Route path="/auxiliary-intake" element={<AuxiliaryIntake patients={patients} onSaveNote={addNote} onUpdatePatient={updatePatient} onAddPatient={addPatient} />} />
+          <Route path="/auxiliary-intake" element={<AuxiliaryIntake patients={patients} onSaveNote={addNote} onUpdatePatient={updatePatient} />} />
 
           <Route path="/patient/:id/consent" element={<InformedConsent patients={patients} onSaveNote={addNote} />} />
           <Route path="/patient/:id/telemedicine-consent" element={<TelemedicineConsent patients={patients} onSaveNote={addNote} />} />
