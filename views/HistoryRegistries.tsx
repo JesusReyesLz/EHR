@@ -5,7 +5,7 @@ import {
   ChevronLeft, History, Search, Filter, Eye, Printer, 
   Database, User, Clock, Activity, FileText, ClipboardList
 } from 'lucide-react';
-import { Patient, ClinicalNote, ModuleType } from '../types';
+import { Patient, ClinicalNote, ModuleType, PatientStatus } from '../types';
 
 const HistoryRegistries: React.FC<{ patients: Patient[], notes: ClinicalNote[] }> = ({ patients, notes }) => {
   const location = useLocation();
@@ -15,19 +15,23 @@ const HistoryRegistries: React.FC<{ patients: Patient[], notes: ClinicalNote[] }
   const [selectedModule, setSelectedModule] = useState<ModuleType>(initialModule);
   const [searchTerm, setSearchTerm] = useState('');
 
-  const moduleHistory = useMemo(() => {
-    // Obtenemos todas las notas firmadas del módulo seleccionado
-    return notes.filter(n => {
-      const p = patients.find(pat => pat.id === n.patientId);
-      return p?.assignedModule === selectedModule && n.isSigned;
-    });
-  }, [selectedModule, notes, patients]);
+  const finalizedPatients = useMemo(() => {
+    // Obtenemos pacientes con estado ATENDIDO del módulo seleccionado
+    return patients.filter(p => 
+        p.assignedModule === selectedModule && 
+        p.status === PatientStatus.ATTENDED &&
+        !p.id.startsWith('OLD-') // Excluir registros fantasma de reagenda
+    );
+  }, [selectedModule, patients]);
 
-  const filteredHistory = moduleHistory.filter(n => {
-    const p = patients.find(pat => pat.id === n.patientId);
-    return (p?.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-            n.type.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            n.id.toLowerCase().includes(searchTerm.toLowerCase()));
+  const filteredHistory = finalizedPatients.filter(p => {
+    const search = searchTerm.toLowerCase();
+    const dischargeData = p.history?.dischargeData;
+    const diagnosis = dischargeData?.diagnosticos?.[0]?.name || p.reason || '';
+    
+    return (p.name.toLowerCase().includes(search) || 
+            p.curp.toLowerCase().includes(search) ||
+            diagnosis.toLowerCase().includes(search));
   });
 
   return (
@@ -37,8 +41,8 @@ const HistoryRegistries: React.FC<{ patients: Patient[], notes: ClinicalNote[] }
            <button onClick={() => navigate('/')} className="flex items-center text-[10px] font-black uppercase text-blue-600 tracking-[0.2em] hover:opacity-70 transition-all">
               <ChevronLeft size={14} className="mr-2" /> Volver al Monitor
            </button>
-           <h1 className="text-4xl font-black text-slate-900 uppercase tracking-tight">Archivo de Atenciones</h1>
-           <p className="text-slate-500 text-sm font-medium uppercase tracking-widest">Auditoría Clínica por Módulo Sanitario</p>
+           <h1 className="text-4xl font-black text-slate-900 uppercase tracking-tight">Archivo Histórico</h1>
+           <p className="text-slate-500 text-sm font-medium uppercase tracking-widest">Consultas Finalizadas por Módulo</p>
         </div>
         <div className="flex flex-wrap items-center bg-white border border-slate-200 p-2 rounded-[2.5rem] shadow-sm gap-1">
            {Object.values(ModuleType).filter(m => m !== ModuleType.ADMIN && m !== ModuleType.MONITOR).map(m => (
@@ -59,7 +63,7 @@ const HistoryRegistries: React.FC<{ patients: Patient[], notes: ClinicalNote[] }
                <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5" />
                <input 
                  type="text" 
-                 placeholder={`Filtrar en el histórico de ${selectedModule}...`}
+                 placeholder={`Buscar paciente o diagnóstico en ${selectedModule}...`}
                  className="w-full pl-16 pr-8 py-5 bg-slate-50 border border-transparent rounded-[1.5rem] focus:bg-white focus:border-blue-200 outline-none transition-all text-sm font-bold shadow-inner"
                  value={searchTerm}
                  onChange={(e) => setSearchTerm(e.target.value)}
@@ -75,37 +79,42 @@ const HistoryRegistries: React.FC<{ patients: Patient[], notes: ClinicalNote[] }
             <table className="w-full text-left">
                <thead>
                   <tr className="bg-slate-50 text-[9px] font-black uppercase text-slate-400 tracking-widest border-b border-slate-100">
-                     <th className="px-10 py-6">Fecha / Hora</th>
+                     <th className="px-10 py-6">Fecha Cierre</th>
                      <th className="px-10 py-6">Paciente / CURP</th>
-                     <th className="px-10 py-6">Tipo de Nota / Intervención</th>
-                     <th className="px-10 py-6">Dictamen / Hallazgo</th>
+                     <th className="px-10 py-6">Diagnóstico Principal</th>
+                     <th className="px-10 py-6">Programa / Detalles</th>
                      <th className="px-10 py-6 text-right">Expediente</th>
                   </tr>
                </thead>
                <tbody className="divide-y divide-slate-100">
-                  {filteredHistory.map(note => {
-                    const p = patients.find(pat => pat.id === note.patientId);
+                  {filteredHistory.map(p => {
+                    const discharge = p.history?.dischargeData;
+                    const mainDiag = discharge?.diagnosticos?.[0] || { name: p.reason, status: 'Presuntivo' };
+                    
                     return (
-                       <tr key={note.id} className="hover:bg-slate-50 transition-all group">
+                       <tr key={p.id} className="hover:bg-slate-50 transition-all group">
                           <td className="px-10 py-8">
-                             <p className="text-[10px] font-black text-slate-900 uppercase">{note.date}</p>
-                             <p className="text-[8px] text-slate-400 font-mono mt-1">Sello: {note.hash?.substr(0,12)}</p>
+                             <p className="text-[10px] font-black text-slate-900 uppercase">{p.lastVisit}</p>
+                             <p className="text-[8px] text-slate-400 font-mono mt-1">Folio: {p.id}</p>
                           </td>
                           <td className="px-10 py-8">
-                             <p className="text-xs font-black text-slate-900 uppercase tracking-tight">{p?.name}</p>
-                             <p className="text-[9px] text-slate-400 font-mono mt-1">{p?.curp}</p>
+                             <p className="text-xs font-black text-slate-900 uppercase tracking-tight">{p.name}</p>
+                             <p className="text-[9px] text-slate-400 font-mono mt-1">{p.curp}</p>
                           </td>
                           <td className="px-10 py-8">
-                             <span className="px-3 py-1 bg-blue-50 text-blue-700 rounded-lg text-[8px] font-black uppercase border border-blue-100">{note.type}</span>
-                             <p className="text-[9px] text-slate-400 font-bold uppercase mt-2 flex items-center gap-1"><Clock size={10} /> Atendió: {note.author}</p>
+                             <p className="text-[10px] font-black text-blue-700 uppercase">{mainDiag.name}</p>
+                             <span className="px-2 py-0.5 bg-blue-50 text-blue-600 rounded text-[7px] font-bold uppercase mt-1 inline-block border border-blue-100">
+                                {mainDiag.status}
+                             </span>
                           </td>
                           <td className="px-10 py-8">
-                             <p className="text-[10px] text-slate-500 font-bold uppercase italic line-clamp-2 max-w-[300px]">
-                                {note.content.diagnosis || note.content.conclusion || note.content.studyRequested || 'Sin descripción'}
+                             <p className="text-[10px] font-bold text-slate-500 uppercase flex items-center gap-1">
+                                {discharge?.program ? <ClipboardList size={10} /> : <Activity size={10} />}
+                                {discharge?.program || 'Consulta General'}
                              </p>
                           </td>
                           <td className="px-10 py-8 text-right">
-                             <button onClick={() => navigate(`/patient/${note.patientId}`, { state: { openNoteId: note.id } })} className="p-4 bg-slate-900 text-white rounded-2xl hover:bg-blue-600 transition-all shadow-lg">
+                             <button onClick={() => navigate(`/patient/${p.id}`)} className="p-4 bg-slate-900 text-white rounded-2xl hover:bg-blue-600 transition-all shadow-lg flex items-center gap-2 ml-auto">
                                 <Eye size={18} />
                              </button>
                           </td>
@@ -116,7 +125,7 @@ const HistoryRegistries: React.FC<{ patients: Patient[], notes: ClinicalNote[] }
                     <tr>
                        <td colSpan={5} className="py-40 text-center opacity-30">
                           <History size={64} className="mx-auto mb-4" />
-                          <p className="text-xs font-black uppercase tracking-widest">Sin registros históricos en este filtro</p>
+                          <p className="text-xs font-black uppercase tracking-widest">Sin consultas finalizadas en este módulo</p>
                        </td>
                     </tr>
                   )}

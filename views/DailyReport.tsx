@@ -36,9 +36,11 @@ const DailyReport: React.FC<DailyReportProps> = ({ patients, notes }) => {
   
   const doctorsList = useMemo(() => {
     const doctors = new Set<string>();
+    // Collect doctors from notes and discharge data
     notes.forEach(n => { if(n.author) doctors.add(n.author); });
+    patients.forEach(p => { if(p.history?.dischargeData?.medico) doctors.add(p.history.dischargeData.medico) });
     return ['TODOS', ...Array.from(doctors)];
-  }, [notes]);
+  }, [notes, patients]);
 
   const attendedByDate = useMemo(() => {
     return patients.filter(p => p.status === PatientStatus.ATTENDED && p.lastVisit === reportDate);
@@ -51,16 +53,17 @@ const DailyReport: React.FC<DailyReportProps> = ({ patients, notes }) => {
       
       let matchesDoctor = true;
       if (doctorFilter !== 'TODOS') {
-        matchesDoctor = notes.some(n => n.patientId === p.id && n.author === doctorFilter);
+        const dischargeDoc = p.history?.dischargeData?.medico;
+        const noteDoc = notes.some(n => n.patientId === p.id && n.author === doctorFilter);
+        matchesDoctor = dischargeDoc === doctorFilter || noteDoc;
       }
 
       return matchesSearch && matchesDoctor;
     });
   }, [attendedByDate, searchTerm, doctorFilter, notes]);
 
-  const getHojaDiariaData = (patientId: string) => {
-    const closingNote = notes.find(n => n.patientId === patientId && n.type === 'Cierre de Atención / Hoja Diaria');
-    return closingNote?.content?.hojaDiaria;
+  const getHojaDiariaData = (patient: Patient) => {
+    return patient.history?.dischargeData;
   };
 
   const suiveData = useMemo(() => {
@@ -177,7 +180,7 @@ const DailyReport: React.FC<DailyReportProps> = ({ patients, notes }) => {
                 <tbody className="divide-y divide-slate-100">
                   {filtered.length > 0 ? (
                     filtered.map((p) => {
-                      const hojaData = getHojaDiariaData(p.id);
+                      const hojaData = getHojaDiariaData(p);
                       return (
                         <tr key={p.id} className="hover:bg-blue-50/20 transition-all group">
                           <td className="px-6 py-5">
@@ -239,6 +242,7 @@ const DailyReport: React.FC<DailyReportProps> = ({ patients, notes }) => {
         </>
       ) : (
         <div className="bg-white border border-slate-200 rounded-[3rem] shadow-xl overflow-hidden animate-in slide-in-from-bottom-4">
+           {/* ... (SUIVE Section remains same structure, just re-rendered) */}
            <div className="p-10 bg-slate-900 text-white flex justify-between items-center relative overflow-hidden">
               <div className="absolute right-0 top-0 h-full w-64 bg-blue-600/10 -skew-x-12 translate-x-32"></div>
               <div className="relative z-10">
@@ -337,7 +341,7 @@ const DailyReport: React.FC<DailyReportProps> = ({ patients, notes }) => {
                  </thead>
                  <tbody>
                     {filtered.map(p => {
-                       const hojaData = getHojaDiariaData(p.id);
+                       const hojaData = getHojaDiariaData(p);
                        return (
                        <tr key={p.id} className="border-2 border-slate-900">
                           <td className="p-3 text-[11px] font-bold border-2 border-slate-900 text-slate-900">{p.id}</td>

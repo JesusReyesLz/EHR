@@ -5,7 +5,7 @@ import {
   ChevronLeft, Microscope, ImageIcon, Save, User, Search, 
   FlaskConical, CheckCircle2, Plus, X, ClipboardList, Info, 
   CreditCard, UserCheck, Timer, AlertCircle, Fingerprint, Heart,
-  Calendar, FileText, ArrowRight
+  Calendar, FileText, ArrowRight, Database, History, UserPlus
 } from 'lucide-react';
 import { Patient, ClinicalNote, ModuleType, PatientStatus, PriorityLevel } from '../types';
 import { LAB_CATALOG, IMAGING_CATALOG } from '../constants';
@@ -46,12 +46,17 @@ const AuxiliaryIntake: React.FC<AuxiliaryIntakeProps> = ({ patients, onSaveNote,
 
   const selectedCount = opForm.labStudies.length + opForm.imagingStudies.length;
 
+  // Búsqueda en TODA la base de datos (Histórico y Activos)
   const filteredPatients = useMemo(() => {
     if (searchTerm.length < 2) return [];
-    return patients.filter(p => 
-      p.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-      p.curp.toLowerCase().includes(searchTerm.toLowerCase())
-    );
+    const search = searchTerm.toLowerCase();
+    // Filtramos para evitar duplicados visuales si hay registros históricos (OLD-) pero permitimos encontrar al paciente original
+    return patients
+      .filter(p => !p.id.startsWith('OLD-')) 
+      .filter(p => 
+        p.name.toLowerCase().includes(search) || 
+        p.curp.toLowerCase().includes(search)
+      );
   }, [patients, searchTerm]);
 
   const toggleStudy = (study: string, type: 'lab' | 'imaging') => {
@@ -66,12 +71,20 @@ const AuxiliaryIntake: React.FC<AuxiliaryIntakeProps> = ({ patients, onSaveNote,
 
   const handleSelectExisting = (p: Patient) => {
     setSelectedPatient(p);
-    setPatientForm({ ...p, status: PatientStatus.WAITING_FOR_SAMPLES });
+    // Pre-llenamos el formulario con los datos de la base de datos
+    setPatientForm({ 
+      ...p, 
+      // Forzamos el estatus y módulo para la nueva admisión a auxiliares
+      status: PatientStatus.WAITING_FOR_SAMPLES,
+      assignedModule: ModuleType.AUXILIARY,
+      priority: PriorityLevel.ROUTINE,
+      reason: '' // Limpiamos el motivo anterior para poner los nuevos estudios
+    });
     setSearchTerm('');
   };
 
   const handleSave = () => {
-    if (!patientForm.name || !patientForm.curp) return;
+    if (!patientForm.name) return;
     if (selectedCount === 0) {
       alert("Seleccione al menos un estudio para el ingreso.");
       return;
@@ -81,14 +94,18 @@ const AuxiliaryIntake: React.FC<AuxiliaryIntakeProps> = ({ patients, onSaveNote,
     const studySummary = [...opForm.labStudies, ...opForm.imagingStudies].join(', ');
 
     if (selectedPatient) {
+      // ACTUALIZACIÓN DE PACIENTE EXISTENTE (REINGRESO A AUXILIARES)
       pToSave = {
-        ...selectedPatient,
-        ...patientForm as Patient,
+        ...selectedPatient, // Mantenemos ID e historial
+        ...patientForm as Patient, // Sobrescribimos datos editados si hubo
         status: PatientStatus.WAITING_FOR_SAMPLES,
-        reason: studySummary
+        assignedModule: ModuleType.AUXILIARY,
+        reason: studySummary,
+        lastVisit: new Date().toISOString().split('T')[0]
       };
       onUpdatePatient(pToSave);
     } else {
+      // PACIENTE TOTALMENTE NUEVO
       pToSave = {
         ...patientForm as Patient,
         id: `AUX-${Date.now().toString().slice(-4)}`,
@@ -104,7 +121,6 @@ const AuxiliaryIntake: React.FC<AuxiliaryIntakeProps> = ({ patients, onSaveNote,
       onAddPatient(pToSave);
     }
 
-    // Nota administrativa omitida del historial clínico por requerimiento
     navigate('/');
   };
 
@@ -116,36 +132,95 @@ const AuxiliaryIntake: React.FC<AuxiliaryIntakeProps> = ({ patients, onSaveNote,
           <h1 className="text-3xl font-black text-slate-900 uppercase tracking-tight leading-none">Admisión de Servicios Auxiliares</h1>
         </div>
         <div className="flex bg-slate-100 p-1.5 rounded-2xl gap-2 shadow-inner">
-           <button onClick={() => { setIsNewPatient(false); setSelectedPatient(null); }} className={`px-6 py-3 rounded-xl text-[10px] font-black uppercase transition-all ${!isNewPatient ? 'bg-white text-indigo-600 shadow-md' : 'text-slate-400'}`}>Localizar</button>
-           <button onClick={() => { setIsNewPatient(true); setSelectedPatient(null); }} className={`px-6 py-3 rounded-xl text-[10px] font-black uppercase transition-all ${isNewPatient ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400'}`}>Nuevo</button>
+           <button onClick={() => { setIsNewPatient(false); setSelectedPatient(null); setPatientForm({name:'', curp:'', age:0, sex:'M', bloodType:'O+'}); }} className={`px-6 py-3 rounded-xl text-[10px] font-black uppercase transition-all ${!isNewPatient ? 'bg-white text-indigo-600 shadow-md' : 'text-slate-400'}`}>Base de Datos</button>
+           <button onClick={() => { setIsNewPatient(true); setSelectedPatient(null); setPatientForm({name:'', curp:'', age:0, sex:'M', bloodType:'O+'}); }} className={`px-6 py-3 rounded-xl text-[10px] font-black uppercase transition-all ${isNewPatient ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400'}`}>Nuevo Registro</button>
         </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
         <div className="lg:col-span-8 space-y-10">
            <div className="bg-white border border-slate-200 rounded-[3rem] p-12 shadow-sm space-y-10">
-              <h3 className="text-sm font-black uppercase tracking-widest text-slate-900 flex items-center gap-4 border-b border-slate-50 pb-6"><User className="text-indigo-600" /> Datos del Paciente</h3>
+              <h3 className="text-sm font-black uppercase tracking-widest text-slate-900 flex items-center gap-4 border-b border-slate-50 pb-6">
+                 {isNewPatient ? <UserPlus size={20} className="text-indigo-600" /> : <Database size={20} className="text-indigo-600" />}
+                 {isNewPatient ? 'Registro de Paciente Nuevo' : 'Búsqueda en Padrón de Pacientes'}
+              </h3>
 
               {!isNewPatient && !selectedPatient ? (
                 <div className="relative">
-                   <Search className="absolute left-8 top-1/2 -translate-y-1/2 text-slate-400" />
-                   <input className="w-full pl-20 pr-8 py-6 bg-slate-50 border border-slate-100 rounded-[2rem] text-sm font-bold outline-none focus:bg-white transition-all shadow-inner" placeholder="Buscar por Nombre o CURP..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+                   <div className="flex items-center gap-4 mb-4 text-slate-400">
+                      <Search size={20} />
+                      <p className="text-[10px] font-black uppercase tracking-widest">Ingrese Nombre o CURP para localizar expediente existente</p>
+                   </div>
+                   <input 
+                      className="w-full p-6 bg-slate-50 border-2 border-slate-100 rounded-[2rem] text-xl font-black outline-none focus:bg-white focus:border-indigo-200 transition-all shadow-inner text-center uppercase" 
+                      placeholder="Ej: JUAN PEREZ..." 
+                      value={searchTerm} 
+                      onChange={e => setSearchTerm(e.target.value)}
+                      autoFocus 
+                   />
+                   
                    {filteredPatients.length > 0 && (
-                     <div className="absolute top-full left-0 w-full mt-4 bg-white border border-slate-200 rounded-[2rem] shadow-2xl z-50 overflow-hidden animate-in zoom-in-95">
-                        {filteredPatients.map(p => (
-                          <button key={p.id} onClick={() => handleSelectExisting(p)} className="w-full flex items-center p-6 hover:bg-indigo-50 transition-all text-left border-b border-slate-50 last:border-0">
-                             <div className="w-12 h-12 bg-indigo-600 text-white rounded-xl flex items-center justify-center font-black mr-6 shadow-md">{p.name[0]}</div>
-                             <div><p className="text-xs font-black uppercase tracking-tight text-slate-900">{p.name}</p><p className="text-[9px] text-slate-400 font-mono mt-1">{p.curp}</p></div>
-                          </button>
-                        ))}
+                     <div className="mt-6 space-y-3">
+                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Resultados Encontrados ({filteredPatients.length})</p>
+                        <div className="grid grid-cols-1 gap-3 max-h-96 overflow-y-auto pr-2 custom-scrollbar">
+                           {filteredPatients.map(p => (
+                             <button 
+                                key={p.id} 
+                                onClick={() => handleSelectExisting(p)} 
+                                className="w-full flex items-center justify-between p-5 bg-white border border-slate-100 hover:border-indigo-500 hover:bg-indigo-50 transition-all rounded-3xl group shadow-sm text-left"
+                             >
+                                <div className="flex items-center gap-5">
+                                   <div className="w-12 h-12 bg-slate-100 text-slate-500 rounded-2xl flex items-center justify-center font-black text-lg group-hover:bg-indigo-600 group-hover:text-white transition-colors">
+                                      {p.name.charAt(0)}
+                                   </div>
+                                   <div>
+                                      <p className="text-sm font-black text-slate-900 uppercase">{p.name}</p>
+                                      <div className="flex gap-4 mt-1">
+                                         <span className="text-[10px] font-mono text-slate-500 bg-slate-100 px-2 py-0.5 rounded">{p.curp}</span>
+                                         <span className="text-[10px] font-bold text-slate-400 uppercase flex items-center gap-1"><History size={10} /> Última: {p.lastVisit}</span>
+                                      </div>
+                                   </div>
+                                </div>
+                                <div className="w-10 h-10 rounded-full border-2 border-slate-100 flex items-center justify-center group-hover:border-indigo-500 text-slate-300 group-hover:text-indigo-500">
+                                   <ArrowRight size={20} />
+                                </div>
+                             </button>
+                           ))}
+                        </div>
                      </div>
+                   )}
+                   {searchTerm.length > 2 && filteredPatients.length === 0 && (
+                      <div className="p-8 text-center text-slate-400">
+                         <p className="font-bold text-xs uppercase">No se encontraron pacientes con esos datos.</p>
+                      </div>
                    )}
                 </div>
               ) : (
-                <div className="grid grid-cols-2 gap-8 animate-in slide-in-from-bottom-4">
-                   <div className="col-span-2 space-y-2"><label className="text-[9px] font-black uppercase text-slate-400 tracking-widest ml-2">Nombre Completo</label><input className="w-full p-5 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-black uppercase outline-none focus:bg-white focus:border-indigo-200" value={patientForm.name} onChange={e => setPatientForm({...patientForm, name: e.target.value})} /></div>
-                   <div className="space-y-2"><label className="text-[9px] font-black uppercase text-slate-400 tracking-widest ml-2">CURP</label><input className="w-full p-5 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-mono font-bold outline-none focus:bg-white" value={patientForm.curp} onChange={e => setPatientForm({...patientForm, curp: e.target.value.toUpperCase()})} maxLength={18} /></div>
-                   <div className="space-y-2"><label className="text-[9px] font-black uppercase text-slate-400 tracking-widest ml-2">Edad</label><input type="number" className="w-full p-5 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold outline-none focus:bg-white" value={patientForm.age} onChange={e => setPatientForm({...patientForm, age: parseInt(e.target.value) || 0})} /></div>
+                <div className="animate-in slide-in-from-bottom-4 space-y-6">
+                   {selectedPatient && (
+                      <div className="flex justify-between items-center bg-indigo-50 p-4 rounded-2xl border border-indigo-100 mb-6">
+                         <div className="flex items-center gap-3">
+                            <CheckCircle2 className="text-indigo-600" size={20} />
+                            <p className="text-xs font-black text-indigo-900 uppercase">Paciente Identificado</p>
+                         </div>
+                         <button onClick={() => { setSelectedPatient(null); setPatientForm({name:'', curp:'', age:0}); setSearchTerm(''); }} className="text-[10px] font-bold text-indigo-600 hover:underline uppercase">Cambiar</button>
+                      </div>
+                   )}
+                   
+                   <div className="grid grid-cols-2 gap-8">
+                      <div className="col-span-2 space-y-2">
+                         <label className="text-[9px] font-black uppercase text-slate-400 tracking-widest ml-2">Nombre Completo</label>
+                         <input className="w-full p-5 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-black uppercase outline-none focus:bg-white focus:border-indigo-200" value={patientForm.name} onChange={e => setPatientForm({...patientForm, name: e.target.value})} readOnly={!!selectedPatient} />
+                      </div>
+                      <div className="space-y-2">
+                         <label className="text-[9px] font-black uppercase text-slate-400 tracking-widest ml-2">CURP</label>
+                         <input className="w-full p-5 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-mono font-bold outline-none focus:bg-white" value={patientForm.curp} onChange={e => setPatientForm({...patientForm, curp: e.target.value.toUpperCase()})} maxLength={18} readOnly={!!selectedPatient} />
+                      </div>
+                      <div className="space-y-2">
+                         <label className="text-[9px] font-black uppercase text-slate-400 tracking-widest ml-2">Edad</label>
+                         <input type="number" className="w-full p-5 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold outline-none focus:bg-white" value={patientForm.age} onChange={e => setPatientForm({...patientForm, age: parseInt(e.target.value) || 0})} readOnly={!!selectedPatient} />
+                      </div>
+                   </div>
                 </div>
               )}
            </div>
@@ -192,7 +267,7 @@ const AuxiliaryIntake: React.FC<AuxiliaryIntakeProps> = ({ patients, onSaveNote,
 
                  <div className="bg-blue-50/10 p-6 rounded-2xl border border-white/5">
                    <p className="text-[9px] text-blue-300 font-medium uppercase leading-relaxed tracking-tight">
-                     "Nota: Este ingreso administrativo no será persistido en el expediente clínico permanente del paciente para agilizar la operatividad de recepción."
+                     "Nota: Si el paciente ya existe en el sistema, esta acción actualizará su estatus a 'En Espera de Toma' en el módulo de Auxiliares, manteniendo su historial clínico previo."
                    </p>
                  </div>
 

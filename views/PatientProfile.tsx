@@ -6,7 +6,7 @@ import {
   Thermometer, Heart, Wind, Droplet, Edit3, Trash2, Save, HeartPulse, 
   TrendingUp, ChevronRight, FilePlus2, Flame, Droplets, X, QrCode, BadgeCheck, Scale, Ruler,
   Calendar, CheckSquare, Maximize2, Clock, Info, LogOut, CheckCircle2, Lock, RotateCcw, FileBadge, AlertOctagon,
-  FileSpreadsheet, Globe, Accessibility, Stethoscope, List, Baby, Syringe, Pill
+  FileSpreadsheet, Globe, Accessibility, Stethoscope, List, Baby, Syringe, Pill, Edit
 } from 'lucide-react';
 import { Patient, ClinicalNote, Vitals, DoctorInfo, PatientStatus, ModuleType } from '../types';
 import { NOTE_CATEGORIES } from '../constants';
@@ -97,42 +97,32 @@ const PatientProfile: React.FC<{ patients: Patient[], notes: ClinicalNote[], onU
   };
 
   const confirmFinalizeAttention = () => {
-    // 1. Generar nota administrativa de cierre con metadatos SIS/SINBA
-    const closeNote: ClinicalNote = {
-      id: `ALTA-${Date.now()}`,
-      patientId: patient.id,
-      type: 'Cierre de Atención / Hoja Diaria',
-      date: new Date().toLocaleString('es-MX'),
-      author: doctorInfo?.name || 'MEDICO TRATANTE',
-      content: { 
-        motivo_egreso: 'Atención Concluida',
-        condicion_egreso: 'Estable',
-        // Variables SIS-SS-01-P Complejas
-        hojaDiaria: {
-            ...dischargeForm,
-            diagnosticos: diagnosesList, // Lista de objetos {name, status}
-            somatometria: patient.currentVitals,
-            edad: patient.age,
-            sexo: patient.sex,
-            curp: patient.curp,
-            modulo: patient.assignedModule
-        },
-        plan_seguimiento: 'Cierre de episodio clínico y envío a archivo histórico.'
-      },
-      isSigned: true,
-      hash: `SIS-${Math.random().toString(36).substr(2, 9).toUpperCase()}`
+    // Estructura de datos para Hoja Diaria y Estadística
+    const dischargeData = {
+        ...dischargeForm,
+        diagnosticos: diagnosesList, // Lista de objetos {name, status}
+        somatometria: patient.currentVitals,
+        edad: patient.age,
+        sexo: patient.sex,
+        curp: patient.curp,
+        modulo: patient.assignedModule,
+        fechaCierre: new Date().toLocaleString('es-MX'),
+        medico: doctorInfo?.name || 'MEDICO TRATANTE'
     };
     
-    // 2. Persistir nota y actualizar paciente
-    onSaveNote(closeNote);
+    // Actualizar paciente: Estado ATENDIDO y guardar datos de cierre en su historial interno
     onUpdatePatient({
       ...patient,
       status: PatientStatus.ATTENDED,
       bedNumber: undefined, // Liberación inmediata de infraestructura
-      lastVisit: new Date().toISOString().split('T')[0] // Fecha para Hoja Diaria
+      lastVisit: new Date().toISOString().split('T')[0], // Fecha para Hoja Diaria
+      history: {
+        ...patient.history,
+        dischargeData: dischargeData // Guardamos los datos estadísticos aquí sin crear nota visible
+      }
     });
     
-    // 3. Cerrar modal y redirigir
+    // Cerrar modal y redirigir
     setShowFinalizeModal(false);
     navigate('/', { replace: true });
   };
@@ -148,7 +138,7 @@ const PatientProfile: React.FC<{ patients: Patient[], notes: ClinicalNote[], onU
     }
   };
 
-  // Renderizado dinámico de campos extra según Programa
+  // ... (Funciones renderProgramSpecifics, renderDynamicChart y renderNoteContent se mantienen igual que en el original)
   const renderProgramSpecifics = () => {
     switch (dischargeForm.program) {
         case 'Niño Sano':
@@ -224,35 +214,28 @@ const PatientProfile: React.FC<{ patients: Patient[], notes: ClinicalNote[], onU
   };
 
   const renderDynamicChart = (data: Vitals[] | null) => {
-    // ... (El código de la gráfica se mantiene igual)
     const vitalsData = data && data.length > 0 ? [...data].reverse() : [];
-    
     if (vitalsData.length === 0) return (
       <div className="bg-white border border-slate-200 rounded-[2rem] p-6 shadow-sm h-[200px] flex flex-col items-center justify-center opacity-40">
         <TrendingUp size={32} className="mb-2 text-slate-300" />
         <p className="font-black uppercase text-[8px] tracking-widest">Sin datos históricos</p>
       </div>
     );
-
     const paddingX = 60, pointSpacing = 80, chartWidth = Math.max(600, (vitalsData.length - 1) * pointSpacing + paddingX * 2);
     const laneHeight = 45, spacing = 15, totalHeight = (laneHeight + spacing) * 4 + 40;
-    
     const lanes = [
       { label: 'T/A', key: 'bp', color: '#3b82f6', min: 60, max: 200 },
       { label: 'F.C.', key: 'hr', color: '#f43f5e', min: 40, max: 160 },
       { label: 'T°', key: 'temp', color: '#f59e0b', min: 34, max: 41 },
       { label: 'SPO2', key: 'o2', color: '#10b981', min: 70, max: 100 }
     ];
-
     const getVal = (d: Vitals, key: string) => key === 'bp' ? parseInt(d.bp?.split('/')[0]) || 120 : (d as any)[key] || 0;
     const getY = (val: number, laneIdx: number, config: any) => {
       const top = laneIdx * (laneHeight + spacing) + 20;
       const normalized = Math.min(Math.max((val - config.min) / (config.max - config.min), 0), 1);
       return top + laneHeight - (normalized * laneHeight);
     };
-
     const step = vitalsData.length > 1 ? (chartWidth - paddingX * 2) / (vitalsData.length - 1) : 0;
-
     return (
       <div className="relative group">
         <div className="bg-white border border-slate-200 rounded-[2.5rem] p-6 shadow-sm overflow-x-auto custom-scrollbar relative">
@@ -311,12 +294,11 @@ const PatientProfile: React.FC<{ patients: Patient[], notes: ClinicalNote[], onU
   };
 
   const renderNoteContent = (note: ClinicalNote) => {
+    // ... (El contenido de renderNoteContent se mantiene idéntico al original)
     if (note.type === 'Hoja de Enfermería Certificada') {
       const { shift, nurse, meds, balance, vitalsSummary } = note.content;
-      
       return (
         <div className="space-y-8 animate-in fade-in">
-          {/* Header Info */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div className="p-4 bg-slate-50 border border-slate-100 rounded-2xl">
               <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><Clock size={12}/> Turno</p>
@@ -331,8 +313,6 @@ const PatientProfile: React.FC<{ patients: Patient[], notes: ClinicalNote[], onU
               <p className={`text-xl font-black mt-1 ${balance < 0 ? 'text-rose-500' : 'text-emerald-500'}`}>{balance > 0 ? '+' : ''}{balance} ml</p>
             </div>
           </div>
-
-          {/* Vitals Table */}
           <div className="space-y-4">
              <h4 className="text-[10px] font-black text-emerald-600 uppercase tracking-widest flex items-center gap-2 border-b border-slate-100 pb-2">
                 <Activity size={14}/> Signos Vitales (Resumen)
@@ -366,8 +346,6 @@ const PatientProfile: React.FC<{ patients: Patient[], notes: ClinicalNote[], onU
                </table>
              </div>
           </div>
-
-          {/* Meds Table */}
           <div className="space-y-4">
              <h4 className="text-[10px] font-black text-blue-600 uppercase tracking-widest flex items-center gap-2 border-b border-slate-100 pb-2">
                 <Pill size={14}/> Medicamentos Administrados
@@ -404,8 +382,6 @@ const PatientProfile: React.FC<{ patients: Patient[], notes: ClinicalNote[], onU
         </div>
       );
     }
-
-    // Default renderer for other notes
     return (
       <div className="space-y-10">
          {Object.entries(note.content).map(([key, val]) => (
@@ -444,18 +420,29 @@ const PatientProfile: React.FC<{ patients: Patient[], notes: ClinicalNote[], onU
         </div>
       )}
 
-      {/* HEADER DE FICHA */}
+      {/* HEADER DE FICHA (MODIFICADO CON BOTÓN DE EDITAR) */}
       <div className="bg-white rounded-[2.5rem] p-6 shadow-sm border border-slate-100 flex flex-wrap items-center justify-between no-print relative overflow-visible z-10">
         <div className="flex items-center gap-6">
            <div className="w-16 h-16 rounded-[1.5rem] bg-slate-900 text-blue-400 flex items-center justify-center text-2xl font-black shadow-lg uppercase">{patient.name.charAt(0)}</div>
            <div>
               <p className="text-[8px] font-black text-slate-400 uppercase tracking-[0.2em] mb-0.5">PACIENTE</p>
-              <h2 className="text-2xl font-black text-slate-900 uppercase tracking-tighter leading-none">
-                {patient.name} <span className="bg-blue-600 text-white px-2 py-0.5 rounded text-[8px] ml-2 font-black uppercase tracking-widest">EXP: {patient.id}</span>
-              </h2>
+              <div className="flex items-center gap-3">
+                <h2 className="text-2xl font-black text-slate-900 uppercase tracking-tighter leading-none">
+                  {patient.name} <span className="bg-blue-600 text-white px-2 py-0.5 rounded text-[8px] ml-2 font-black uppercase tracking-widest align-middle">EXP: {patient.id}</span>
+                </h2>
+                {!isAttended && (
+                  <button
+                    onClick={() => navigate(`/edit-patient/${patient.id}`)}
+                    className="p-1.5 bg-slate-100 text-slate-500 rounded-lg hover:bg-blue-600 hover:text-white transition-all shadow-sm"
+                    title="Editar Datos Generales (Grupo Sanguíneo, Alergias, etc.)"
+                  >
+                    <Edit size={16} />
+                  </button>
+                )}
+              </div>
               <div className="flex gap-6 mt-3">
                  <div><p className="text-[8px] font-black text-slate-300 uppercase tracking-widest">EDAD</p><p className="font-black text-slate-700 text-xs">{patient.age} AÑOS</p></div>
-                 <div><p className="text-[8px] font-black text-slate-300 uppercase tracking-widest">GRUPO S/R</p><p className="font-black text-slate-700 text-xs">{patient.bloodType}</p></div>
+                 <div><p className="text-[8px] font-black text-slate-300 uppercase tracking-widest">GRUPO S/R</p><p className="font-black text-slate-700 text-xs">{patient.bloodType || 'N/D'}</p></div>
                  <div className="bg-rose-50 px-3 py-0.5 rounded-lg border border-rose-100">
                     <p className="text-[7px] font-black text-rose-500 uppercase tracking-widest flex items-center gap-1"><Flame size={8} /> ALERGIAS</p>
                     <p className="text-[9px] font-black text-rose-600 uppercase">{patient.allergies.length > 0 ? patient.allergies[0] : 'NEGADAS'}</p>
@@ -483,6 +470,7 @@ const PatientProfile: React.FC<{ patients: Patient[], notes: ClinicalNote[], onU
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        {/* ... (El resto del componente sigue igual) ... */}
         <div className="lg:col-span-8 space-y-6">
            {renderDynamicChart(patient.vitalsHistory || null)}
 
