@@ -97,18 +97,6 @@ const PatientProfile: React.FC<{ patients: Patient[], notes: ClinicalNote[], onU
   };
 
   const confirmFinalizeAttention = () => {
-    // Validaciones
-    if (patient.assignedModule === ModuleType.OUTPATIENT) {
-        if (diagnosesList.length === 0) {
-            alert("Debe agregar al menos un diagnóstico con su estatus epidemiológico.");
-            return;
-        }
-        if (!dischargeForm.program) {
-            alert("Seleccione el Programa de Salud para la estadística.");
-            return;
-        }
-    }
-
     // 1. Generar nota administrativa de cierre con metadatos SIS/SINBA
     const closeNote: ClinicalNote = {
       id: `ALTA-${Date.now()}`,
