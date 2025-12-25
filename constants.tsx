@@ -1,5 +1,13 @@
 
-import { Patient, PatientStatus, ModuleType, MedicationStock, MedicationCategory, PriorityLevel } from './types';
+import { Patient, PatientStatus, ModuleType, MedicationStock, MedicationCategory, PriorityLevel, AgendaStatus } from './types';
+
+// Helper local para asegurar consistencia en fechas de demo
+const getLocalToday = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+
+const todayStr = getLocalToday();
 
 export const INITIAL_PATIENTS: Patient[] = [
   {
@@ -12,13 +20,16 @@ export const INITIAL_PATIENTS: Patient[] = [
     allergies: ['PENICILINA'],
     status: PatientStatus.IN_CONSULTATION,
     priority: PriorityLevel.MEDIUM,
-    lastVisit: '2023-10-25',
+    lastVisit: todayStr,
+    scheduledDate: todayStr,
+    agendaStatus: AgendaStatus.ARRIVED_ON_TIME,
     reason: 'Control de Diabetes Tipo 2',
     chronicDiseases: ['Diabetes Mellitus 2'],
     assignedModule: ModuleType.OUTPATIENT,
-    appointmentTime: '10:30 AM',
-    waitingStartTime: '2023-10-25 10:15:00',
-    currentVitals: { bp: '125/82', temp: 36.6, hr: 72, rr: 16, o2: 98, weight: 82, height: 175, bmi: 26.8, date: '2023-10-25 10:45:12' }
+    appointmentTime: '10:30',
+    waitingStartTime: `${todayStr} 10:15:00`,
+    email: 'juan.perez@email.com',
+    currentVitals: { bp: '125/82', temp: 36.6, hr: 72, rr: 16, o2: 98, weight: 82, height: 175, bmi: 26.8, date: `${todayStr} 10:45:12` }
   },
   {
     id: '2',
@@ -30,12 +41,16 @@ export const INITIAL_PATIENTS: Patient[] = [
     allergies: [],
     status: PatientStatus.WAITING,
     priority: PriorityLevel.CRITICAL,
-    lastVisit: '2023-10-26',
+    lastVisit: todayStr,
+    scheduledDate: todayStr,
+    agendaStatus: AgendaStatus.PENDING,
     reason: 'Dolor precordial intenso',
     chronicDiseases: [],
     assignedModule: ModuleType.EMERGENCY,
     bedNumber: 'BOX-04',
-    waitingStartTime: new Date().toISOString()
+    appointmentTime: '09:00',
+    email: 'maria.rodriguez@email.com',
+    waitingStartTime: new Date().toLocaleString()
   }
 ];
 
@@ -65,7 +80,6 @@ export const IMAGING_CATALOG: StudyMetadata[] = [
   { name: 'Electrocardiograma (EKG)', preparation: 'Piel limpia, sin cremas o aceites.', indications: 'Reposo de 5 minutos previo a la toma.' }
 ];
 
-// Mantenemos compatibilidad con los arreglos simples si se usan en otros lados
 export const LAB_STUDIES = LAB_CATALOG.map(s => s.name);
 export const IMAGING_STUDIES = IMAGING_CATALOG.map(s => s.name);
 

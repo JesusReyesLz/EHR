@@ -6,7 +6,7 @@ import {
   ChevronRight, Timer, PlayCircle, HeartPulse,
   X, Printer, MapPin, Calendar, AlertTriangle, ChevronDown,
   FlaskConical, TestTube, FileText, CheckCircle2, ArrowRight,
-  History, Eye, Trash2
+  History, Eye, Trash2, Heart, Scale, Ruler, Wind, Droplet, Thermometer, Save
 } from 'lucide-react';
 import { ModuleType, Patient, PatientStatus, PriorityLevel, ClinicalNote, Vitals } from '../types';
 
@@ -35,7 +35,6 @@ const Dashboard: React.FC<DashboardProps> = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [showTriageSelector, setShowTriageSelector] = useState<string | null>(null);
   
-  // State for Auxiliary Module tabs
   const [auxTab, setAuxTab] = useState<'waiting' | 'process' | 'history'>('waiting');
 
   const calculateDays = (dateStr?: string) => {
@@ -47,6 +46,7 @@ const Dashboard: React.FC<DashboardProps> = ({
   };
 
   const priorityColors: Record<string, string> = {
+    '0': 'bg-slate-100 text-slate-400 border border-slate-200 shadow-none',
     '1': 'bg-rose-600 text-white',
     '2': 'bg-orange-500 text-white',
     '3': 'bg-amber-400 text-slate-900',
@@ -55,20 +55,22 @@ const Dashboard: React.FC<DashboardProps> = ({
   };
 
   const renderTriageBadge = (p: Patient) => {
-    const level = p.priority.split(' ')[0];
+    const level = p.priority?.split(' ')[0] || '0';
+    const label = p.priority?.split('-')[1] || 'Sin Triage';
+    
     return (
       <div className="relative group/triage">
         <button 
           onClick={() => setShowTriageSelector(showTriageSelector === p.id ? null : p.id)}
-          className={`px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest flex items-center gap-3 transition-all hover:scale-105 active:scale-95 shadow-sm ${priorityColors[level] || 'bg-slate-200 text-slate-600'}`}
+          className={`px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest flex items-center gap-3 transition-all hover:scale-105 active:scale-95 shadow-sm ${priorityColors[level]}`}
         >
-          <div className="w-1.5 h-1.5 rounded-full bg-white animate-pulse"></div>
-          {p.priority.split('-')[1] || p.priority}
+          {level !== '0' && <div className="w-1.5 h-1.5 rounded-full bg-white animate-pulse"></div>}
+          {label}
           <ChevronDown size={12} className="opacity-50" />
         </button>
 
         {showTriageSelector === p.id && (
-           <div className="absolute top-full left-0 mt-2 w-56 bg-white border border-slate-200 rounded-2xl shadow-2xl z-[100] p-2 animate-in slide-in-from-top-2 no-print">
+           <div className="absolute top-full left-0 mt-2 w-64 bg-white border border-slate-200 rounded-2xl shadow-2xl z-[100] p-2 animate-in slide-in-from-top-2 no-print">
               {Object.values(PriorityLevel).map(lvl => (
                  <button 
                     key={lvl} 
@@ -110,11 +112,9 @@ const Dashboard: React.FC<DashboardProps> = ({
   const filteredPatients = patients.filter(p => {
     const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase()) || p.curp.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesModule = p.assignedModule === module;
-    
-    let isActive = true;
+    let isActive = p.status !== PatientStatus.SCHEDULED && p.status !== PatientStatus.ATTENDED;
     if (module === ModuleType.AUXILIARY) {
-       // En Auxiliares mostramos todos los estatus relevantes para poblar los 3 tabs correctamente
-       isActive = [
+       isActive = p.status !== PatientStatus.SCHEDULED && [
          PatientStatus.WAITING_FOR_SAMPLES, 
          PatientStatus.WAITING,
          PatientStatus.PROCESSING_RESULTS, 
@@ -122,10 +122,7 @@ const Dashboard: React.FC<DashboardProps> = ({
          PatientStatus.ATTENDED, 
          PatientStatus.READY_RESULTS
        ].includes(p.status);
-    } else {
-       isActive = p.status !== PatientStatus.ATTENDED;
     }
-
     return matchesSearch && matchesModule && isActive;
   });
 
@@ -154,7 +151,7 @@ const Dashboard: React.FC<DashboardProps> = ({
             className="flex items-center px-10 py-5 bg-indigo-600 text-white rounded-[1.5rem] font-black text-xs uppercase tracking-widest shadow-2xl shadow-indigo-200 transition-all hover:bg-slate-900 active:scale-95 group"
           >
             <FlaskConical className="w-5 h-5 mr-3 group-hover:rotate-12 transition-transform" />
-            Nueva Solicitud / Ingreso
+            Admisión de Estudios
           </button>
         </div>
 
@@ -162,7 +159,7 @@ const Dashboard: React.FC<DashboardProps> = ({
            <Search className="ml-4 text-slate-400 w-5 h-5" />
            <input 
              type="text" 
-             placeholder="Buscar paciente por Nombre o CURP..."
+             placeholder="Buscar paciente en sala o proceso..."
              className="w-full py-3 bg-transparent font-bold text-sm outline-none text-slate-700 placeholder-slate-300"
              value={searchTerm}
              onChange={(e) => setSearchTerm(e.target.value)}
@@ -170,14 +167,14 @@ const Dashboard: React.FC<DashboardProps> = ({
         </div>
 
         <div className="flex bg-white border border-slate-200 p-2 rounded-[2rem] shadow-sm w-fit mx-auto md:mx-0">
-           <button onClick={() => setAuxTab('waiting')} className={`px-8 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 ${auxTab === 'waiting' ? 'bg-amber-500 text-white shadow-lg' : 'text-slate-500 hover:bg-slate-50'}`}>
+           <button onClick={() => setAuxTab('waiting')} className={`px-8 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 ${auxTab === 'waiting' ? 'bg-amber-50 text-white shadow-lg' : 'text-slate-500 hover:bg-slate-50'}`}>
               <Clock size={14} /> Sala de Espera ({waitingPatients.length})
            </button>
            <button onClick={() => setAuxTab('process')} className={`px-8 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 ${auxTab === 'process' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-500 hover:bg-slate-50'}`}>
               <FlaskConical size={14} /> En Toma / Proceso ({inProcessPatients.length})
            </button>
            <button onClick={() => setAuxTab('history')} className={`px-8 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 ${auxTab === 'history' ? 'bg-emerald-600 text-white shadow-lg' : 'text-slate-500 hover:bg-slate-50'}`}>
-              <History size={14} /> Resultados Listos / Histórico ({historyPatients.length})
+              <History size={14} /> Resultados Listos ({historyPatients.length})
            </button>
         </div>
 
@@ -188,7 +185,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                    <div className="flex items-center gap-4">
                       <div className="w-12 h-12 bg-amber-100 text-amber-600 rounded-2xl flex items-center justify-center border border-amber-200"><Clock size={24} /></div>
                       <div>
-                         <h3 className="text-lg font-black text-slate-900 uppercase tracking-tight">Pacientes en Sala de Espera</h3>
+                         <h3 className="text-lg font-black text-slate-900 uppercase tracking-tight">Pacientes Presentes en Sala</h3>
                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Listos para pasar a toma de muestra</p>
                       </div>
                    </div>
@@ -209,15 +206,15 @@ const Dashboard: React.FC<DashboardProps> = ({
                                </td>
                                <td className="px-10 py-6">
                                   <div className="flex flex-col">
-                                     <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Solicitud</span>
-                                     <span className="text-xs font-bold text-slate-700 uppercase line-clamp-1 max-w-md">{p.reason || 'Estudios Generales'}</span>
+                                     <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Estudios</span>
+                                     <span className="text-xs font-bold text-slate-700 uppercase line-clamp-1 max-w-md">{p.reason}</span>
                                   </div>
                                </td>
                                <td className="px-10 py-6 text-right space-x-3">
                                   <button 
                                      onClick={() => handleAuxAction(p, 'delete')} 
                                      className="p-3 text-slate-300 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all"
-                                     title="Eliminar Registro (Error)"
+                                     title="Eliminar Registro"
                                   >
                                      <Trash2 size={18} />
                                   </button>
@@ -231,7 +228,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                             </tr>
                          ))}
                          {waitingPatients.length === 0 && (
-                            <tr><td colSpan={3} className="py-20 text-center text-slate-300 font-black uppercase text-xs">Sala de espera vacía</td></tr>
+                            <tr><td colSpan={3} className="py-20 text-center text-slate-300 font-black uppercase text-xs">Sin pacientes presentes en sala</td></tr>
                          )}
                       </tbody>
                    </table>
@@ -245,7 +242,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                    <div className="flex items-center gap-4">
                       <div className="w-12 h-12 bg-indigo-100 text-indigo-600 rounded-2xl flex items-center justify-center border border-indigo-200"><FlaskConical size={24} /></div>
                       <div>
-                         <h3 className="text-lg font-black text-slate-900 uppercase tracking-tight">Pacientes en Toma / Proceso</h3>
+                         <h3 className="text-lg font-black text-slate-900 uppercase tracking-tight">Estudios en Procesamiento</h3>
                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Captura de resultados e interpretación</p>
                       </div>
                    </div>
@@ -275,17 +272,10 @@ const Dashboard: React.FC<DashboardProps> = ({
                                </td>
                                <td className="px-10 py-6 text-right space-x-3">
                                   <button 
-                                     onClick={() => handleAuxAction(p, 'delete')} 
-                                     className="p-3 text-slate-300 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all"
-                                     title="Cancelar Estudio (Error)"
-                                  >
-                                     <Trash2 size={18} />
-                                  </button>
-                                  <button 
                                      onClick={() => handleAuxAction(p, 'report')} 
                                      className="inline-flex items-center px-6 py-3 bg-white border-2 border-indigo-100 text-indigo-600 rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-indigo-600 hover:text-white transition-all shadow-sm gap-2"
                                   >
-                                     <FileText size={14} /> Registrar Resultados
+                                     <FileText size={14} /> Capturar Resultados
                                   </button>
                                </td>
                             </tr>
@@ -305,8 +295,8 @@ const Dashboard: React.FC<DashboardProps> = ({
                    <div className="flex items-center gap-4">
                       <div className="w-12 h-12 bg-emerald-100 text-emerald-600 rounded-2xl flex items-center justify-center border border-emerald-200"><CheckCircle2 size={24} /></div>
                       <div>
-                         <h3 className="text-lg font-black text-slate-900 uppercase tracking-tight">Histórico de Resultados</h3>
-                         <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Consulta y reimpresión de estudios finalizados</p>
+                         <h3 className="text-lg font-black text-slate-900 uppercase tracking-tight">Resultados Finalizados</h3>
+                         <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Consulta de estudios completados hoy</p>
                       </div>
                    </div>
                 </div>
@@ -335,13 +325,13 @@ const Dashboard: React.FC<DashboardProps> = ({
                                      onClick={() => handleAuxAction(p, 'view')} 
                                      className="inline-flex items-center px-6 py-3 bg-white border border-slate-200 text-slate-600 rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-emerald-600 hover:text-white hover:border-emerald-600 transition-all shadow-sm gap-2"
                                   >
-                                     <Eye size={14} /> Ver Expediente / Imprimir
+                                     <Eye size={14} /> Ver Expediente
                                   </button>
                                </td>
                             </tr>
                          ))}
                          {historyPatients.length === 0 && (
-                            <tr><td colSpan={3} className="py-20 text-center text-slate-300 font-black uppercase text-xs">No hay resultados en el historial</td></tr>
+                            <tr><td colSpan={3} className="py-20 text-center text-slate-300 font-black uppercase text-xs">No hay resultados recientes</td></tr>
                          )}
                       </tbody>
                    </table>
@@ -353,7 +343,6 @@ const Dashboard: React.FC<DashboardProps> = ({
     );
   }
 
-  // Render para Módulos Estándar (Consulta, Urgencias, Hospitalización)
   return (
     <div className="max-w-full space-y-10 animate-in fade-in duration-700">
       
@@ -375,7 +364,7 @@ const Dashboard: React.FC<DashboardProps> = ({
           className="flex items-center px-10 py-5 bg-slate-900 text-white rounded-[1.5rem] font-black text-xs uppercase tracking-widest shadow-2xl transition-all hover:bg-blue-600 active:scale-95 group"
         >
           <UserPlus className="w-5 h-5 mr-3 group-hover:scale-110 transition-transform" />
-          Nuevo Paciente
+          Admisión Inmediata
         </button>
       </div>
 
@@ -385,7 +374,7 @@ const Dashboard: React.FC<DashboardProps> = ({
               <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5" />
               <input 
                 type="text" 
-                placeholder={`Filtrar pacientes en ${module}...`}
+                placeholder={`Buscar pacientes activos en ${module}...`}
                 className="w-full pl-16 pr-8 py-5 bg-slate-50 border border-transparent rounded-[1.5rem] focus:bg-white focus:border-blue-200 outline-none transition-all text-sm font-bold text-slate-900 shadow-inner"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
@@ -458,7 +447,6 @@ const Dashboard: React.FC<DashboardProps> = ({
                           <button 
                              onClick={() => handlePatientAction(p)} 
                              className="p-4 bg-slate-900 text-white rounded-2xl hover:bg-blue-600 transition-all shadow-md group-hover:scale-110 flex items-center justify-center ml-auto"
-                             title={p.bedNumber ? "Continuar Atención" : "Asignar Ubicación"}
                           >
                              {p.bedNumber ? <ChevronRight size={20} /> : <MapPin size={20} className="text-amber-400" />}
                           </button>
@@ -469,7 +457,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                     <tr>
                        <td colSpan={5} className="py-40 text-center opacity-20">
                           <Users size={80} className="mx-auto mb-6" />
-                          <p className="text-sm font-black uppercase tracking-widest">Sin pacientes activos en este módulo</p>
+                          <p className="text-sm font-black uppercase tracking-widest">Sin pacientes presentes en este módulo</p>
                        </td>
                     </tr>
                  )}
@@ -481,113 +469,100 @@ const Dashboard: React.FC<DashboardProps> = ({
   );
 };
 
-export const VitalsEditorModal: React.FC<{ 
-  patient: Patient; 
-  onClose: () => void; 
-  onSave: (v: Vitals) => void 
-}> = ({ patient, onClose, onSave }) => {
+export const VitalsEditorModal: React.FC<{ patient: Patient, onClose: () => void, onSave: (v: Vitals) => void }> = ({ patient, onClose, onSave }) => {
   const [vitals, setVitals] = useState<Vitals>(patient.currentVitals || {
-    bp: '120/80', temp: 36.5, hr: 72, rr: 18, o2: 98, weight: 70, height: 170, bmi: 24.2, date: new Date().toISOString()
+    bp: '120/80',
+    temp: 36.5,
+    hr: 70,
+    rr: 16,
+    o2: 98,
+    weight: 70,
+    height: 170,
+    bmi: 24.2,
+    date: new Date().toISOString()
   });
 
-  const updateBmi = (w: number, h: number) => {
+  const calculateBMI = (w: number, h: number) => {
     if (w > 0 && h > 0) {
-      const heightM = h / 100;
-      return parseFloat((w / (heightM * heightM)).toFixed(1));
+      const heightInMeters = h / 100;
+      return parseFloat((w / (heightInMeters * heightInMeters)).toFixed(1));
     }
     return 0;
   };
 
+  const handleChange = (field: keyof Vitals, value: string | number) => {
+    const newVitals = { ...vitals, [field]: value };
+    if (field === 'weight' || field === 'height') {
+      newVitals.bmi = calculateBMI(Number(newVitals.weight), Number(newVitals.height));
+    }
+    setVitals(newVitals);
+  };
+
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center p-6 bg-slate-900/90 backdrop-blur-md animate-in fade-in">
-      <div className="bg-white w-full max-w-2xl rounded-[3rem] shadow-2xl p-12 border border-blue-100 flex flex-col">
-        <div className="flex justify-between items-center mb-10">
+      <div className="bg-white w-full max-w-2xl rounded-[3rem] shadow-2xl overflow-hidden flex flex-col border border-white/20">
+        <div className="p-8 bg-slate-50 border-b border-slate-200 flex justify-between items-center">
           <div className="flex items-center gap-4">
-             <div className="w-14 h-14 bg-blue-600 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-blue-100">
-               <Activity size={28} />
-             </div>
-             <div>
-                <h2 className="text-2xl font-black text-slate-900 uppercase tracking-tighter">Captura de Signos</h2>
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{patient.name}</p>
-             </div>
+            <div className="w-12 h-12 bg-blue-600 rounded-2xl flex items-center justify-center text-white shadow-lg"><HeartPulse size={24} /></div>
+            <div>
+               <p className="text-xs font-black text-slate-900 uppercase tracking-widest">Nueva Toma de Signos</p>
+               <p className="text-[10px] text-slate-400 font-bold uppercase">{patient.name}</p>
+            </div>
           </div>
-          <button onClick={onClose} className="p-3 hover:bg-slate-100 rounded-2xl transition-all">
-            <X size={24} />
-          </button>
+          <button onClick={onClose} className="p-3 hover:bg-white rounded-2xl transition-all border border-slate-200"><X size={24} className="text-slate-500" /></button>
         </div>
+        
+        <div className="p-10 space-y-8">
+           <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
+              {[
+                { label: 'Presión Arterial', key: 'bp', type: 'text', icon: <Droplet size={14} className="text-blue-500" />, unit: 'mmHg' },
+                { label: 'Temp Corporal', key: 'temp', type: 'number', icon: <Thermometer size={14} className="text-amber-500" />, unit: '°C' },
+                { label: 'Frec. Cardíaca', key: 'hr', type: 'number', icon: <Heart size={14} className="text-rose-500" />, unit: 'LPM' },
+                { label: 'Frec. Resp', key: 'rr', type: 'number', icon: <Wind size={14} className="text-emerald-500" />, unit: 'RPM' },
+                { label: 'Saturación O2', key: 'o2', type: 'number', icon: <Activity size={14} className="text-blue-400" />, unit: '%' },
+                { label: 'Peso', key: 'weight', type: 'number', icon: <Scale size={14} className="text-slate-400" />, unit: 'kg' },
+                { label: 'Talla', key: 'height', type: 'number', icon: <Ruler size={14} className="text-slate-400" />, unit: 'cm' },
+              ].map(item => (
+                <div key={item.key} className="space-y-2">
+                   <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                      {item.icon} {item.label}
+                   </label>
+                   <div className="relative">
+                      <input 
+                        type={item.type} 
+                        className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl font-black text-slate-900 outline-none focus:bg-white focus:border-blue-400 transition-all"
+                        value={(vitals as any)[item.key]}
+                        onChange={e => handleChange(item.key as keyof Vitals, item.type === 'number' ? parseFloat(e.target.value) || 0 : e.target.value)}
+                      />
+                      <span className="absolute right-4 top-1/2 -translate-y-1/2 text-[8px] font-black text-slate-300 uppercase">{item.unit}</span>
+                   </div>
+                </div>
+              ))}
+              <div className="space-y-2">
+                 <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                    <Activity size={14} className="text-blue-600" /> IMC
+                 </label>
+                 <div className="p-4 bg-blue-50 border border-blue-100 rounded-xl font-black text-blue-700 text-center">
+                    {vitals.bmi}
+                 </div>
+              </div>
+           </div>
 
-        <div className="grid grid-cols-2 gap-8">
-           <div className="space-y-2">
-              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Presión Arterial</label>
-              <input 
-                className="w-full p-5 bg-slate-50 border border-slate-200 rounded-2xl text-xl font-black text-center focus:bg-white focus:border-blue-500 outline-none" 
-                value={vitals.bp} 
-                onChange={e => setVitals({...vitals, bp: e.target.value})} 
-                placeholder="120/80"
-              />
-           </div>
-           <div className="space-y-2">
-              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Frec. Cardíaca (LPM)</label>
-              <input 
-                type="number" 
-                className="w-full p-5 bg-slate-50 border border-slate-200 rounded-2xl text-xl font-black text-center focus:bg-white focus:border-blue-500 outline-none" 
-                value={vitals.hr} 
-                onChange={e => setVitals({...vitals, hr: parseInt(e.target.value) || 0})} 
-              />
-           </div>
-           <div className="space-y-2">
-              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Temperatura (°C)</label>
-              <input 
-                type="number" 
-                step="0.1" 
-                className="w-full p-5 bg-slate-50 border border-slate-200 rounded-2xl text-xl font-black text-center focus:bg-white focus:border-blue-500 outline-none" 
-                value={vitals.temp} 
-                onChange={e => setVitals({...vitals, temp: parseFloat(e.target.value) || 0})} 
-              />
-           </div>
-           <div className="space-y-2">
-              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Sat. O2 (%)</label>
-              <input 
-                type="number" 
-                className="w-full p-5 bg-slate-50 border border-slate-200 rounded-2xl text-xl font-black text-center focus:bg-white focus:border-blue-500 outline-none" 
-                value={vitals.o2} 
-                onChange={e => setVitals({...vitals, o2: parseInt(e.target.value) || 0})} 
-              />
-           </div>
-           <div className="space-y-2">
-              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Peso (kg)</label>
-              <input 
-                type="number" 
-                step="0.1" 
-                className="w-full p-5 bg-slate-50 border border-slate-200 rounded-2xl text-xl font-black text-center focus:bg-white focus:border-blue-500 outline-none" 
-                value={vitals.weight} 
-                onChange={e => {
-                  const w = parseFloat(e.target.value) || 0;
-                  setVitals({...vitals, weight: w, bmi: updateBmi(w, vitals.height)});
-                }} 
-              />
-           </div>
-           <div className="space-y-2">
-              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Talla (cm)</label>
-              <input 
-                type="number" 
-                className="w-full p-5 bg-slate-50 border border-slate-200 rounded-2xl text-xl font-black text-center focus:bg-white focus:border-blue-500 outline-none" 
-                value={vitals.height} 
-                onChange={e => {
-                  const h = parseInt(e.target.value) || 0;
-                  setVitals({...vitals, height: h, bmi: updateBmi(vitals.weight, h)});
-                }} 
-              />
-           </div>
-        </div>
-
-        <div className="mt-12 flex gap-4">
-           <button onClick={onClose} className="flex-1 py-5 text-slate-400 font-black uppercase text-[10px] tracking-widest hover:text-slate-900 transition-colors">Cancelar</button>
            <button 
-             onClick={() => onSave({...vitals, date: new Date().toLocaleString('es-MX')})} 
-             className="flex-[2] py-5 bg-blue-600 text-white rounded-[2rem] font-black uppercase text-[10px] tracking-widest shadow-2xl shadow-blue-100 hover:bg-slate-900 transition-all"
+             onClick={() => {
+                const now = new Date();
+                const day = String(now.getDate()).padStart(2, '0');
+                const month = String(now.getMonth() + 1).padStart(2, '0');
+                const year = now.getFullYear();
+                const hours = String(now.getHours()).padStart(2, '0');
+                const minutes = String(now.getMinutes()).padStart(2, '0');
+                const seconds = String(now.getSeconds()).padStart(2, '0');
+                const formattedDate = `${day}/${month}/${year}, ${hours}:${minutes}:${seconds}`;
+                onSave({ ...vitals, date: formattedDate });
+             }}
+             className="w-full py-5 bg-slate-900 text-white rounded-[2rem] font-black text-xs uppercase tracking-[0.2em] shadow-xl hover:bg-emerald-600 transition-all flex items-center justify-center gap-3"
            >
-             Guardar Signos Vitales
+              <Save size={18} /> Guardar y Sellar Registro
            </button>
         </div>
       </div>

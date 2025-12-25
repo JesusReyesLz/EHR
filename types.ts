@@ -22,10 +22,21 @@ export enum PatientStatus {
   TAKING_SAMPLES = 'En Toma de Muestra',
   PROCESSING_RESULTS = 'En Procesamiento',
   READY_RESULTS = 'Resultados Listos',
-  TRANSIT = 'En camino a sala'
+  TRANSIT = 'En camino a sala',
+  SCHEDULED = 'Programado'
+}
+
+export enum AgendaStatus {
+  PENDING = 'Pendiente',
+  ARRIVED_ON_TIME = 'Llegó a tiempo',
+  ARRIVED_LATE = 'Llegó tarde',
+  NO_SHOW = 'No asistió',
+  RESCHEDULED = 'Reagendada',
+  CANCELLED = 'Cancelada'
 }
 
 export enum PriorityLevel {
+  NONE = '0 - Sin Clasificar (Triage Pendiente)',
   CRITICAL = '1 - Crítico (Rojo)',
   HIGH = '2 - Emergencia (Naranja)',
   MEDIUM = '3 - Urgencia (Amarillo)',
@@ -37,6 +48,20 @@ export enum MedicationCategory {
   GENERAL = 'General',
   ANTIBIOTIC = 'Antibiótico',
   CONTROLLED = 'Controlado'
+}
+
+export interface DoctorInfo {
+  name: string;
+  cedula: string;
+  specialtyCedula?: string;
+  institution: string;
+  specialty: string;
+  email: string;
+  address: string;
+  phone: string;
+  hospital: string;
+  titleUrl?: string;
+  cedulaUrl?: string;
 }
 
 export interface Vitals {
@@ -51,6 +76,15 @@ export interface Vitals {
   waist?: number;
   hip?: number;
   date: string;
+}
+
+export interface DiuresisEntry {
+  id: string;
+  date: string;
+  time: string;
+  amount: number;
+  characteristics: string;
+  color: string;
 }
 
 export interface MedicationPrescription {
@@ -85,19 +119,23 @@ export interface Patient {
   status: PatientStatus;
   priority: PriorityLevel;
   lastVisit: string;
-  scheduledDate?: string; // Para programación a futuro
+  scheduledDate?: string; 
   reason: string;
   chronicDiseases: string[];
   assignedModule: ModuleType;
   currentVitals?: Vitals;
   vitalsHistory?: Vitals[];
+  diuresisHistory?: DiuresisEntry[];
   attachments?: Attachment[];
   history?: any;
   bedNumber?: string;
   appointmentTime?: string;
+  agendaStatus?: AgendaStatus;
+  waitingStartTime?: string;
   birthDate?: string;
   birthPlace?: string;
   phone?: string;
+  email?: string;
   address?: string;
   civilStatus?: string;
   occupation?: string;
@@ -108,7 +146,8 @@ export interface Patient {
   indigenousLanguage?: boolean;
   medicalInsurance?: string;
   triageLevel?: 'Rojo' | 'Amarillo' | 'Verde'; 
-  waitingStartTime?: string;
+  modifiedBy?: string; 
+  originalDate?: string; 
 }
 
 export interface ClinicalNote {
