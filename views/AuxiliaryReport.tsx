@@ -1,300 +1,88 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { 
-  ChevronLeft, Printer, ShieldCheck, Microscope, ImageIcon, 
-  Save, User, UserCheck, AlertTriangle, CheckCircle2,
-  Table, FileText, Plus, Trash2, Info, Search, Activity, FlaskConical,
-  Lock, ArrowRight, ShieldAlert, Thermometer, Droplet, UserPlus, Timer,
-  FlaskRound as Flask, Upload, X
-} from 'lucide-react';
+import { ChevronLeft, Save, FlaskConical, ImageIcon, X, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { Patient, ClinicalNote, PatientStatus } from '../types';
-import { LAB_CATALOG, IMAGING_CATALOG } from '../constants';
 
-interface AuxiliaryReportProps {
-  patients: Patient[];
-  notes?: ClinicalNote[];
-  onSaveNote: (note: ClinicalNote) => void;
-  onUpdatePatient?: (p: Patient) => void;
-}
-
-const AuxiliaryReport: React.FC<AuxiliaryReportProps> = ({ patients, notes = [], onSaveNote, onUpdatePatient }) => {
-  const { id, orderId } = useParams();
+const AuxiliaryReport: React.FC<{ patients: Patient[], onSaveNote: (n: ClinicalNote) => void, onUpdatePatient: (p: Patient) => void }> = ({ patients, onSaveNote, onUpdatePatient }) => {
+  const { id } = useParams();
   const navigate = useNavigate();
   const patient = patients.find(p => p.id === id);
-  const order = notes.find(n => n.id === orderId);
 
   const [reportType, setReportType] = useState<'Laboratorio' | 'Imagenología'>('Laboratorio');
-  const [labResults, setLabResults] = useState<any[]>([]);
-  const [images, setImages] = useState<{id: string, url: string, name: string}[]>([]);
-
-  const [form, setForm] = useState({
-    studyRequested: 'Cargando estudios...',
-    clinicalJustification: '',
-    findings: '', 
-    conclusion: '', 
-    imagingTechnique: 'Proyección Estándar',
-    incidents: 'Sin incidentes.',
-    performedBy: 'Q.F.B. Beatriz Mendoza',
-    validatedBy: 'Dr. Alejandro Méndez',
-    dateTime: new Date().toLocaleString('es-MX'),
-  });
-
-  useEffect(() => {
-     if (order) {
-        const studies = order.content.labStudies || (order.type.includes('Solicitud') ? order.content.labStudies : []);
-        const imaging = order.content.imagingStudies || (order.type.includes('Solicitud') ? order.content.imagingStudies : []);
-        
-        if (imaging && imaging.length > 0) {
-           setReportType('Imagenología');
-           setForm(f => ({ ...f, studyRequested: imaging.join(', ') }));
-        } else if (studies && studies.length > 0) {
-           setReportType('Laboratorio');
-           setForm(f => ({ ...f, studyRequested: studies.join(', ') }));
-           const initialResults = studies.map((s: string, idx: number) => {
-              const meta = LAB_CATALOG.find(m => m.name === s);
-              return { 
-                id: idx.toString(), 
-                analyte: s, 
-                value: '', 
-                unit: s.includes('Glucosa') ? 'mg/dL' : s.includes('Sanguíneo') ? 'N/A' : 'mg/dL', 
-                refRange: meta?.indications || 'Normal', 
-                status: 'Normal' 
-              };
-           });
-           setLabResults(initialResults);
-        }
-     }
-  }, [order]);
-
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files.length > 0) {
-      // Mock upload - in real app would upload to server/blob
-      const newImages = Array.from(e.target.files).map(file => {
-        const f = file as File;
-        return {
-          id: Math.random().toString(36),
-          url: URL.createObjectURL(f),
-          name: f.name
-        };
-      });
-      setImages([...images, ...newImages]);
-    }
-  };
+  const [labResults, setLabResults] = useState([
+    { analyte: 'Glucosa en ayuno', value: '', unit: 'mg/dL', refRange: '70-100', status: 'Normal' },
+    { analyte: 'Creatinina sérica', value: '', unit: 'mg/dL', refRange: '0.6-1.2', status: 'Normal' },
+    { analyte: 'Urea', value: '', unit: 'mg/dL', refRange: '10-50', status: 'Normal' }
+  ]);
+  const [findings, setFindings] = useState('');
 
   if (!patient) return null;
 
   const handleSave = () => {
-    if (reportType === 'Laboratorio' && labResults.some(r => !r.value)) {
-       alert("Capture todos los resultados.");
-       return;
-    }
-
     const newNoteId = `RES-${Date.now()}`;
-    const newNote: ClinicalNote = {
+    onSaveNote({
       id: newNoteId,
       patientId: patient.id,
-      type: `Reporte de Resultados: ${reportType}`,
+      type: `Reporte de ${reportType}`,
       date: new Date().toLocaleString('es-MX'),
-      author: form.performedBy,
-      content: { 
-        ...form, 
-        reportType, 
-        orderId: orderId,
-        labResults: reportType === 'Laboratorio' ? labResults : undefined,
-        images: reportType === 'Imagenología' ? images : undefined
-      },
+      author: 'Q.F.B. Beatriz Mendoza',
+      content: { reportType, labResults: reportType === 'Laboratorio' ? labResults : undefined, findings },
       isSigned: true,
-      hash: `CERT-AUX-${Math.random().toString(36).substr(2, 10).toUpperCase()}`
-    };
-
-    // Actualización de estatus para que salte al histórico de Auxiliares
-    if (onUpdatePatient) {
-       onUpdatePatient({
-          ...patient,
-          status: PatientStatus.READY_RESULTS 
-       });
-    }
-
-    onSaveNote(newNote);
-    // Redirigir al perfil del paciente abriendo la nota para impresión/visualización inmediata
-    navigate(`/patient/${patient.id}`, { state: { openNoteId: newNoteId } });
+      hash: `CERT-AUX-${Math.random().toString(36).substr(2, 8).toUpperCase()}`
+    });
+    onUpdatePatient({ ...patient, status: PatientStatus.READY_RESULTS });
+    navigate(`/patient/${patient.id}`);
   };
 
   return (
-    <div className="max-w-7xl mx-auto pb-40 animate-in fade-in duration-500 px-4">
-      
-      <div className="bg-white border-b-8 border-indigo-600 p-10 rounded-t-[3.5rem] shadow-2xl mb-10 flex flex-col md:flex-row justify-between items-center gap-8">
+    <div className="max-w-7xl mx-auto pb-40 animate-in fade-in">
+      <div className="bg-white border-b-8 border-indigo-600 p-10 rounded-t-[3.5rem] shadow-2xl mb-10 flex justify-between items-center">
         <div className="flex items-center gap-6">
-          <button onClick={() => navigate(-1)} className="p-4 bg-slate-900 text-white rounded-2xl hover:bg-indigo-600 transition-all shadow-xl">
-            <ChevronLeft size={24} />
-          </button>
-          <div>
-             <h1 className="text-3xl font-black text-slate-900 uppercase tracking-tight">Consola Analítica</h1>
-             <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest mt-1">Carga de Resultados • NOM-024 Compatible</p>
-          </div>
+          <button onClick={() => navigate(-1)} className="p-4 bg-slate-900 text-white rounded-2xl shadow-xl"><ChevronLeft size={24} /></button>
+          <h1 className="text-3xl font-black uppercase">Captura de Resultados</h1>
         </div>
-        <div className="px-8 py-3 bg-indigo-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-lg flex items-center gap-3">
-           <Flask size={16} /> {reportType}
+        <div className="flex bg-slate-100 p-1.5 rounded-2xl gap-2">
+           <button onClick={() => setReportType('Laboratorio')} className={`px-6 py-3 rounded-xl text-[10px] font-black uppercase ${reportType === 'Laboratorio' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-500'}`}>Laboratorio</button>
+           <button onClick={() => setReportType('Imagenología')} className={`px-6 py-3 rounded-xl text-[10px] font-black uppercase ${reportType === 'Imagenología' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-500'}`}>Imagenología</button>
         </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
         <div className="lg:col-span-8 space-y-10">
-           
-           <div className="bg-white border border-slate-200 rounded-[3rem] p-10 shadow-sm flex items-center justify-between overflow-hidden relative">
-              <div className="absolute right-0 top-0 h-full w-32 bg-slate-50 -skew-x-12 translate-x-10"></div>
-              <div className="flex items-center gap-8 relative z-10">
-                 <div className="w-16 h-16 bg-slate-900 text-white rounded-2xl flex items-center justify-center font-black text-xl shadow-xl">{patient.name.charAt(0)}</div>
-                 <div>
-                    <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight mb-1">{patient.name}</h3>
-                    <p className="text-[10px] text-slate-500 font-mono tracking-tighter uppercase">{patient.curp} • {patient.age}A • {patient.sex === 'M' ? 'HOMBRE' : 'MUJER'}</p>
-                 </div>
-              </div>
-           </div>
-
            {reportType === 'Laboratorio' ? (
              <div className="bg-white border border-slate-200 rounded-[3.5rem] shadow-2xl overflow-hidden">
-                <div className="p-6 bg-slate-900 text-white flex items-center justify-between">
-                   <div className="flex items-center gap-4">
-                      <Table size={20} className="text-indigo-400" />
-                      <h3 className="text-xs font-black uppercase tracking-widest">Panel de Captura Analítica</h3>
-                   </div>
-                   <p className="text-[8px] font-bold text-slate-400 uppercase tracking-[0.2em]">Puntos de datos más juntos</p>
-                </div>
-                <div className="overflow-x-auto">
-                   <table className="w-full text-left border-collapse">
-                      <thead>
-                         <tr className="bg-slate-50 text-[9px] font-black uppercase text-slate-400 tracking-widest border-b border-slate-100">
-                            <th className="px-8 py-4">Analito</th>
-                            <th className="px-4 py-4 text-center">Valor</th>
-                            <th className="px-4 py-4 text-center">Unidad</th>
-                            <th className="px-4 py-4 text-center">Referencia</th>
-                            <th className="px-8 py-4 text-center">Estatus</th>
+                <table className="w-full text-left">
+                   <thead className="bg-slate-50 text-[9px] font-black uppercase text-slate-400 tracking-widest border-b">
+                      <tr><th className="px-8 py-5">Analito</th><th className="px-4 py-5 text-center">Valor</th><th className="px-4 py-5 text-center">Ref.</th><th className="px-8 py-5 text-center">Estatus</th></tr>
+                   </thead>
+                   <tbody className="divide-y">
+                      {labResults.map((r, i) => (
+                         <tr key={i} className="hover:bg-indigo-50/20 transition-all">
+                            <td className="px-8 py-4 text-[11px] font-black uppercase">{r.analyte}</td>
+                            <td className="px-4 py-4"><input className="w-24 mx-auto block bg-white border-2 border-slate-200 p-3 rounded-xl font-black text-center text-indigo-700" value={r.value} onChange={e => setLabResults(labResults.map((lr, idx) => idx === i ? {...lr, value: e.target.value} : lr))} /></td>
+                            <td className="px-4 py-4 text-center text-[10px] font-bold text-slate-400">{r.refRange}</td>
+                            <td className="px-8 py-4 text-center">
+                               <select className={`px-4 py-2 rounded-xl text-[9px] font-black uppercase text-white ${r.status === 'Normal' ? 'bg-emerald-500' : 'bg-rose-600'}`} value={r.status} onChange={e => setLabResults(labResults.map((lr, idx) => idx === i ? {...lr, status: e.target.value} : lr))}>
+                                  <option>Normal</option><option>Alto</option><option>Bajo</option>
+                               </select>
+                            </td>
                          </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100">
-                         {labResults.map((r, i) => (
-                            <tr key={r.id} className="hover:bg-indigo-50/20 transition-all group">
-                               <td className="px-8 py-3 text-[11px] font-black text-slate-700 uppercase tracking-tight leading-none">{r.analyte}</td>
-                               <td className="px-4 py-3">
-                                  <input 
-                                    className="w-24 mx-auto block bg-white border-2 border-slate-200 p-3 rounded-xl font-black text-center text-indigo-700 text-xl outline-none focus:border-indigo-600 transition-all" 
-                                    value={r.value} 
-                                    onChange={e => setLabResults(labResults.map(lr => lr.id === r.id ? {...lr, value: e.target.value} : lr))} 
-                                    placeholder="0.00" 
-                                  />
-                               </td>
-                               <td className="px-4 py-3 text-center text-[10px] font-black text-slate-400 uppercase">{r.unit}</td>
-                               <td className="px-4 py-3 text-center text-[9px] font-bold text-slate-400 uppercase italic leading-tight max-w-[120px]">{r.refRange}</td>
-                               <td className="px-8 py-3 text-center">
-                                  <select 
-                                    className={`px-4 py-2 rounded-xl text-[9px] font-black uppercase shadow-sm cursor-pointer border-none outline-none ${r.status !== 'Normal' ? 'bg-rose-600 text-white' : 'bg-emerald-500 text-white'}`}
-                                    value={r.status}
-                                    onChange={e => setLabResults(labResults.map(lr => lr.id === r.id ? {...lr, status: e.target.value} : lr))}
-                                  >
-                                     <option>Normal</option><option>Alto</option><option>Bajo</option>
-                                  </select>
-                               </td>
-                            </tr>
-                         ))}
-                      </tbody>
-                   </table>
-                </div>
+                      ))}
+                   </tbody>
+                </table>
              </div>
            ) : (
-             <div className="space-y-8 animate-in zoom-in-95">
-               {/* ÁREA DE CARGA DE IMÁGENES PACS */}
-               <div className="bg-slate-900 border-4 border-slate-800 rounded-[3rem] p-10 text-white shadow-2xl relative overflow-hidden">
-                  <div className="flex justify-between items-center mb-8 relative z-10">
-                     <h3 className="text-sm font-black uppercase tracking-widest flex items-center gap-3">
-                        <ImageIcon size={18} className="text-indigo-400" /> Digitalización de Estudios (PACS)
-                     </h3>
-                     <label className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-500 rounded-2xl text-[9px] font-black uppercase cursor-pointer transition-all flex items-center gap-2">
-                        <Upload size={14} /> Subir Imagen / DICOM
-                        <input type="file" multiple accept="image/*" className="hidden" onChange={handleFileUpload} />
-                     </label>
-                  </div>
-                  
-                  {images.length > 0 ? (
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 relative z-10">
-                       {images.map((img, idx) => (
-                          <div key={img.id} className="relative aspect-square bg-black/50 rounded-2xl overflow-hidden group border border-white/10">
-                             <img src={img.url} alt="Study" className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-all" />
-                             <button 
-                               onClick={() => setImages(images.filter(i => i.id !== img.id))}
-                               className="absolute top-2 right-2 p-1.5 bg-red-500/80 text-white rounded-full opacity-0 group-hover:opacity-100 transition-all"
-                             >
-                                <X size={12} />
-                             </button>
-                             <span className="absolute bottom-2 left-2 text-[8px] font-mono bg-black/70 px-2 py-1 rounded text-white truncate max-w-[90%]">{img.name}</span>
-                          </div>
-                       ))}
-                    </div>
-                  ) : (
-                    <div className="border-2 border-dashed border-white/10 rounded-3xl h-32 flex flex-col items-center justify-center text-slate-500 relative z-10">
-                       <Upload size={24} className="mb-2 opacity-50" />
-                       <p className="text-[10px] font-black uppercase tracking-widest">Arrastre archivos o haga clic para subir</p>
-                    </div>
-                  )}
-               </div>
-
-               <div className="bg-white border border-slate-200 rounded-[3.5rem] p-12 shadow-sm space-y-8">
-                   <div className="space-y-4">
-                      <label className="text-[10px] font-black text-slate-900 uppercase block ml-2">Técnica Radiológica / Procedimiento</label>
-                      <input className="w-full p-6 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-black uppercase tracking-tight" value={form.imagingTechnique} onChange={e => setForm({...form, imagingTechnique: e.target.value})} />
-                   </div>
-                   <div className="space-y-4">
-                      <label className="text-[10px] font-black text-slate-900 uppercase block ml-2">Descripción de Hallazgos</label>
-                      <textarea className="w-full p-8 bg-slate-50 border border-slate-200 rounded-[2.5rem] h-64 text-sm font-medium italic leading-relaxed outline-none shadow-inner" value={form.findings} onChange={e => setForm({...form, findings: e.target.value})} />
-                   </div>
-                </div>
+             <div className="bg-white border border-slate-200 rounded-[3.5rem] p-12 space-y-8">
+                <label className="text-[10px] font-black uppercase tracking-widest block ml-2">Descripción de Hallazgos Radiológicos</label>
+                <textarea className="w-full p-8 bg-slate-50 border border-slate-200 rounded-[2.5rem] h-64 text-sm font-medium italic outline-none shadow-inner focus:bg-white" value={findings} onChange={e => setFindings(e.target.value)} />
              </div>
            )}
-
-           <div className="bg-indigo-50 border-2 border-indigo-100 rounded-[2.5rem] p-8 space-y-4">
-              <label className="text-[10px] font-black text-indigo-700 uppercase tracking-widest block ml-2">Interpretación Diagnóstica / Conclusión</label>
-              <textarea 
-                className="w-full p-6 bg-white border border-indigo-200 rounded-[2rem] h-24 text-sm font-black uppercase outline-none focus:border-indigo-600" 
-                value={form.conclusion} 
-                onChange={e => setForm({...form, conclusion: e.target.value})} 
-                placeholder="Escriba el dictamen final..."
-              />
-           </div>
         </div>
-
-        <div className="lg:col-span-4 space-y-10">
-           <div className="bg-white border-t-8 border-indigo-600 rounded-[3.5rem] p-12 shadow-2xl space-y-10 sticky top-32">
-              <h3 className="text-xs font-black uppercase tracking-widest text-indigo-600 flex items-center gap-4"><UserCheck size={24} /> Validación Sanitaria</h3>
-              <div className="space-y-8">
-                 <div className="space-y-3">
-                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-2">Técnico / Analista que realiza</label>
-                    <input className="w-full p-5 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-black uppercase" value={form.performedBy} onChange={e => setForm({...form, performedBy: e.target.value})} />
-                 </div>
-                 <div className="space-y-3">
-                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-2">Médico / Químico Responsable</label>
-                    <input className="w-full p-5 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-black uppercase" value={form.validatedBy} onChange={e => setForm({...form, validatedBy: e.target.value})} />
-                 </div>
-              </div>
-              
-              <div className="p-6 bg-slate-50 rounded-3xl space-y-3">
-                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Protocolo de Cierre</p>
-                <div className="flex items-center gap-3">
-                   <div className="w-4 h-4 bg-emerald-500 rounded-full"></div>
-                   <span className="text-[9px] font-bold text-slate-600 uppercase">Muestras Validadas</span>
-                </div>
-                <div className="flex items-center gap-3">
-                   <div className="w-4 h-4 bg-emerald-500 rounded-full"></div>
-                   <span className="text-[9px] font-bold text-slate-600 uppercase">Control de Calidad OK</span>
-                </div>
-              </div>
-
-              <button 
-                onClick={handleSave}
-                className="w-full py-8 bg-indigo-600 text-white rounded-[2rem] font-black text-xs uppercase tracking-[0.3em] shadow-[0_20px_50px_-15px_rgba(79,70,229,0.5)] hover:bg-emerald-600 transition-all flex items-center justify-center gap-5"
-              >
-                 <Save size={24} /> Finalizar y Sellar
-              </button>
+        <div className="lg:col-span-4">
+           <div className="bg-slate-900 text-white rounded-[3rem] p-12 shadow-2xl space-y-10 border border-white/10">
+              <h3 className="text-xs font-black uppercase tracking-widest text-indigo-400 border-b border-white/10 pb-4">Validación Técnica</h3>
+              <button onClick={handleSave} className="w-full py-8 bg-indigo-600 text-white rounded-[2rem] font-black text-xs uppercase tracking-[0.3em] shadow-xl hover:bg-emerald-600 transition-all flex items-center justify-center gap-5"><Save size={24} /> Finalizar y Sellar</button>
            </div>
         </div>
       </div>

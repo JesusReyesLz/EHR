@@ -87,6 +87,25 @@ export interface DiuresisEntry {
   color: string;
 }
 
+export interface LiquidEntry {
+  id: string;
+  type: 'Ingreso' | 'Egreso';
+  concept: string; // Solución, Dieta, Diuresis, Sangrado, etc.
+  amount: number;
+  time: string;
+  date: string;
+}
+
+export interface MedicationLog {
+  id: string;
+  medName: string;
+  dosage: string;
+  time: string;
+  status: 'Aplicado' | 'No Aplicado' | 'Pendiente';
+  nurse: string;
+  date: string;
+}
+
 export interface MedicationPrescription {
   id: string;
   name: string;
@@ -126,28 +145,22 @@ export interface Patient {
   currentVitals?: Vitals;
   vitalsHistory?: Vitals[];
   diuresisHistory?: DiuresisEntry[];
+  liquidHistory?: LiquidEntry[];
+  medicationLogs?: MedicationLog[];
   attachments?: Attachment[];
   history?: any;
   bedNumber?: string;
   appointmentTime?: string;
   agendaStatus?: AgendaStatus;
   waitingStartTime?: string;
-  birthDate?: string;
-  birthPlace?: string;
-  phone?: string;
   email?: string;
-  address?: string;
-  civilStatus?: string;
-  occupation?: string;
+  phone?: string;
+  modifiedBy?: string;
   religion?: string;
   education?: string;
-  residence?: string;
-  ethnicGroup?: string;
-  indigenousLanguage?: boolean;
-  medicalInsurance?: string;
-  triageLevel?: 'Rojo' | 'Amarillo' | 'Verde'; 
-  modifiedBy?: string; 
-  originalDate?: string; 
+  occupation?: string;
+  address?: string;
+  civilStatus?: string;
 }
 
 export interface ClinicalNote {
@@ -157,16 +170,8 @@ export interface ClinicalNote {
   date: string;
   author: string;
   content: {
-    subjective?: string;
-    objective?: string;
-    analysis?: string;
-    plan?: string;
-    diagnosis?: string;
-    vitals?: Vitals;
-    prescriptions?: MedicationPrescription[];
     [key: string]: any;
   };
-  attachments?: Attachment[];
   isSigned: boolean;
   hash?: string;
 }
