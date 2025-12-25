@@ -150,6 +150,8 @@ export interface Patient {
   attachments?: Attachment[];
   history?: any;
   bedNumber?: string;
+  transitTargetBed?: string;
+  transitTargetModule?: ModuleType;
   appointmentTime?: string;
   agendaStatus?: AgendaStatus;
   waitingStartTime?: string;

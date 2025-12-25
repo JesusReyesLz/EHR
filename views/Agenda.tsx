@@ -29,6 +29,10 @@ import {
 } from 'lucide-react';
 import { Patient, PatientStatus, ModuleType, AgendaStatus } from '../types';
 
+// Función auxiliar para normalizar texto (quitar acentos y pasar a minúsculas)
+const cleanStr = (str: string) => 
+  (str || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+
 interface AgendaProps {
   onUpdateStatus: (id: string, status: PatientStatus, agendaStatus?: AgendaStatus) => void;
   patients: Patient[];
@@ -58,9 +62,10 @@ const Agenda: React.FC<AgendaProps> = ({ onUpdateStatus, patients }) => {
   // Búsqueda global para encontrar en qué fecha está un paciente
   const globalSearchResults = useMemo(() => {
     if (searchTerm.length < 3) return [];
+    const search = cleanStr(searchTerm);
     return patients
       .filter(p => !p.id.startsWith('OLD-')) // No mostrar duplicados históricos en búsqueda global
-      .filter(p => p.name.toLowerCase().includes(searchTerm.toLowerCase()) || p.curp.toLowerCase().includes(searchTerm.toLowerCase()))
+      .filter(p => cleanStr(p.name).includes(search) || cleanStr(p.curp).includes(search))
       .sort((a, b) => (b.scheduledDate || '').localeCompare(a.scheduledDate || ''));
   }, [patients, searchTerm]);
 
@@ -82,8 +87,9 @@ const Agenda: React.FC<AgendaProps> = ({ onUpdateStatus, patients }) => {
   }, [patients, selectedDate]);
 
   const filteredAppointments = useMemo(() => {
+    const search = cleanStr(searchTerm);
     return dayAppointments.filter(p => {
-      const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase()) || p.curp.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchesSearch = cleanStr(p.name).includes(search) || cleanStr(p.curp).includes(search);
       const arrived = isActuallyArrived(p);
       const modified = p.agendaStatus === AgendaStatus.CANCELLED || p.agendaStatus === AgendaStatus.RESCHEDULED;
 
@@ -380,7 +386,7 @@ const Agenda: React.FC<AgendaProps> = ({ onUpdateStatus, patients }) => {
                           {appt.agendaStatus && appt.agendaStatus !== AgendaStatus.PENDING && (
                              <div className={`px-4 py-1.5 rounded-lg text-[8px] font-black uppercase flex items-center gap-2 ${
                                 appt.agendaStatus === AgendaStatus.ARRIVED_ON_TIME ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' :
-                                appt.agendaStatus === AgendaStatus.ARRIVED_LATE ? 'bg-amber-50 text-amber-600 border border-amber-100' :
+                                appt.agendaStatus === AgendaStatus.ARRIVED_LATE ? 'bg-amber-50 text-amber-600 border-amber-100' :
                                 appt.agendaStatus === AgendaStatus.NO_SHOW ? 'bg-rose-50 text-rose-700 border border-rose-100' :
                                 isMod ? 'bg-slate-900 text-white border border-slate-800' :
                                 'bg-rose-50 text-rose-600'

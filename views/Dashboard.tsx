@@ -4,9 +4,10 @@ import { useNavigate } from 'react-router-dom';
 import { 
   Search, UserPlus, Clock, Activity, ChevronRight, 
   FlaskConical, Beaker, FileText, CheckCircle2, 
-  MapPin, AlertTriangle, Printer, Microscope, ClipboardList
+  MapPin, AlertTriangle, Printer, Microscope, ClipboardList,
+  ChevronDown, MapPinned, Users, Info, X, Check, Timer, ArrowRight
 } from 'lucide-react';
-import { ModuleType, Patient, PatientStatus, PriorityLevel, Vitals } from '../types';
+import { ModuleType, Patient, PatientStatus, PriorityLevel } from '../types';
 
 interface DashboardProps {
   module: ModuleType;
@@ -18,6 +19,65 @@ interface DashboardProps {
   doctorInfo: any;
 }
 
+// Función auxiliar para normalizar texto (quitar acentos y pasar a minúsculas)
+const cleanStr = (str: string) => 
+  (str || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+
+const TriageDropdown: React.FC<{ 
+  current: PriorityLevel, 
+  onSelect: (val: PriorityLevel) => void 
+}> = ({ current, onSelect }) => {
+  const [isOpen, setIsOpen] = useState(false);
+
+  const getStyle = (val: string) => {
+    if (val.includes('Rojo')) return 'bg-rose-50 border-rose-200 text-rose-700';
+    if (val.includes('Naranja')) return 'bg-orange-50 border-orange-200 text-orange-700';
+    if (val.includes('Amarillo')) return 'bg-amber-50 border-amber-200 text-amber-700';
+    if (val.includes('Verde')) return 'bg-emerald-50 border-emerald-200 text-emerald-700';
+    if (val.includes('Azul')) return 'bg-blue-50 border-blue-200 text-blue-700';
+    return 'bg-slate-50 border-slate-200 text-slate-400';
+  };
+
+  return (
+    <div className="relative inline-block text-left">
+      <button 
+        onClick={() => setIsOpen(!isOpen)}
+        className={`flex items-center gap-2 px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-tight border transition-all shadow-sm ${getStyle(current)}`}
+      >
+        {current.split('-')[1] || current}
+        <ChevronDown size={12} className={`transition-transform duration-300 ${isOpen ? 'rotate-180' : ''}`} />
+      </button>
+
+      {isOpen && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setIsOpen(false)}></div>
+          <div className="absolute left-0 mt-2 w-64 bg-white border border-slate-200 rounded-2xl shadow-2xl z-50 overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="p-2.5 bg-slate-50 border-b border-slate-100">
+               <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest ml-2">Seleccionar Clasificación</p>
+            </div>
+            {Object.values(PriorityLevel).map((level) => (
+              <button
+                key={level}
+                onClick={() => {
+                  onSelect(level);
+                  setIsOpen(false);
+                }}
+                className={`w-full text-left px-4 py-3 text-[9px] font-black uppercase transition-all flex items-center justify-between hover:bg-slate-50 ${current === level ? 'bg-blue-50/50 text-blue-700' : 'text-slate-600'}`}
+              >
+                <div className="flex items-center gap-3">
+                   <div className={`w-2 h-2 rounded-full ${getStyle(level).split(' ')[0]}`}></div>
+                   {level}
+                </div>
+                {current === level && <Check size={12} />}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+};
+
 const Dashboard: React.FC<DashboardProps> = ({ 
   module, patients, onUpdateStatus, onUpdatePriority, onModuleChange, onUpdatePatient, doctorInfo 
 }) => {
@@ -26,23 +86,31 @@ const Dashboard: React.FC<DashboardProps> = ({
   const isAuxiliary = module === ModuleType.AUXILIARY;
 
   const filteredPatients = patients.filter(p => {
-    const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase()) || p.curp.toLowerCase().includes(searchTerm.toLowerCase());
+    const search = cleanStr(searchTerm);
+    const matchesSearch = cleanStr(p.name).includes(search) || cleanStr(p.id).includes(search);
     const matchesModule = p.assignedModule === module;
-    return matchesSearch && matchesModule && p.status !== PatientStatus.ATTENDED;
+    return matchesSearch && matchesModule && p.status !== PatientStatus.ATTENDED && p.status !== PatientStatus.READY_RESULTS;
   });
 
-  // Agrupación para Auxiliares
-  const waitingPatients = filteredPatients.filter(p => p.status === PatientStatus.WAITING_FOR_SAMPLES);
-  const inProcessPatients = filteredPatients.filter(p => p.status === PatientStatus.TAKING_SAMPLES || p.status === PatientStatus.PROCESSING_RESULTS);
-  const readyPatients = filteredPatients.filter(p => p.status === PatientStatus.READY_RESULTS);
+  const handlePatientAction = (p: Patient) => {
+    if (!p.bedNumber && module !== ModuleType.AUXILIARY) {
+      navigate('/monitor', { state: { patientToAssign: p, targetModule: module } });
+    } else {
+      navigate(`/patient/${p.id}`);
+    }
+  };
 
   if (isAuxiliary) {
+    const waiting = filteredPatients.filter(p => p.status === PatientStatus.WAITING_FOR_SAMPLES);
+    const taking = filteredPatients.filter(p => p.status === PatientStatus.TAKING_SAMPLES);
+    const processing = filteredPatients.filter(p => p.status === PatientStatus.PROCESSING_RESULTS);
+
     return (
       <div className="max-w-full space-y-10 animate-in fade-in duration-500">
         <div className="flex justify-between items-end">
           <div className="space-y-2">
             <p className="text-[10px] font-black text-indigo-600 uppercase tracking-[0.3em]">Servicios de Diagnóstico</p>
-            <h1 className="text-5xl font-black text-slate-900 tracking-tighter uppercase">AUXILIARES</h1>
+            <h1 className="text-5xl font-black text-slate-900 tracking-tighter uppercase leading-none">Monitor de Auxiliares</h1>
           </div>
           <button onClick={() => navigate('/auxiliary-intake')} className="flex items-center px-10 py-5 bg-indigo-600 text-white rounded-[1.5rem] font-black text-xs uppercase tracking-widest shadow-2xl hover:bg-slate-900 transition-all">
             <FlaskConical className="w-5 h-5 mr-3" /> Nuevo Ingreso
@@ -50,157 +118,193 @@ const Dashboard: React.FC<DashboardProps> = ({
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* COLUMNA 1: SALA DE ESPERA */}
-          <div className="bg-white border border-slate-200 rounded-[3rem] p-8 shadow-sm flex flex-col min-h-[600px]">
-            <div className="flex items-center justify-between mb-8 border-b border-slate-100 pb-4">
-               <h3 className="text-xs font-black uppercase text-amber-600 flex items-center gap-2"><Clock size={16} /> Sala de Espera</h3>
-               <span className="bg-amber-100 text-amber-600 px-3 py-1 rounded-full text-[10px] font-black">{waitingPatients.length}</span>
-            </div>
-            <div className="space-y-4 flex-1 overflow-y-auto no-scrollbar">
-               {waitingPatients.map(p => (
-                 <div key={p.id} className="p-6 bg-slate-50 rounded-2xl border border-slate-100 space-y-4 hover:border-indigo-400 transition-all">
-                    <div>
-                       <p className="text-xs font-black text-slate-900 uppercase truncate">{p.name}</p>
-                       <p className="text-[9px] text-slate-400 font-mono mt-1">{p.curp}</p>
+           <div className="bg-white border border-slate-200 rounded-[3rem] p-8 shadow-sm flex flex-col min-h-[600px]">
+              <div className="flex items-center justify-between mb-8 border-b border-slate-100 pb-6">
+                 <h3 className="text-xs font-black uppercase text-amber-600 flex items-center gap-3"><Clock size={18} /> Sala de Espera</h3>
+                 <span className="bg-amber-50 text-amber-600 px-3 py-1 rounded-xl text-[10px] font-black shadow-inner">{waiting.length}</span>
+              </div>
+              <div className="space-y-4 flex-1 overflow-y-auto no-scrollbar">
+                 {waiting.map(p => (
+                    <div key={p.id} className="p-6 bg-slate-50 border border-slate-100 rounded-[2.5rem] space-y-4 hover:border-indigo-300 transition-all group">
+                       <div>
+                          <p className="text-xs font-black text-slate-900 uppercase tracking-tight">{p.name}</p>
+                          <p className="text-[9px] text-slate-400 font-bold uppercase mt-1">ID: {p.id}</p>
+                       </div>
+                       <div className="p-3 bg-white rounded-2xl border border-slate-50">
+                          <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">Estudios Solicitados:</p>
+                          <p className="text-[10px] font-bold text-indigo-600 uppercase line-clamp-2">{p.reason}</p>
+                       </div>
+                       <button 
+                         onClick={() => onUpdateStatus(p.id, PatientStatus.TAKING_SAMPLES)}
+                         className="w-full py-4 bg-indigo-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-lg hover:bg-slate-900 transition-all flex items-center justify-center gap-2"
+                       >
+                         Llamar a Toma <ArrowRight size={14} />
+                       </button>
                     </div>
-                    <div className="p-3 bg-white rounded-xl border border-slate-100">
-                       <p className="text-[8px] font-black text-slate-400 uppercase mb-1">Estudios:</p>
-                       <p className="text-[10px] font-bold text-indigo-600 uppercase line-clamp-2">{p.reason}</p>
-                    </div>
-                    <button 
-                      onClick={() => onUpdateStatus(p.id, PatientStatus.TAKING_SAMPLES)}
-                      className="w-full py-3 bg-indigo-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg hover:bg-slate-900 transition-all flex items-center justify-center gap-2"
-                    >
-                      Llamar a Toma <ChevronRight size={14} />
-                    </button>
-                 </div>
-               ))}
-               {waitingPatients.length === 0 && <div className="py-20 text-center opacity-20 font-black uppercase text-[10px]">Sin pacientes en espera</div>}
-            </div>
-          </div>
+                 ))}
+                 {waiting.length === 0 && <div className="py-20 text-center opacity-10 font-black uppercase text-[10px] tracking-[0.4em]">Vacio</div>}
+              </div>
+           </div>
 
-          {/* COLUMNA 2: TOMA DE MUESTRA / PROCESO */}
-          <div className="bg-white border border-slate-200 rounded-[3rem] p-8 shadow-xl flex flex-col min-h-[600px] ring-4 ring-indigo-50">
-            <div className="flex items-center justify-between mb-8 border-b border-slate-100 pb-4">
-               <h3 className="text-xs font-black uppercase text-indigo-700 flex items-center gap-2"><Microscope size={16} /> Toma de Muestra</h3>
-               <span className="bg-indigo-100 text-indigo-700 px-3 py-1 rounded-full text-[10px] font-black">{inProcessPatients.length}</span>
-            </div>
-            <div className="space-y-4 flex-1 overflow-y-auto no-scrollbar">
-               {inProcessPatients.map(p => (
-                 <div key={p.id} className="p-6 bg-indigo-50/50 rounded-2xl border-2 border-indigo-200 space-y-4 animate-pulse">
-                    <div>
-                       <p className="text-xs font-black text-indigo-900 uppercase truncate">{p.name}</p>
-                       <p className="text-[9px] text-indigo-400 font-mono mt-1">ID ORDEN: {p.id}</p>
+           <div className="bg-indigo-50/50 border border-indigo-100 rounded-[3.5rem] p-8 shadow-inner flex flex-col min-h-[600px]">
+              <div className="flex items-center justify-between mb-8 border-b border-indigo-100 pb-6">
+                 <h3 className="text-xs font-black uppercase text-indigo-700 flex items-center gap-3"><Activity size={18} /> Sala de Toma</h3>
+                 <span className="bg-indigo-600 text-white px-3 py-1 rounded-xl text-[10px] font-black shadow-md">{taking.length}</span>
+              </div>
+              <div className="space-y-4 flex-1 overflow-y-auto no-scrollbar">
+                 {taking.map(p => (
+                    <div key={p.id} className="p-6 bg-white border-2 border-indigo-200 rounded-[2.5rem] space-y-4 shadow-xl">
+                       <p className="text-xs font-black text-indigo-900 uppercase tracking-tight">{p.name}</p>
+                       <button 
+                         onClick={() => onUpdateStatus(p.id, PatientStatus.PROCESSING_RESULTS)}
+                         className="w-full py-4 bg-slate-900 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-lg hover:bg-indigo-700 transition-all flex items-center justify-center gap-2"
+                       >
+                         Muestra Recolectada <ArrowRight size={14} />
+                       </button>
                     </div>
-                    <button 
-                      onClick={() => navigate(`/patient/${p.id}/auxiliary-report`)}
-                      className="w-full py-4 bg-slate-900 text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-xl hover:bg-blue-600 transition-all flex items-center justify-center gap-2"
-                    >
-                      Capturar Resultados <Beaker size={14} />
-                    </button>
-                 </div>
-               ))}
-               {inProcessPatients.length === 0 && <div className="py-20 text-center opacity-20 font-black uppercase text-[10px]">Sin tomas en curso</div>}
-            </div>
-          </div>
+                 ))}
+                 {taking.length === 0 && <div className="py-20 text-center opacity-20 font-black uppercase text-[10px] tracking-[0.4em]">Sin pacientes en toma</div>}
+              </div>
+           </div>
 
-          {/* COLUMNA 3: RESULTADOS LISTOS */}
-          <div className="bg-white border border-slate-200 rounded-[3rem] p-8 shadow-sm flex flex-col min-h-[600px]">
-            <div className="flex items-center justify-between mb-8 border-b border-slate-100 pb-4">
-               <h3 className="text-xs font-black uppercase text-emerald-600 flex items-center gap-2"><CheckCircle2 size={16} /> Resultados Listos</h3>
-               <span className="bg-emerald-100 text-emerald-600 px-3 py-1 rounded-full text-[10px] font-black">{readyPatients.length}</span>
-            </div>
-            <div className="space-y-4 flex-1 overflow-y-auto no-scrollbar">
-               {readyPatients.map(p => (
-                 <div key={p.id} className="p-6 bg-emerald-50/30 rounded-2xl border border-emerald-100 space-y-4">
-                    <p className="text-xs font-black text-slate-900 uppercase truncate">{p.name}</p>
-                    <div className="flex gap-2">
-                       <button onClick={() => navigate(`/patient/${p.id}`)} className="flex-1 py-3 bg-white border border-emerald-200 text-emerald-700 rounded-xl text-[9px] font-black uppercase hover:bg-emerald-600 hover:text-white transition-all">Ver Reporte</button>
-                       <button className="p-3 bg-emerald-600 text-white rounded-xl shadow-md"><Printer size={16}/></button>
+           <div className="bg-white border border-slate-200 rounded-[3rem] p-8 shadow-sm flex flex-col min-h-[600px]">
+              <div className="flex items-center justify-between mb-8 border-b border-slate-100 pb-6">
+                 <h3 className="text-xs font-black uppercase text-blue-700 flex items-center gap-3"><FileText size={18} /> Espera de Captura</h3>
+                 <span className="bg-blue-50 text-blue-700 px-3 py-1 rounded-xl text-[10px] font-black shadow-inner">{processing.length}</span>
+              </div>
+              <div className="space-y-4 flex-1 overflow-y-auto no-scrollbar">
+                 {processing.map(p => (
+                    <div key={p.id} className="p-6 bg-slate-50 border border-slate-100 rounded-[2.5rem] space-y-4 hover:border-blue-300 transition-all">
+                       <p className="text-xs font-black text-slate-900 uppercase tracking-tight">{p.name}</p>
+                       <button 
+                         onClick={() => navigate(`/patient/${p.id}/auxiliary-report`)}
+                         className="w-full py-4 bg-blue-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-lg hover:bg-slate-900 transition-all flex items-center justify-center gap-2"
+                       >
+                         <Beaker size={14} /> Capturar Resultados
+                       </button>
                     </div>
-                 </div>
-               ))}
-               {readyPatients.length === 0 && <div className="py-20 text-center opacity-20 font-black uppercase text-[10px]">Sin resultados para entrega</div>}
-            </div>
-          </div>
+                 ))}
+                 {processing.length === 0 && <div className="py-20 text-center opacity-10 font-black uppercase text-[10px] tracking-[0.4em]">Sin resultados pendientes</div>}
+              </div>
+           </div>
         </div>
       </div>
     );
   }
 
-  // Vista estándar para otros módulos
   return (
     <div className="max-w-full space-y-10 animate-in fade-in duration-500">
       <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-8">
         <div className="space-y-2">
           <div className="flex items-center space-x-2 text-slate-400 uppercase text-[10px] font-black tracking-[0.3em]">
             <Activity className="w-4 h-4 text-blue-600" />
-            <span>Consola Médica Integral</span>
+            <span>Monitor de Atención Clínica</span>
             <ChevronRight className="w-3 h-3" />
             <span className="text-slate-900">{module}</span>
           </div>
-          <h1 className="text-5xl font-black text-slate-900 tracking-tighter uppercase">{module}</h1>
+          <h1 className="text-6xl font-black text-slate-900 tracking-tighter uppercase leading-none">{module}</h1>
         </div>
-        <button 
-          onClick={() => navigate('/new-patient')}
-          className="flex items-center px-10 py-5 bg-slate-900 text-white rounded-[1.5rem] font-black text-xs uppercase tracking-widest shadow-2xl hover:bg-blue-600 transition-all active:scale-95"
-        >
-          <UserPlus className="w-5 h-5 mr-3" /> Admisión Inmediata
-        </button>
+        <div className="flex gap-4">
+          <button className="p-5 bg-white border border-slate-200 text-slate-400 rounded-2xl hover:text-blue-600 transition-all shadow-sm"><Printer size={20} /></button>
+          <button 
+            onClick={() => navigate('/new-patient')}
+            className="flex items-center px-10 py-5 bg-slate-900 text-white rounded-[1.5rem] font-black text-xs uppercase tracking-widest shadow-2xl hover:bg-blue-600 transition-all active:scale-95"
+          >
+            <UserPlus className="w-5 h-5 mr-3" /> Nuevo Ingreso
+          </button>
+        </div>
       </div>
 
-      <div className="bg-white rounded-[3.5rem] shadow-2xl border border-slate-200 overflow-hidden">
-        <div className="p-10 border-b border-slate-100 flex justify-between items-center">
+      <div className="bg-white rounded-[3.5rem] shadow-sm border border-slate-100 overflow-hidden">
+        <div className="p-8 border-b border-slate-100 flex justify-between items-center bg-white">
            <div className="relative flex-1 max-w-2xl">
-              <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5" />
+              <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-300 w-5 h-5" />
               <input 
                 type="text" 
-                placeholder={`Buscar en ${module}...`}
-                className="w-full pl-16 pr-8 py-5 bg-slate-50 rounded-[1.5rem] focus:bg-white outline-none transition-all text-sm font-bold shadow-inner"
+                placeholder={`Buscar paciente por nombre o folio...`}
+                className="w-full pl-16 pr-8 py-5 bg-slate-50 rounded-[1.5rem] focus:bg-white outline-none border border-transparent focus:border-blue-100 transition-all text-sm font-bold"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
            </div>
-           <button className="p-4 bg-slate-50 text-slate-400 rounded-2xl hover:text-blue-600 transition-all"><Printer size={20} /></button>
         </div>
 
         <div className="overflow-x-auto">
-           <table className="w-full text-left">
+           <table className="w-full text-left border-separate border-spacing-y-0">
               <thead>
-                 <tr className="bg-slate-50/50 text-[9px] font-black uppercase text-slate-400 tracking-widest border-b border-slate-100">
+                 <tr className="bg-white text-[9px] font-black uppercase text-slate-400 tracking-widest border-b border-slate-100">
                     <th className="px-10 py-6">Paciente / Identificación</th>
                     <th className="px-10 py-6 text-center">Triage / Prioridad</th>
-                    <th className="px-10 py-6 text-center">Ubicación</th>
-                    <th className="px-10 py-6 text-center">Estatus Clínico</th>
-                    <th className="px-10 py-6 text-right">Ficha</th>
+                    <th className="px-10 py-6 text-center">Ubicación / Estancia</th>
+                    <th className="px-10 py-6 text-center">Estado Clínico</th>
+                    <th className="px-10 py-6 text-right">Acción</th>
                  </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
-                 {filteredPatients.map(p => (
-                    <tr key={p.id} className="hover:bg-slate-50 transition-all group">
-                       <td className="px-10 py-8">
-                          <div className="flex items-center gap-6">
-                             <div className="w-12 h-12 bg-slate-900 text-white rounded-xl flex items-center justify-center font-black uppercase">{p.name[0]}</div>
-                             <div>
-                                <p className="font-black text-slate-900 text-sm uppercase">{p.name}</p>
-                                <p className="text-[9px] text-slate-400 font-mono tracking-widest">{p.curp}</p>
+              <tbody className="divide-y divide-slate-50">
+                 {filteredPatients.map(p => {
+                    // Lógica solicitada: si tiene consultorio asignado dice "En Consulta", si no "En sala de espera"
+                    const displayStatus = p.bedNumber ? "En Consulta" : "En sala de espera";
+                    
+                    return (
+                       <tr key={p.id} className="hover:bg-blue-50/20 transition-all group">
+                          <td className="px-10 py-8">
+                             <div className="flex items-center gap-6">
+                                <div className="w-14 h-14 bg-slate-900 text-white rounded-[1.5rem] flex items-center justify-center text-lg font-black shadow-lg">
+                                   {p.name[0] || 'P'}
+                                </div>
+                                <div className="space-y-1">
+                                   <p className="font-black text-slate-900 text-[13px] uppercase tracking-tight leading-none">{p.name}</p>
+                                   <p className="text-[8px] text-slate-400 font-bold uppercase tracking-widest">
+                                      ID: {p.id} • {p.age}A • {p.sex === 'M' ? 'MASC' : 'FEM'}
+                                   </p>
+                                </div>
                              </div>
-                          </div>
-                       </td>
-                       <td className="px-10 py-8 text-center">
-                          <span className="px-3 py-1.5 bg-slate-100 rounded-lg text-[8px] font-black uppercase">{p.priority}</span>
-                       </td>
-                       <td className="px-10 py-8 text-center">
-                          <span className="text-[10px] font-black uppercase">{p.bedNumber || 'Sin Asignar'}</span>
-                       </td>
-                       <td className="px-10 py-8 text-center">
-                          <span className="bg-blue-50 text-blue-600 px-4 py-2 rounded-xl text-[9px] font-black uppercase">{p.status}</span>
-                       </td>
-                       <td className="px-10 py-8 text-right">
-                          <button onClick={() => navigate(`/patient/${p.id}`)} className="p-4 bg-slate-900 text-white rounded-2xl hover:bg-blue-600 transition-all flex items-center justify-center ml-auto"><ChevronRight size={20} /></button>
+                          </td>
+                          <td className="px-10 py-8 text-center">
+                             <TriageDropdown 
+                               current={p.priority} 
+                               onSelect={(val) => onUpdatePriority(p.id, val)} 
+                             />
+                          </td>
+                          <td className="px-10 py-8 text-center">
+                             {!p.bedNumber ? (
+                                <div className="inline-flex items-center gap-2 px-4 py-2 bg-slate-50 border border-slate-100 rounded-xl text-[9px] font-black text-slate-400 uppercase italic">
+                                   <AlertTriangle size={12} className="text-amber-500" /> Sin Asignar
+                                </div>
+                             ) : (
+                                <div className="inline-flex items-center gap-2 px-4 py-2 bg-blue-50/50 border border-blue-100 rounded-xl text-[9px] font-black text-blue-800 uppercase tracking-widest shadow-sm">
+                                   <MapPin size={12} className="text-blue-500" /> {p.bedNumber}
+                                </div>
+                             )}
+                          </td>
+                          <td className="px-10 py-8 text-center">
+                             <span className={`inline-flex items-center justify-center min-w-[120px] px-3 py-2 rounded-xl text-[8px] font-black uppercase border tracking-wider shadow-sm transition-all leading-none ${displayStatus === "En sala de espera" ? 'bg-slate-50 text-slate-400 border-slate-200' : 'bg-blue-50/80 text-blue-700 border-blue-100'}`}>
+                                {displayStatus}
+                             </span>
+                          </td>
+                          <td className="px-10 py-8 text-right">
+                             <button 
+                               onClick={() => handlePatientAction(p)}
+                               className={`w-14 h-14 rounded-[1.5rem] transition-all flex items-center justify-center ml-auto shadow-xl group/btn active:scale-95 ${p.bedNumber ? 'bg-slate-900 text-white hover:bg-blue-600' : 'bg-slate-900 text-amber-400 hover:bg-slate-800'}`}
+                             >
+                                {p.bedNumber ? (
+                                  <ChevronRight size={20} />
+                                ) : (
+                                  <MapPinned size={20} className="animate-pulse" />
+                                )}
+                             </button>
+                          </td>
+                       </tr>
+                    );
+                 })}
+                 {filteredPatients.length === 0 && (
+                    <tr>
+                       <td colSpan={5} className="py-32 text-center opacity-30 font-black uppercase tracking-[0.4em] text-slate-400">
+                          <Users size={64} className="mx-auto mb-6" />
+                          Sin pacientes en lista activa
                        </td>
                     </tr>
-                 ))}
+                 )}
               </tbody>
            </table>
         </div>

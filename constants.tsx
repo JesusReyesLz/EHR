@@ -54,34 +54,40 @@ export const INITIAL_PATIENTS: Patient[] = [
   }
 ];
 
-export interface StudyMetadata {
-  name: string;
-  preparation: string;
-  indications: string;
-}
+export const DEFAULT_INFRASTRUCTURE = {
+  outpatient: Array.from({ length: 8 }, (_, i) => `C-${(i+1).toString().padStart(2, '0')}`),
+  emergency: Array.from({ length: 10 }, (_, i) => `BOX-${(i+1).toString().padStart(2, '0')}`),
+  hospitalization: {
+    'Medicina Interna': Array.from({ length: 6 }, (_, i) => `MI-${(i+1).toString().padStart(2, '0')}`),
+    'Cirugía': Array.from({ length: 6 }, (_, i) => `CX-${(i+1).toString().padStart(2, '0')}`),
+    'Obstetricia': Array.from({ length: 4 }, (_, i) => `OB-${(i+1).toString().padStart(2, '0')}`),
+    'Pediatría': Array.from({ length: 4 }, (_, i) => `PD-${(i+1).toString().padStart(2, '0')}`),
+    'UCI': Array.from({ length: 4 }, (_, i) => `ICU-${(i+1).toString().padStart(2, '0')}`)
+  }
+};
 
-export const LAB_CATALOG: StudyMetadata[] = [
-  { name: 'Biometría Hemática Completa', preparation: 'Ayuno mínimo de 4 horas.', indications: 'Muestra de sangre venosa.' },
-  { name: 'Química Sanguínea (6 elementos)', preparation: 'Ayuno estricto de 8 a 12 horas.', indications: 'No ingerir alcohol 24 horas antes.' },
-  { name: 'Examen General de Orina (EGO)', preparation: 'Aseo previo de zona genital.', indications: 'Recolectar el primer chorro de la primera orina de la mañana.' },
-  { name: 'Perfil de Lípidos', preparation: 'Ayuno estricto de 12 horas.', indications: 'Cena ligera libre de grasas el día anterior.' },
-  { name: 'Glucosa en ayuno', preparation: 'Ayuno de 8 a 10 horas.', indications: 'No realizar ejercicio intenso antes de la toma.' },
-  { name: 'Tiempos de Coagulación (TP, TPT)', preparation: 'Ayuno mínimo de 4 horas.', indications: 'Informar si toma anticoagulantes.' },
-  { name: 'Grupo Sanguíneo y Factor Rh', preparation: 'No requiere ayuno.', indications: 'Identificación oficial requerida.' },
-  { name: 'Hemoglobina Glicosilada (HbA1c)', preparation: 'No requiere ayuno.', indications: 'Útil para control de diabetes.' }
+export const LAB_STUDIES = [
+  'Biometría Hemática Completa',
+  'Química Sanguínea (6 elementos)',
+  'Examen General de Orina (EGO)',
+  'Perfil de Lípidos',
+  'Glucosa en ayuno',
+  'Tiempos de Coagulación (TP, TPT)',
+  'Grupo Sanguíneo y Factor Rh',
+  'Hemoglobina Glicosilada (HbA1c)'
 ];
 
-export const IMAGING_CATALOG: StudyMetadata[] = [
-  { name: 'Radiografía de Tórax', preparation: 'Retirar objetos metálicos del cuello y tórax.', indications: 'No apto para pacientes con sospecha de embarazo.' },
-  { name: 'Ultrasonido Abdominal Integral', preparation: 'Ayuno de 6 a 8 horas. Beber 1 litro de agua 1 hora antes.', indications: 'No orinar hasta terminar el estudio.' },
-  { name: 'Mastografía Bilateral', preparation: 'No aplicar desodorante, talco o perfume en axilas.', indications: 'Recomendado del día 7 al 10 del ciclo menstrual.' },
-  { name: 'Tomografía (TAC) con Contraste', preparation: 'Ayuno de 6 horas. Traer estudios de Creatinina recientes.', indications: 'Informar sobre alergias al yodo o mariscos.' },
-  { name: 'Resonancia Magnética (RMN)', preparation: 'Sin objetos metálicos, marcapasos o prótesis ferrosas.', indications: 'Llegar 20 minutos antes para cuestionario de seguridad.' },
-  { name: 'Electrocardiograma (EKG)', preparation: 'Piel limpia, sin cremas o aceites.', indications: 'Reposo de 5 minutos previo a la toma.' }
+export const IMAGING_STUDIES = [
+  'Radiografía de Tórax',
+  'Ultrasonido Abdominal Integral',
+  'Mastografía Bilateral',
+  'Tomografía (TAC) con Contraste',
+  'Resonancia Magnética (RMN)',
+  'Electrocardiograma (EKG)'
 ];
 
-export const LAB_STUDIES = LAB_CATALOG.map(s => s.name);
-export const IMAGING_STUDIES = IMAGING_CATALOG.map(s => s.name);
+export const LAB_CATALOG = LAB_STUDIES.map(s => ({ name: s, preparation: 'Ayuno requerido.', indications: 'Muestra venosa.' }));
+export const IMAGING_CATALOG = IMAGING_STUDIES.map(s => ({ name: s, preparation: 'Consultar indicaciones.', indications: 'Gabinete.' }));
 
 export const VADEMECUM_DB: MedicationStock[] = [
   {
@@ -90,21 +96,6 @@ export const VADEMECUM_DB: MedicationStock[] = [
     genericName: 'PARACETAMOL',
     presentation: 'Tabletas',
     concentration: '500mg',
-    batch: 'N/A',
-    expiryDate: '2030-01-01',
-    currentStock: 999,
-    minStock: 0,
-    unit: 'Tabletas',
-    supplier: 'Genérico',
-    registroCofepris: 'N/A',
-    category: MedicationCategory.GENERAL
-  },
-  {
-    id: 'DB-002',
-    name: 'GLAFORNIL (METFORMINA)',
-    genericName: 'METFORMINA',
-    presentation: 'Tabletas',
-    concentration: '850mg',
     batch: 'N/A',
     expiryDate: '2030-01-01',
     currentStock: 999,
@@ -144,26 +135,6 @@ export const NOTE_CATEGORIES = [
       'Nota Inicial de Urgencias',
       'Nota de Egreso / Alta'
     ]
-  },
-  {
-    title: 'Quirúrgico y Anestesia',
-    notes: [
-      'Nota Pre-operatoria',
-      'Nota Post-operatoria',
-      'Nota Pre-anestésica',
-      'Nota Post-anestésica',
-      'Lista de Verificación OMS'
-    ]
-  },
-  {
-    title: 'Auxiliares y Órdenes',
-    notes: [
-      'Solicitud de Estudios Auxiliares',
-      'Reporte de Resultados Lab/Imagen',
-      'Hoja de Enfermería',
-      'Consentimiento Informado',
-      'Receta Médica'
-    ]
   }
 ];
 
@@ -171,6 +142,7 @@ export const BITACORAS = [
   { id: 'refrig', name: 'Control de Temperatura (Red de Frío)', icon: 'Thermometer' },
   { id: 'cloro', name: 'Bitácora de Cloración de Agua', icon: 'Droplets' },
   { id: 'rpbi', name: 'Manejo de RPBI', icon: 'Trash2' },
+  { id: 'extintores', name: 'Revisión de Extintores', icon: 'Flame' },
   { id: 'limpieza', name: 'Bitácora de Limpieza y Sanitización', icon: 'Sparkles' }
 ];
 
@@ -179,4 +151,12 @@ export const PROTOCOLOS = [
   'Manual de Manejo de RPBI',
   'Plan de Contingencia y Evacuación',
   'Protocolo de Seguridad Sanitaria'
+];
+
+export const FORMATOS_VIGENTES = [
+  { id: 'f-hc', name: 'Formato: Historia Clínica (Anverso/Reverso)', category: 'Clínico', norm: 'NOM-004' },
+  { id: 'f-enf', name: 'Formato: Hoja de Enfermería (Sábana)', category: 'Clínico', norm: 'NOM-004' },
+  { id: 'f-cons', name: 'Carta de Consentimiento Informado', category: 'Legal', norm: 'NOM-004' },
+  { id: 'f-ref', name: 'Hoja de Referencia y Contrarreferencia', category: 'Administrativo', norm: 'Regulatorio' },
+  { id: 'f-suive', name: 'Formulario SUIVE-1 (Semanal)', category: 'Epidemiología', norm: 'NOM-017' }
 ];

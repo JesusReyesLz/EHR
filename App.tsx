@@ -21,24 +21,13 @@ import NursingSheet from './views/NursingSheet';
 import AuxiliaryReport from './views/AuxiliaryReport';
 import AuxiliaryOrder from './views/AuxiliaryOrder';
 import AuxiliaryIntake from './views/AuxiliaryIntake';
-import InformedConsent from './views/InformedConsent';
-import TelemedicineConsent from './views/TelemedicineConsent';
-import VoluntaryDischarge from './views/VoluntaryDischarge';
-import MPNotification from './views/MPNotification';
-import DeathCertificate from './views/DeathCertificate';
-import TransfusionRegistry from './views/TransfusionRegistry';
-import SocialWorkSheet from './views/SocialWorkSheet';
-import StomatologyExpedient from './views/StomatologyExpedient';
-import EpidemiologyStudy from './views/EpidemiologyStudy';
-import HospitalMonitor from './views/HospitalMonitor';
 import HistoryRegistries from './views/HistoryRegistries';
 import EvolutionNote from './views/notes/EvolutionNote';
 import EmergencyNote from './views/notes/EmergencyNote';
 import SurgicalNote from './views/notes/SurgicalNote';
-import ESAVINote from './views/notes/ESAVINote';
 import DischargeNote from './views/notes/DischargeNote';
-import InterconsultaNote from './views/notes/InterconsultaNote';
-import { ModuleType, Patient, ClinicalNote, ConsultationRecord, PatientStatus, PriorityLevel, DoctorInfo } from './types';
+import HospitalMonitor from './views/HospitalMonitor';
+import { ModuleType, Patient, ClinicalNote, PatientStatus, PriorityLevel, DoctorInfo } from './types';
 import { INITIAL_PATIENTS } from './constants';
 
 function Layout({ children, currentModule, onModuleChange, doctorInfo }: any) {
@@ -106,42 +95,45 @@ function Layout({ children, currentModule, onModuleChange, doctorInfo }: any) {
 const App: React.FC = () => {
   const [currentModule, setCurrentModule] = useState<ModuleType>(ModuleType.OUTPATIENT);
   const [doctorInfo, setDoctorInfo] = useState<DoctorInfo>({ name: 'JESUS REYES LOZANO', cedula: '12840177', institution: 'UNAM', specialty: 'Médico Cirujano', email: 'dr.reyes@medexpediente.mx', address: 'AV. PASEO DE LOS LEONES 2345, MONTERREY', phone: '81 1234 5678', hospital: 'CENTRO MÉDICO SAN FRANCISCO' });
-  const [patients, setPatients] = useState<Patient[]>(() => JSON.parse(localStorage.getItem('med_patients_v5') || JSON.stringify(INITIAL_PATIENTS)));
-  const [notes, setNotes] = useState<ClinicalNote[]>(() => JSON.parse(localStorage.getItem('med_notes_v5') || '[]'));
+  const [patients, setPatients] = useState<Patient[]>(() => JSON.parse(localStorage.getItem('med_patients_v6') || JSON.stringify(INITIAL_PATIENTS)));
+  const [notes, setNotes] = useState<ClinicalNote[]>(() => JSON.parse(localStorage.getItem('med_notes_v6') || '[]'));
 
   useEffect(() => {
-    localStorage.setItem('med_patients_v5', JSON.stringify(patients));
-    localStorage.setItem('med_notes_v5', JSON.stringify(notes));
+    localStorage.setItem('med_patients_v6', JSON.stringify(patients));
+    localStorage.setItem('med_notes_v6', JSON.stringify(notes));
   }, [patients, notes]);
 
   const updatePatient = (updated: Patient) => setPatients(prev => prev.map(p => p.id === updated.id ? updated : p));
+  
+  const updatePatientStatus = (id: string, status: PatientStatus) => {
+    setPatients(prev => prev.map(p => p.id === id ? { ...p, status } : p));
+  };
+
+  const updatePatientPriority = (id: string, priority: PriorityLevel) => {
+    setPatients(prev => prev.map(p => p.id === id ? { ...p, priority } : p));
+  };
+
   const addNote = (newNote: ClinicalNote) => setNotes(prev => [newNote, ...prev]);
 
   return (
     <Router>
       <Layout currentModule={currentModule} onModuleChange={setCurrentModule} doctorInfo={doctorInfo}>
         <Routes>
-          <Route path="/" element={<Dashboard module={currentModule} patients={patients} onUpdateStatus={() => {}} onUpdatePriority={() => {}} onModuleChange={setCurrentModule} onUpdatePatient={updatePatient} doctorInfo={doctorInfo} />} />
+          <Route path="/" element={<Dashboard module={currentModule} patients={patients} onUpdateStatus={updatePatientStatus} onUpdatePriority={updatePatientPriority} onModuleChange={setCurrentModule} onUpdatePatient={updatePatient} doctorInfo={doctorInfo} />} />
           <Route path="/patient/:id" element={<PatientProfile patients={patients} notes={notes} onUpdatePatient={updatePatient} onSaveNote={addNote} doctorInfo={doctorInfo} />} />
-          
-          {/* Rutas Críticas de Auxiliares y Enfermería */}
           <Route path="/patient/:id/nursing-sheet" element={<NursingSheet patients={patients} onSaveNote={addNote} onUpdatePatient={updatePatient} />} />
           <Route path="/patient/:id/auxiliary-report" element={<AuxiliaryReport patients={patients} onSaveNote={addNote} onUpdatePatient={updatePatient} />} />
           <Route path="/auxiliary-intake" element={<AuxiliaryIntake patients={patients} onSaveNote={addNote} onUpdatePatient={updatePatient} onAddPatient={(p) => setPatients(prev => [...prev, p])} />} />
-          
-          {/* Notas Especializadas */}
+          <Route path="/history-registry" element={<HistoryRegistries patients={patients} notes={notes} />} />
           <Route path="/patient/:id/note/evolution" element={<EvolutionNote patients={patients} notes={notes} onSaveNote={addNote} />} />
           <Route path="/patient/:id/note/emergency" element={<EmergencyNote patients={patients} notes={notes} onSaveNote={addNote} />} />
-          <Route path="/patient/:id/note/surgical" element={<SurgicalNote patients={patients} notes={notes} onSaveNote={addNote} />} />
-          <Route path="/patient/:id/note/discharge" element={<DischargeNote patients={patients} notes={notes} onSaveNote={addNote} />} />
           <Route path="/patient/:id/history" element={<MedicalHistory patients={patients} notes={notes} onUpdatePatient={updatePatient} onSaveNote={addNote} />} />
           <Route path="/patient/:id/prescription" element={<Prescription patients={patients} doctorInfo={doctorInfo} onSaveNote={addNote} />} />
-          
-          {/* Otros Módulos */}
           <Route path="/monitor" element={<HospitalMonitor patients={patients} onUpdatePatient={updatePatient} />} />
-          <Route path="/agenda" element={<Agenda onUpdateStatus={() => {}} patients={patients} />} />
+          <Route path="/agenda" element={<Agenda onUpdateStatus={updatePatientStatus} patients={patients} />} />
           <Route path="/inventory" element={<Inventory />} />
           <Route path="/logs" element={<AdminLogs />} />
+          <Route path="/daily-report" element={<DailyReport records={[]} />} />
           <Route path="/settings" element={<SettingsView doctorInfo={doctorInfo} onUpdateDoctor={setDoctorInfo} />} />
           <Route path="/new-patient" element={<NewPatient onAdd={(p) => setPatients(prev => [...prev, p])} patients={patients} />} />
           <Route path="*" element={<Navigate to="/" replace />} />
