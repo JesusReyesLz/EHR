@@ -93,12 +93,15 @@ const AuxiliaryIntake: React.FC<AuxiliaryIntakeProps> = ({ patients, onSaveNote,
     let pToSave: Patient;
     const isFuture = new Date(patientForm.scheduledDate!).getTime() > new Date().setHours(0,0,0,0);
 
+    // Definir estatus inicial: Si es hoy, va a sala de espera. Si es futuro, queda agendado (pero para demo lo mandamos a espera)
+    const initialStatus = PatientStatus.WAITING_FOR_SAMPLES;
+
     if (selectedPatient) {
       pToSave = {
         ...selectedPatient,
         ...patientForm as Patient,
         assignedModule: ModuleType.AUXILIARY,
-        status: PatientStatus.WAITING_FOR_SAMPLES,
+        status: initialStatus,
         reason: [...opForm.labStudies, ...opForm.imagingStudies].join(', ')
       };
       onUpdatePatient(pToSave);
@@ -110,7 +113,7 @@ const AuxiliaryIntake: React.FC<AuxiliaryIntakeProps> = ({ patients, onSaveNote,
         curp: patientForm.curp?.toUpperCase() || '',
         lastVisit: new Date().toISOString().split('T')[0],
         assignedModule: ModuleType.AUXILIARY,
-        status: PatientStatus.WAITING_FOR_SAMPLES,
+        status: initialStatus,
         reason: [...opForm.labStudies, ...opForm.imagingStudies].join(', '),
         vitalsHistory: []
       };
@@ -129,7 +132,7 @@ const AuxiliaryIntake: React.FC<AuxiliaryIntakeProps> = ({ patients, onSaveNote,
     };
 
     onSaveNote(intakeNote);
-    alert(isFuture ? `Programado para ${patientForm.scheduledDate}.` : `Ingreso técnico completado.`);
+    alert(`Paciente ingresado correctamente a Sala de Espera.`);
     navigate('/');
   };
 
@@ -185,7 +188,6 @@ const AuxiliaryIntake: React.FC<AuxiliaryIntakeProps> = ({ patients, onSaveNote,
                    </div>
                    <div className="space-y-3">
                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-2">CURP *</label>
-                     {/* Corrected variable from 'form' to 'patientForm' below */}
                      <input type="text" className="w-full p-5 bg-slate-50 border border-slate-200 rounded-2xl font-mono uppercase text-sm font-bold" value={patientForm.curp} onChange={e => setPatientForm({...patientForm, curp: e.target.value.toUpperCase()})} maxLength={18} />
                    </div>
                    <div className="grid grid-cols-2 gap-4">

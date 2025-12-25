@@ -12,7 +12,8 @@ import {
   Package,
   Monitor as MonitorIcon,
   Search,
-  Layout as LayoutIcon
+  Layout as LayoutIcon,
+  History
 } from 'lucide-react';
 import Dashboard from './views/Dashboard';
 import PatientProfile from './views/PatientProfile';
@@ -27,7 +28,6 @@ import MedicalHistory from './views/MedicalHistory';
 import Inventory from './views/Inventory';
 import NursingSheet from './views/NursingSheet';
 import AuxiliaryReport from './views/AuxiliaryReport';
-// Fix: Added missing component imports to root App
 import AuxiliaryOrder from './views/AuxiliaryOrder';
 import AuxiliaryIntake from './views/AuxiliaryIntake';
 import InformedConsent from './views/InformedConsent';
@@ -40,6 +40,7 @@ import SocialWorkSheet from './views/SocialWorkSheet';
 import StomatologyExpedient from './views/StomatologyExpedient';
 import EpidemiologyStudy from './views/EpidemiologyStudy';
 import HospitalMonitor from './views/HospitalMonitor';
+import HistoryRegistries from './views/HistoryRegistries';
 
 // Editores Especializados
 import EvolutionNote from './views/notes/EvolutionNote';
@@ -93,6 +94,13 @@ const App: React.FC = () => {
     setPatients(prev => [...prev, newPatient]);
   };
 
+  const removePatient = (id: string) => {
+    if (window.confirm("¿Está seguro de eliminar este registro del sistema? Esta acción no se puede deshacer.")) {
+      setPatients(prev => prev.filter(p => p.id !== id));
+      setNotes(prev => prev.filter(n => n.patientId !== id));
+    }
+  };
+
   const updatePatientStatus = (patientId: string, status: PatientStatus) => {
     setPatients(prev => prev.map(p => p.id === patientId ? { ...p, status } : p));
   };
@@ -131,8 +139,13 @@ const App: React.FC = () => {
           module: patient.assignedModule
         };
         setConsultations(prev => [record, ...prev]);
+        
+        // Manejo de estatus al finalizar notas
         if (newNote.type.includes('Egreso') || newNote.type.includes('Alta') || newNote.type.includes('Defunción')) {
           updatePatientStatus(patient.id, PatientStatus.ATTENDED);
+        } else if (newNote.type.includes('Reporte de Resultados')) {
+          // Si es un resultado de auxiliar, marcamos como "Resultados Listos"
+          updatePatientStatus(patient.id, PatientStatus.READY_RESULTS);
         }
       }
     }
@@ -142,12 +155,12 @@ const App: React.FC = () => {
     <Router>
       <Layout currentModule={currentModule} onModuleChange={setCurrentModule}>
         <Routes>
-          {/* Fix: Added notes={notes} prop to Dashboard for pending orders calculation */}
-          <Route path="/" element={<Dashboard module={currentModule} patients={patients} notes={notes} onUpdateStatus={updatePatientStatus} onUpdatePriority={updatePatientPriority} onModuleChange={setCurrentModule} />} />
+          <Route path="/" element={<Dashboard module={currentModule} patients={patients} notes={notes} onUpdateStatus={updatePatientStatus} onUpdatePriority={updatePatientPriority} onModuleChange={setCurrentModule} onUpdatePatient={updatePatient} onDeletePatient={removePatient} />} />
           <Route path="/monitor" element={<HospitalMonitor patients={patients} onUpdatePatient={updatePatient} />} />
           <Route path="/new-patient" element={<NewPatient onAdd={addPatient} patients={patients} />} />
           <Route path="/edit-patient/:id" element={<NewPatient onAdd={updatePatient} patients={patients} />} />
           <Route path="/patient/:id" element={<PatientProfile patients={patients} notes={notes} onUpdatePatient={updatePatient} onSaveNote={addNote} />} />
+          <Route path="/history-registry" element={<HistoryRegistries patients={patients} notes={notes} />} />
           
           <Route path="/patient/:id/note/evolution" element={<EvolutionNote patients={patients} notes={notes} onSaveNote={addNote} />} />
           <Route path="/patient/:id/note/evolution/:noteId" element={<EvolutionNote patients={patients} notes={notes} onSaveNote={addNote} />} />
@@ -164,12 +177,10 @@ const App: React.FC = () => {
 
           <Route path="/patient/:id/history" element={<MedicalHistory patients={patients} notes={notes} onUpdatePatient={updatePatient} onSaveNote={addNote} />} />
           <Route path="/patient/:id/nursing-sheet" element={<NursingSheet patients={patients} onSaveNote={addNote} />} />
-          
-          {/* Fix: Added missing routes for Auxiliary diagnostics workflow */}
           <Route path="/patient/:id/auxiliary-order" element={<AuxiliaryOrder patients={patients} onSaveNote={addNote} />} />
-          <Route path="/patient/:id/auxiliary-report" element={<AuxiliaryReport patients={patients} notes={notes} onSaveNote={addNote} />} />
-          <Route path="/patient/:id/auxiliary-report/:orderId" element={<AuxiliaryReport patients={patients} notes={notes} onSaveNote={addNote} />} />
-          {/* Fix: Added missing onAddPatient prop on line 172 to satisfy AuxiliaryIntakeProps requirements */}
+          <Route path="/patient/:id/auxiliary-report" element={<AuxiliaryReport patients={patients} notes={notes} onSaveNote={addNote} onUpdatePatient={updatePatient} />} />
+          <Route path="/patient/:id/auxiliary-report/:orderId" element={<AuxiliaryReport patients={patients} notes={notes} onSaveNote={addNote} onUpdatePatient={updatePatient} />} />
+          
           <Route path="/auxiliary-intake" element={<AuxiliaryIntake patients={patients} onSaveNote={addNote} onUpdatePatient={updatePatient} onAddPatient={addPatient} />} />
 
           <Route path="/patient/:id/consent" element={<InformedConsent patients={patients} onSaveNote={addNote} />} />
@@ -199,9 +210,10 @@ const App: React.FC = () => {
 const Layout = ({ children, currentModule, onModuleChange }: any) => {
   const location = useLocation();
   const menuItems = [
-    { icon: <Users className="w-5 h-5" />, label: 'Pacientes', path: '/' },
+    { icon: <Users className="w-5 h-5" />, label: 'Monitor Activo', path: '/' },
     { icon: <MonitorIcon className="w-5 h-5" />, label: 'Centro de Mando', path: '/monitor' },
-    { icon: <Calendar className="w-5 h-5" />, label: 'Agenda', path: '/agenda' },
+    { icon: <History className="w-5 h-5" />, label: 'Archivo Histórico', path: '/history-registry' },
+    { icon: <Calendar className="w-5 h-5" />, label: 'Agenda Operativa', path: '/agenda' },
     { icon: <Package className="w-5 h-5" />, label: 'Farmacia / Stock', path: '/inventory' },
     { icon: <FileSpreadsheet className="w-5 h-5" />, label: 'Hoja Diaria (SUIVE)', path: '/daily-report' },
     { icon: <ClipboardList className="w-5 h-5" />, label: 'Bitácoras', path: '/logs' },

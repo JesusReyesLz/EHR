@@ -33,6 +33,19 @@ const PatientProfile: React.FC<{ patients: Patient[], notes: ClinicalNote[], onU
     }
   }, [patient?.vitalsHistory, scrollRef.current]);
 
+  // Effect to handle automatic note opening from navigation state
+  useEffect(() => {
+    if (location.state && (location.state as any).openNoteId) {
+      const noteId = (location.state as any).openNoteId;
+      const note = notes.find(n => n.id === noteId);
+      if (note) {
+        setSelectedNote(note);
+        // Clear history state to prevent reopening on simple refresh
+        window.history.replaceState({}, document.title);
+      }
+    }
+  }, [location.state, notes]);
+
   const historyData = useMemo(() => {
     if (!patient?.vitalsHistory || patient.vitalsHistory.length === 0) return null;
     return [...patient.vitalsHistory].reverse();
@@ -138,7 +151,15 @@ const PatientProfile: React.FC<{ patients: Patient[], notes: ClinicalNote[], onU
       pharmacovigilance: 'Farmacovigilancia',
       nursingInstructions: 'Indicaciones Enfermería',
       seguimiento: 'Pronóstico y Seguimiento',
-      vitalsInterpretation: 'Interpretación de Signos Vitales'
+      vitalsInterpretation: 'Interpretación de Signos Vitales',
+      studyRequested: 'Estudios Solicitados',
+      clinicalJustification: 'Justificación Clínica',
+      findings: 'Hallazgos',
+      conclusion: 'Conclusión / Interpretación',
+      imagingTechnique: 'Técnica de Imagen',
+      performedBy: 'Realizado por',
+      validatedBy: 'Validado por',
+      incidents: 'Incidentes'
     };
 
     // Orden específico para notas SOAP
@@ -153,7 +174,7 @@ const PatientProfile: React.FC<{ patients: Patient[], notes: ClinicalNote[], onU
     // Claves restantes que no están en el orden específico
     const remainingKeys = Object.keys(note.content).filter(k => 
       !orderedKeys.includes(k) && 
-      !['vitals', 'prescriptions', 'isSigned', 'hash', 'author', 'date'].includes(k) &&
+      !['vitals', 'prescriptions', 'isSigned', 'hash', 'author', 'date', 'labResults', 'images', 'orderId', 'reportType'].includes(k) &&
       typeof note.content[k] === 'string' && 
       (note.content[k] as string).length > 0
     );
@@ -175,6 +196,58 @@ const PatientProfile: React.FC<{ patients: Patient[], notes: ClinicalNote[], onU
             </div>
           </div>
         ))}
+
+        {/* Renderizado especial para Resultados de Laboratorio */}
+        {note.content.labResults && (note.content.labResults as any[]).length > 0 && (
+          <div className="space-y-4 pt-4">
+             <h4 className="text-[10px] font-black text-slate-500 uppercase tracking-widest border-l-4 border-indigo-600 pl-3">Tabla de Resultados Analíticos</h4>
+             <div className="overflow-x-auto rounded-2xl border border-slate-200">
+                <table className="w-full text-left text-xs">
+                   <thead className="bg-slate-50 text-slate-500 font-black uppercase">
+                      <tr>
+                         <th className="p-3">Analito</th>
+                         <th className="p-3">Resultado</th>
+                         <th className="p-3">Unidad</th>
+                         <th className="p-3">Ref.</th>
+                         <th className="p-3 text-center">Estado</th>
+                      </tr>
+                   </thead>
+                   <tbody className="divide-y divide-slate-100 font-medium">
+                      {(note.content.labResults as any[]).map((res: any, idx: number) => (
+                         <tr key={idx} className="hover:bg-slate-50">
+                            <td className="p-3 font-bold">{res.analyte}</td>
+                            <td className="p-3 font-black text-slate-900">{res.value}</td>
+                            <td className="p-3 text-slate-500">{res.unit}</td>
+                            <td className="p-3 text-slate-400 italic">{res.refRange}</td>
+                            <td className="p-3 text-center">
+                               <span className={`px-2 py-1 rounded text-[9px] font-black uppercase ${res.status === 'Normal' ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>
+                                  {res.status}
+                               </span>
+                            </td>
+                         </tr>
+                      ))}
+                   </tbody>
+                </table>
+             </div>
+          </div>
+        )}
+
+        {/* Renderizado especial para Imágenes */}
+        {note.content.images && (note.content.images as any[]).length > 0 && (
+          <div className="space-y-4 pt-4">
+             <h4 className="text-[10px] font-black text-slate-500 uppercase tracking-widest border-l-4 border-indigo-600 pl-3">Evidencia de Imagen (PACS)</h4>
+             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                {(note.content.images as any[]).map((img: any, idx: number) => (
+                   <div key={idx} className="relative aspect-square bg-black rounded-xl overflow-hidden group">
+                      <img src={img.url} alt={img.name} className="w-full h-full object-cover opacity-90 group-hover:opacity-100 transition-opacity" />
+                      <div className="absolute bottom-0 left-0 right-0 p-2 bg-gradient-to-t from-black/80 to-transparent">
+                         <p className="text-[8px] text-white font-mono truncate">{img.name}</p>
+                      </div>
+                   </div>
+                ))}
+             </div>
+          </div>
+        )}
       </div>
     );
   };

@@ -6,7 +6,7 @@ import {
   Save, User, UserCheck, AlertTriangle, CheckCircle2,
   Table, FileText, Plus, Trash2, Info, Search, Activity, FlaskConical,
   Lock, ArrowRight, ShieldAlert, Thermometer, Droplet, UserPlus, Timer,
-  FlaskRound as Flask
+  FlaskRound as Flask, Upload, X
 } from 'lucide-react';
 import { Patient, ClinicalNote, PatientStatus } from '../types';
 import { LAB_CATALOG, IMAGING_CATALOG } from '../constants';
@@ -26,6 +26,7 @@ const AuxiliaryReport: React.FC<AuxiliaryReportProps> = ({ patients, notes = [],
 
   const [reportType, setReportType] = useState<'Laboratorio' | 'Imagenología'>('Laboratorio');
   const [labResults, setLabResults] = useState<any[]>([]);
+  const [images, setImages] = useState<{id: string, url: string, name: string}[]>([]);
 
   const [form, setForm] = useState({
     studyRequested: 'Cargando estudios...',
@@ -66,6 +67,21 @@ const AuxiliaryReport: React.FC<AuxiliaryReportProps> = ({ patients, notes = [],
      }
   }, [order]);
 
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      // Mock upload - in real app would upload to server/blob
+      const newImages = Array.from(e.target.files).map(file => {
+        const f = file as File;
+        return {
+          id: Math.random().toString(36),
+          url: URL.createObjectURL(f),
+          name: f.name
+        };
+      });
+      setImages([...images, ...newImages]);
+    }
+  };
+
   if (!patient) return null;
 
   const handleSave = () => {
@@ -85,22 +101,24 @@ const AuxiliaryReport: React.FC<AuxiliaryReportProps> = ({ patients, notes = [],
         ...form, 
         reportType, 
         orderId: orderId,
-        labResults: reportType === 'Laboratorio' ? labResults : undefined 
+        labResults: reportType === 'Laboratorio' ? labResults : undefined,
+        images: reportType === 'Imagenología' ? images : undefined
       },
       isSigned: true,
       hash: `CERT-AUX-${Math.random().toString(36).substr(2, 10).toUpperCase()}`
     };
 
+    // Actualización de estatus para que salte al histórico de Auxiliares
     if (onUpdatePatient) {
        onUpdatePatient({
           ...patient,
-          status: PatientStatus.ATTENDED 
+          status: PatientStatus.READY_RESULTS 
        });
     }
 
     onSaveNote(newNote);
-    alert("Resultados Certificados y Archivados.");
-    navigate(`/`);
+    // Redirigir al perfil del paciente abriendo la nota para impresión/visualización inmediata
+    navigate(`/patient/${patient.id}`, { state: { openNoteId: newNoteId } });
   };
 
   return (
@@ -185,8 +203,43 @@ const AuxiliaryReport: React.FC<AuxiliaryReportProps> = ({ patients, notes = [],
                 </div>
              </div>
            ) : (
-             <div className="bg-white border border-slate-200 rounded-[3.5rem] p-12 shadow-2xl space-y-10 animate-in zoom-in-95">
-                <div className="space-y-8">
+             <div className="space-y-8 animate-in zoom-in-95">
+               {/* ÁREA DE CARGA DE IMÁGENES PACS */}
+               <div className="bg-slate-900 border-4 border-slate-800 rounded-[3rem] p-10 text-white shadow-2xl relative overflow-hidden">
+                  <div className="flex justify-between items-center mb-8 relative z-10">
+                     <h3 className="text-sm font-black uppercase tracking-widest flex items-center gap-3">
+                        <ImageIcon size={18} className="text-indigo-400" /> Digitalización de Estudios (PACS)
+                     </h3>
+                     <label className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-500 rounded-2xl text-[9px] font-black uppercase cursor-pointer transition-all flex items-center gap-2">
+                        <Upload size={14} /> Subir Imagen / DICOM
+                        <input type="file" multiple accept="image/*" className="hidden" onChange={handleFileUpload} />
+                     </label>
+                  </div>
+                  
+                  {images.length > 0 ? (
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 relative z-10">
+                       {images.map((img, idx) => (
+                          <div key={img.id} className="relative aspect-square bg-black/50 rounded-2xl overflow-hidden group border border-white/10">
+                             <img src={img.url} alt="Study" className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-all" />
+                             <button 
+                               onClick={() => setImages(images.filter(i => i.id !== img.id))}
+                               className="absolute top-2 right-2 p-1.5 bg-red-500/80 text-white rounded-full opacity-0 group-hover:opacity-100 transition-all"
+                             >
+                                <X size={12} />
+                             </button>
+                             <span className="absolute bottom-2 left-2 text-[8px] font-mono bg-black/70 px-2 py-1 rounded text-white truncate max-w-[90%]">{img.name}</span>
+                          </div>
+                       ))}
+                    </div>
+                  ) : (
+                    <div className="border-2 border-dashed border-white/10 rounded-3xl h-32 flex flex-col items-center justify-center text-slate-500 relative z-10">
+                       <Upload size={24} className="mb-2 opacity-50" />
+                       <p className="text-[10px] font-black uppercase tracking-widest">Arrastre archivos o haga clic para subir</p>
+                    </div>
+                  )}
+               </div>
+
+               <div className="bg-white border border-slate-200 rounded-[3.5rem] p-12 shadow-sm space-y-8">
                    <div className="space-y-4">
                       <label className="text-[10px] font-black text-slate-900 uppercase block ml-2">Técnica Radiológica / Procedimiento</label>
                       <input className="w-full p-6 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-black uppercase tracking-tight" value={form.imagingTechnique} onChange={e => setForm({...form, imagingTechnique: e.target.value})} />

@@ -4,7 +4,9 @@ import { useNavigate } from 'react-router-dom';
 import { 
   Search, UserPlus, Users, Clock, Activity, 
   ChevronRight, Timer, PlayCircle, HeartPulse,
-  X, Printer, MapPin, Calendar, AlertTriangle, ChevronDown
+  X, Printer, MapPin, Calendar, AlertTriangle, ChevronDown,
+  FlaskConical, TestTube, FileText, CheckCircle2, ArrowRight,
+  History, Eye, Trash2
 } from 'lucide-react';
 import { ModuleType, Patient, PatientStatus, PriorityLevel, ClinicalNote, Vitals } from '../types';
 
@@ -16,6 +18,7 @@ interface DashboardProps {
   onUpdatePriority: (id: string, priority: PriorityLevel) => void;
   onModuleChange: (mod: ModuleType) => void;
   onUpdatePatient?: (p: Patient) => void;
+  onDeletePatient?: (id: string) => void;
 }
 
 const Dashboard: React.FC<DashboardProps> = ({ 
@@ -25,11 +28,15 @@ const Dashboard: React.FC<DashboardProps> = ({
   onUpdateStatus, 
   onUpdatePriority, 
   onModuleChange,
-  onUpdatePatient
+  onUpdatePatient,
+  onDeletePatient
 }) => {
   const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState('');
   const [showTriageSelector, setShowTriageSelector] = useState<string | null>(null);
+  
+  // State for Auxiliary Module tabs
+  const [auxTab, setAuxTab] = useState<'waiting' | 'process' | 'history'>('waiting');
 
   const calculateDays = (dateStr?: string) => {
     if (!dateStr) return 1;
@@ -79,21 +86,274 @@ const Dashboard: React.FC<DashboardProps> = ({
   };
 
   const handlePatientAction = (p: Patient) => {
-    // Si no tiene cama/consultorio, mandamos al monitor hospitalario para asignación obligatoria
-    if (!p.bedNumber) {
+    if (!p.bedNumber && module !== ModuleType.AUXILIARY) {
       navigate('/monitor', { state: { patientToAssign: p, targetModule: p.assignedModule } });
     } else {
       navigate(`/patient/${p.id}`);
     }
   };
 
+  const handleAuxAction = (p: Patient, action: 'start' | 'report' | 'view' | 'delete') => {
+    if (action === 'start') {
+       onUpdateStatus(p.id, PatientStatus.TAKING_SAMPLES);
+    } else if (action === 'report') {
+       const lastOrder = notes.find(n => n.patientId === p.id && (n.type.includes('Solicitud') || n.type.includes('Ingreso')));
+       const route = lastOrder ? `/patient/${p.id}/auxiliary-report/${lastOrder.id}` : `/patient/${p.id}/auxiliary-report`;
+       navigate(route);
+    } else if (action === 'view') {
+       navigate(`/patient/${p.id}`);
+    } else if (action === 'delete') {
+       if (onDeletePatient) onDeletePatient(p.id);
+    }
+  };
+
   const filteredPatients = patients.filter(p => {
     const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase()) || p.curp.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesModule = p.assignedModule === module;
-    const isActive = p.status !== PatientStatus.ATTENDED;
+    
+    let isActive = true;
+    if (module === ModuleType.AUXILIARY) {
+       // En Auxiliares mostramos todos los estatus relevantes para poblar los 3 tabs correctamente
+       isActive = [
+         PatientStatus.WAITING_FOR_SAMPLES, 
+         PatientStatus.WAITING,
+         PatientStatus.PROCESSING_RESULTS, 
+         PatientStatus.TAKING_SAMPLES, 
+         PatientStatus.ATTENDED, 
+         PatientStatus.READY_RESULTS
+       ].includes(p.status);
+    } else {
+       isActive = p.status !== PatientStatus.ATTENDED;
+    }
+
     return matchesSearch && matchesModule && isActive;
   });
 
+  if (module === ModuleType.AUXILIARY) {
+    const waitingPatients = filteredPatients.filter(p => p.status === PatientStatus.WAITING_FOR_SAMPLES || p.status === PatientStatus.WAITING);
+    const inProcessPatients = filteredPatients.filter(p => p.status === PatientStatus.PROCESSING_RESULTS || p.status === PatientStatus.TAKING_SAMPLES);
+    const historyPatients = filteredPatients.filter(p => p.status === PatientStatus.ATTENDED || p.status === PatientStatus.READY_RESULTS);
+
+    return (
+      <div className="max-w-full space-y-10 animate-in fade-in duration-700">
+        <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-8">
+          <div className="space-y-2">
+            <div className="flex items-center space-x-2 text-slate-400 uppercase text-[10px] font-black tracking-[0.3em]">
+              <Activity className="w-4 h-4 text-blue-600" />
+              <span>Consola Médica Integral</span>
+              <ChevronRight className="w-3 h-3" />
+              <span className="text-slate-900">{module}</span>
+            </div>
+            <h1 className="text-5xl font-black text-slate-900 tracking-tighter uppercase leading-none">
+              Laboratorio e Imagen
+            </h1>
+          </div>
+          
+          <button 
+            onClick={() => navigate('/auxiliary-intake')}
+            className="flex items-center px-10 py-5 bg-indigo-600 text-white rounded-[1.5rem] font-black text-xs uppercase tracking-widest shadow-2xl shadow-indigo-200 transition-all hover:bg-slate-900 active:scale-95 group"
+          >
+            <FlaskConical className="w-5 h-5 mr-3 group-hover:rotate-12 transition-transform" />
+            Nueva Solicitud / Ingreso
+          </button>
+        </div>
+
+        <div className="bg-white rounded-[2.5rem] p-4 shadow-sm border border-slate-200 flex items-center gap-4">
+           <Search className="ml-4 text-slate-400 w-5 h-5" />
+           <input 
+             type="text" 
+             placeholder="Buscar paciente por Nombre o CURP..."
+             className="w-full py-3 bg-transparent font-bold text-sm outline-none text-slate-700 placeholder-slate-300"
+             value={searchTerm}
+             onChange={(e) => setSearchTerm(e.target.value)}
+           />
+        </div>
+
+        <div className="flex bg-white border border-slate-200 p-2 rounded-[2rem] shadow-sm w-fit mx-auto md:mx-0">
+           <button onClick={() => setAuxTab('waiting')} className={`px-8 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 ${auxTab === 'waiting' ? 'bg-amber-500 text-white shadow-lg' : 'text-slate-500 hover:bg-slate-50'}`}>
+              <Clock size={14} /> Sala de Espera ({waitingPatients.length})
+           </button>
+           <button onClick={() => setAuxTab('process')} className={`px-8 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 ${auxTab === 'process' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-500 hover:bg-slate-50'}`}>
+              <FlaskConical size={14} /> En Toma / Proceso ({inProcessPatients.length})
+           </button>
+           <button onClick={() => setAuxTab('history')} className={`px-8 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 ${auxTab === 'history' ? 'bg-emerald-600 text-white shadow-lg' : 'text-slate-500 hover:bg-slate-50'}`}>
+              <History size={14} /> Resultados Listos / Histórico ({historyPatients.length})
+           </button>
+        </div>
+
+        <div className="bg-white rounded-[3.5rem] shadow-xl border border-slate-200 overflow-hidden min-h-[500px]">
+           {auxTab === 'waiting' && (
+              <>
+                <div className="p-8 border-b border-slate-100 bg-amber-50/30 flex items-center justify-between">
+                   <div className="flex items-center gap-4">
+                      <div className="w-12 h-12 bg-amber-100 text-amber-600 rounded-2xl flex items-center justify-center border border-amber-200"><Clock size={24} /></div>
+                      <div>
+                         <h3 className="text-lg font-black text-slate-900 uppercase tracking-tight">Pacientes en Sala de Espera</h3>
+                         <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Listos para pasar a toma de muestra</p>
+                      </div>
+                   </div>
+                </div>
+                <div className="overflow-x-auto">
+                   <table className="w-full text-left">
+                      <tbody className="divide-y divide-slate-100">
+                         {waitingPatients.map(p => (
+                            <tr key={p.id} className="hover:bg-slate-50 transition-all group">
+                               <td className="px-10 py-6">
+                                  <div className="flex items-center">
+                                     <div className="w-12 h-12 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center font-black mr-5 border border-amber-100 uppercase text-lg">{p.name.charAt(0)}</div>
+                                     <div>
+                                        <p className="font-black text-slate-900 text-xs uppercase leading-none mb-1.5">{p.name}</p>
+                                        <span className="text-[9px] text-slate-400 font-mono tracking-widest">{p.curp}</span>
+                                     </div>
+                                  </div>
+                               </td>
+                               <td className="px-10 py-6">
+                                  <div className="flex flex-col">
+                                     <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Solicitud</span>
+                                     <span className="text-xs font-bold text-slate-700 uppercase line-clamp-1 max-w-md">{p.reason || 'Estudios Generales'}</span>
+                                  </div>
+                               </td>
+                               <td className="px-10 py-6 text-right space-x-3">
+                                  <button 
+                                     onClick={() => handleAuxAction(p, 'delete')} 
+                                     className="p-3 text-slate-300 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all"
+                                     title="Eliminar Registro (Error)"
+                                  >
+                                     <Trash2 size={18} />
+                                  </button>
+                                  <button 
+                                     onClick={() => handleAuxAction(p, 'start')} 
+                                     className="inline-flex items-center px-6 py-3 bg-slate-900 text-white rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-emerald-600 transition-all shadow-lg gap-2"
+                                  >
+                                     <TestTube size={14} /> Pasar a Toma
+                                  </button>
+                               </td>
+                            </tr>
+                         ))}
+                         {waitingPatients.length === 0 && (
+                            <tr><td colSpan={3} className="py-20 text-center text-slate-300 font-black uppercase text-xs">Sala de espera vacía</td></tr>
+                         )}
+                      </tbody>
+                   </table>
+                </div>
+              </>
+           )}
+
+           {auxTab === 'process' && (
+              <>
+                <div className="p-8 border-b border-slate-100 bg-indigo-50/30 flex items-center justify-between">
+                   <div className="flex items-center gap-4">
+                      <div className="w-12 h-12 bg-indigo-100 text-indigo-600 rounded-2xl flex items-center justify-center border border-indigo-200"><FlaskConical size={24} /></div>
+                      <div>
+                         <h3 className="text-lg font-black text-slate-900 uppercase tracking-tight">Pacientes en Toma / Proceso</h3>
+                         <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Captura de resultados e interpretación</p>
+                      </div>
+                   </div>
+                </div>
+                <div className="overflow-x-auto">
+                   <table className="w-full text-left">
+                      <tbody className="divide-y divide-slate-100">
+                         {inProcessPatients.map(p => (
+                            <tr key={p.id} className="hover:bg-slate-50 transition-all group">
+                               <td className="px-10 py-6">
+                                  <div className="flex items-center">
+                                     <div className="w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-black mr-5 border border-indigo-100 uppercase text-lg">{p.name.charAt(0)}</div>
+                                     <div>
+                                        <p className="font-black text-slate-900 text-xs uppercase leading-none mb-1.5">{p.name}</p>
+                                        <span className="text-[9px] text-slate-400 font-mono tracking-widest">{p.curp}</span>
+                                     </div>
+                                  </div>
+                               </td>
+                               <td className="px-10 py-6">
+                                  <div className="flex items-center gap-2">
+                                     <div className="w-2 h-2 bg-indigo-500 rounded-full animate-pulse"></div>
+                                     <span className="text-[9px] font-bold text-indigo-600 uppercase tracking-widest">
+                                        {p.status === PatientStatus.TAKING_SAMPLES ? 'En Toma de Muestra' : 'Procesando Resultados'}
+                                     </span>
+                                  </div>
+                                  <p className="text-[8px] font-medium text-slate-400 mt-1 uppercase max-w-xs truncate">{p.reason}</p>
+                               </td>
+                               <td className="px-10 py-6 text-right space-x-3">
+                                  <button 
+                                     onClick={() => handleAuxAction(p, 'delete')} 
+                                     className="p-3 text-slate-300 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all"
+                                     title="Cancelar Estudio (Error)"
+                                  >
+                                     <Trash2 size={18} />
+                                  </button>
+                                  <button 
+                                     onClick={() => handleAuxAction(p, 'report')} 
+                                     className="inline-flex items-center px-6 py-3 bg-white border-2 border-indigo-100 text-indigo-600 rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-indigo-600 hover:text-white transition-all shadow-sm gap-2"
+                                  >
+                                     <FileText size={14} /> Registrar Resultados
+                                  </button>
+                               </td>
+                            </tr>
+                         ))}
+                         {inProcessPatients.length === 0 && (
+                            <tr><td colSpan={3} className="py-20 text-center text-slate-300 font-black uppercase text-xs">Sin estudios en proceso</td></tr>
+                         )}
+                      </tbody>
+                   </table>
+                </div>
+              </>
+           )}
+
+           {auxTab === 'history' && (
+              <>
+                <div className="p-8 border-b border-slate-100 bg-emerald-50/30 flex items-center justify-between">
+                   <div className="flex items-center gap-4">
+                      <div className="w-12 h-12 bg-emerald-100 text-emerald-600 rounded-2xl flex items-center justify-center border border-emerald-200"><CheckCircle2 size={24} /></div>
+                      <div>
+                         <h3 className="text-lg font-black text-slate-900 uppercase tracking-tight">Histórico de Resultados</h3>
+                         <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Consulta y reimpresión de estudios finalizados</p>
+                      </div>
+                   </div>
+                </div>
+                <div className="overflow-x-auto">
+                   <table className="w-full text-left">
+                      <tbody className="divide-y divide-slate-100">
+                         {historyPatients.map(p => (
+                            <tr key={p.id} className="hover:bg-slate-50 transition-all group">
+                               <td className="px-10 py-6">
+                                  <div className="flex items-center">
+                                     <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-black mr-5 border border-emerald-100 uppercase text-lg">{p.name.charAt(0)}</div>
+                                     <div>
+                                        <p className="font-black text-slate-900 text-xs uppercase leading-none mb-1.5">{p.name}</p>
+                                        <span className="text-[9px] text-slate-400 font-mono tracking-widest">{p.curp}</span>
+                                     </div>
+                                  </div>
+                               </td>
+                               <td className="px-10 py-6">
+                                  <div className="flex flex-col">
+                                     <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Última Atención</span>
+                                     <span className="text-xs font-bold text-slate-700 uppercase">{p.lastVisit}</span>
+                                  </div>
+                               </td>
+                               <td className="px-10 py-6 text-right">
+                                  <button 
+                                     onClick={() => handleAuxAction(p, 'view')} 
+                                     className="inline-flex items-center px-6 py-3 bg-white border border-slate-200 text-slate-600 rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-emerald-600 hover:text-white hover:border-emerald-600 transition-all shadow-sm gap-2"
+                                  >
+                                     <Eye size={14} /> Ver Expediente / Imprimir
+                                  </button>
+                               </td>
+                            </tr>
+                         ))}
+                         {historyPatients.length === 0 && (
+                            <tr><td colSpan={3} className="py-20 text-center text-slate-300 font-black uppercase text-xs">No hay resultados en el historial</td></tr>
+                         )}
+                      </tbody>
+                   </table>
+                </div>
+              </>
+           )}
+        </div>
+      </div>
+    );
+  }
+
+  // Render para Módulos Estándar (Consulta, Urgencias, Hospitalización)
   return (
     <div className="max-w-full space-y-10 animate-in fade-in duration-700">
       
@@ -221,7 +481,6 @@ const Dashboard: React.FC<DashboardProps> = ({
   );
 };
 
-// Fix: Add missing VitalsEditorModal component and export it to fix the import error in PatientProfile.
 export const VitalsEditorModal: React.FC<{ 
   patient: Patient; 
   onClose: () => void; 
