@@ -1,11 +1,11 @@
+
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { 
   Activity, Bed, Users, Flame, Plus, UserPlus, ShieldCheck, X, 
   MoveHorizontal, Truck, Baby, Heart, HeartPulse, Thermometer, 
   LayoutGrid, Settings2, Trash2, Edit2, Check, MapPin, ArrowRight,
-  // Added LogOut to fix "Cannot find name 'LogOut'" error on line 178
-  LogOut
+  LogOut, Save, AlertTriangle
 } from 'lucide-react';
 import { Patient, ModuleType, PatientStatus } from '../types';
 import { DEFAULT_INFRASTRUCTURE } from '../constants';
@@ -40,6 +40,21 @@ const HospitalMonitor: React.FC<HospitalMonitorProps> = ({ patients, onUpdatePat
     return saved ? JSON.parse(saved) : DEFAULT_INFRASTRUCTURE;
   });
 
+  // Estado del Modal de Gestión
+  const [modalConfig, setModalConfig] = useState<{
+    isOpen: boolean;
+    type: 'add' | 'rename' | 'delete';
+    targetId?: string;
+    contextModule: 'outpatient' | 'emergency' | 'hosp';
+    contextArea?: HospitalArea;
+    inputValue: string;
+  }>({
+    isOpen: false,
+    type: 'add',
+    contextModule: 'outpatient',
+    inputValue: ''
+  });
+
   useEffect(() => {
     localStorage.setItem('med_infra_v_prod', JSON.stringify(infra));
   }, [infra]);
@@ -54,57 +69,78 @@ const HospitalMonitor: React.FC<HospitalMonitorProps> = ({ patients, onUpdatePat
     }
   }, [location.state]);
 
-  const handleAddSpace = (type: 'outpatient' | 'emergency' | 'hosp', area?: HospitalArea) => {
-    const name = window.prompt("Ingrese el identificador para el nuevo espacio (Ej: C-10, BOX-12, MI-08):");
-    if (!name || name.trim() === "") return;
-    const cleanName = name.trim().toUpperCase();
-    setInfra((prev: any) => {
-      const newState = { ...prev };
-      if (type === 'outpatient') newState.outpatient = [...prev.outpatient, cleanName];
-      else if (type === 'emergency') newState.emergency = [...prev.emergency, cleanName];
-      else if (type === 'hosp' && area) {
-        newState.hospitalization = { ...prev.hospitalization, [area]: [...prev.hospitalization[area], cleanName] };
-      }
-      return newState;
+  const handleOpenAdd = (mod: 'outpatient' | 'emergency' | 'hosp', area?: HospitalArea) => {
+    setModalConfig({
+      isOpen: true,
+      type: 'add',
+      contextModule: mod,
+      contextArea: area,
+      inputValue: ''
     });
   };
 
-  const handleRemoveSpace = (id: string, type: 'outpatient' | 'emergency' | 'hosp', area?: HospitalArea) => {
+  const handleOpenRename = (id: string, mod: 'outpatient' | 'emergency' | 'hosp', area?: HospitalArea) => {
+    setModalConfig({
+      isOpen: true,
+      type: 'rename',
+      targetId: id,
+      contextModule: mod,
+      contextArea: area,
+      inputValue: id
+    });
+  };
+
+  const handleOpenDelete = (id: string, mod: 'outpatient' | 'emergency' | 'hosp', area?: HospitalArea) => {
     const isOccupied = patients.some(p => (p.bedNumber === id || p.transitTargetBed === id) && p.status !== PatientStatus.ATTENDED);
     if (isOccupied) {
       alert(`No se puede eliminar ${id} porque está ocupado o reservado por un traslado.`);
       return;
     }
-    if (!window.confirm(`¿Seguro que desea eliminar permanentemente el espacio ${id}?`)) return;
-    setInfra((prev: any) => {
-      const newState = { ...prev };
-      if (type === 'outpatient') newState.outpatient = prev.outpatient.filter((s: string) => s !== id);
-      else if (type === 'emergency') newState.emergency = prev.emergency.filter((s: string) => s !== id);
-      else if (type === 'hosp' && area) {
-        newState.hospitalization = { ...prev.hospitalization, [area]: prev.hospitalization[area].filter((s: string) => s !== id) };
-      }
-      return newState;
+    setModalConfig({
+      isOpen: true,
+      type: 'delete',
+      targetId: id,
+      contextModule: mod,
+      contextArea: area,
+      inputValue: ''
     });
   };
 
-  const handleRenameSpace = (oldId: string, type: 'outpatient' | 'emergency' | 'hosp', area?: HospitalArea) => {
-    const newId = window.prompt("Ingrese el nuevo nombre para este espacio:", oldId);
-    if (!newId || newId.trim() === "" || newId.toUpperCase() === oldId) return;
-    const cleanName = newId.trim().toUpperCase();
+  const executeInfraAction = () => {
+    const { type, targetId, contextModule, contextArea, inputValue } = modalConfig;
+    const cleanValue = inputValue.trim().toUpperCase();
+
+    if ((type === 'add' || type === 'rename') && !cleanValue) return;
+
     setInfra((prev: any) => {
       const newState = { ...prev };
-      if (type === 'outpatient') newState.outpatient = prev.outpatient.map((s: string) => s === oldId ? cleanName : s);
-      else if (type === 'emergency') newState.emergency = prev.emergency.map((s: string) => s === oldId ? cleanName : s);
-      else if (type === 'hosp' && area) {
-        newState.hospitalization = { ...prev.hospitalization, [area]: prev.hospitalization[area].map((s: string) => s === oldId ? cleanName : s) };
+      
+      // Helper to update specific array
+      const updateList = (list: string[]) => {
+        if (type === 'add') return [...list, cleanValue];
+        if (type === 'delete') return list.filter(id => id !== targetId);
+        if (type === 'rename') return list.map(id => id === targetId ? cleanValue : id);
+        return list;
+      };
+
+      if (contextModule === 'outpatient') {
+        newState.outpatient = updateList(prev.outpatient);
+      } else if (contextModule === 'emergency') {
+        newState.emergency = updateList(prev.emergency);
+      } else if (contextModule === 'hosp' && contextArea) {
+        newState.hospitalization = {
+          ...prev.hospitalization,
+          [contextArea]: updateList(prev.hospitalization[contextArea])
+        };
       }
       return newState;
     });
+
+    setModalConfig(prev => ({ ...prev, isOpen: false }));
   };
 
   const handleCompleteMove = (newBedId: string, targetModule: ModuleType) => {
     if (!patientInTransit || !onUpdatePatient) return;
-    // IMPORTANTE: Mantenemos el bedNumber original (origen) y seteamos el transitTargetBed (destino)
     onUpdatePatient({
       ...patientInTransit,
       transitTargetBed: newBedId,
@@ -117,7 +153,6 @@ const HospitalMonitor: React.FC<HospitalMonitorProps> = ({ patients, onUpdatePat
 
   const handleConfirmArrival = (patient: Patient) => {
     if (!onUpdatePatient) return;
-    // Liberamos el origen y movemos definitivamente al destino
     onUpdatePatient({
       ...patient,
       bedNumber: patient.transitTargetBed,
@@ -161,8 +196,18 @@ const HospitalMonitor: React.FC<HospitalMonitorProps> = ({ patients, onUpdatePat
           <span className={`text-[10px] font-black ${p ? (isTransit ? 'text-amber-600' : 'text-blue-400') : 'text-slate-300'}`}>{id}</span>
           {isEditMode && !p && (
             <div className="flex gap-2">
-              <button onClick={(e) => { e.stopPropagation(); handleRenameSpace(id, module === ModuleType.OUTPATIENT ? 'outpatient' : module === ModuleType.EMERGENCY ? 'emergency' : 'hosp', module === ModuleType.HOSPITALIZATION ? activeHospArea : undefined); }} className="p-1.5 bg-white rounded-lg shadow-sm text-slate-400 hover:text-blue-600 border border-slate-100"><Edit2 size={12}/></button>
-              <button onClick={(e) => { e.stopPropagation(); handleRemoveSpace(id, module === ModuleType.OUTPATIENT ? 'outpatient' : module === ModuleType.EMERGENCY ? 'emergency' : 'hosp', module === ModuleType.HOSPITALIZATION ? activeHospArea : undefined); }} className="p-1.5 bg-white rounded-lg shadow-sm text-slate-400 hover:text-rose-600 border border-slate-100"><Trash2 size={12}/></button>
+              <button 
+                onClick={(e) => { e.stopPropagation(); handleOpenRename(id, module === ModuleType.OUTPATIENT ? 'outpatient' : module === ModuleType.EMERGENCY ? 'emergency' : 'hosp', module === ModuleType.HOSPITALIZATION ? activeHospArea : undefined); }} 
+                className="p-1.5 bg-white rounded-lg shadow-sm text-slate-400 hover:text-blue-600 border border-slate-100"
+              >
+                <Edit2 size={12}/>
+              </button>
+              <button 
+                onClick={(e) => { e.stopPropagation(); handleOpenDelete(id, module === ModuleType.OUTPATIENT ? 'outpatient' : module === ModuleType.EMERGENCY ? 'emergency' : 'hosp', module === ModuleType.HOSPITALIZATION ? activeHospArea : undefined); }} 
+                className="p-1.5 bg-white rounded-lg shadow-sm text-slate-400 hover:text-rose-600 border border-slate-100"
+              >
+                <Trash2 size={12}/>
+              </button>
             </div>
           )}
           {p && !isTransit && (
@@ -299,10 +344,10 @@ const HospitalMonitor: React.FC<HospitalMonitorProps> = ({ patients, onUpdatePat
                   {infra.outpatient.map((id: string) => renderCard(id, ModuleType.OUTPATIENT, 'blue'))}
                   {isEditMode && (
                     <button 
-                      onClick={() => handleAddSpace('outpatient')}
-                      className="h-60 rounded-[2.5rem] border-4 border-dashed border-slate-100 flex flex-col items-center justify-center gap-4 text-slate-300 hover:border-blue-400 hover:text-blue-500 transition-all bg-white"
+                      onClick={() => handleOpenAdd('outpatient')}
+                      className="h-60 rounded-[2.5rem] border-4 border-dashed border-slate-100 flex flex-col items-center justify-center gap-4 text-slate-300 hover:border-blue-400 hover:text-blue-500 transition-all bg-white group"
                     >
-                       <Plus size={32} />
+                       <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center group-hover:bg-blue-50 transition-colors"><Plus size={32} /></div>
                        <p className="text-[10px] font-black uppercase">Agregar Consultorio</p>
                     </button>
                   )}
@@ -324,10 +369,10 @@ const HospitalMonitor: React.FC<HospitalMonitorProps> = ({ patients, onUpdatePat
                   {infra.emergency.map((id: string) => renderCard(id, ModuleType.EMERGENCY, 'rose'))}
                   {isEditMode && (
                     <button 
-                      onClick={() => handleAddSpace('emergency')}
-                      className="h-60 rounded-3xl border-2 border-dashed border-white/10 flex flex-col items-center justify-center gap-4 text-white/20 hover:border-rose-500 hover:text-rose-400 transition-all"
+                      onClick={() => handleOpenAdd('emergency')}
+                      className="h-60 rounded-3xl border-2 border-dashed border-white/10 flex flex-col items-center justify-center gap-4 text-white/20 hover:border-rose-500 hover:text-rose-400 transition-all group"
                     >
-                       <Plus size={32} />
+                       <div className="w-14 h-14 bg-white/5 rounded-2xl flex items-center justify-center group-hover:bg-rose-500/20 transition-colors"><Plus size={24} /></div>
                        <p className="text-[10px] font-black uppercase">Nuevo Box</p>
                     </button>
                   )}
@@ -361,10 +406,10 @@ const HospitalMonitor: React.FC<HospitalMonitorProps> = ({ patients, onUpdatePat
                      {(infra.hospitalization[activeHospArea] || []).map((id: string) => renderCard(id, ModuleType.HOSPITALIZATION, AREA_CONFIG[activeHospArea].color))}
                      {isEditMode && (
                         <button 
-                          onClick={() => handleAddSpace('hosp', activeHospArea)}
-                          className={`h-60 rounded-[2.5rem] border-4 border-dashed border-slate-100 flex flex-col items-center justify-center gap-4 text-slate-300 hover:border-${AREA_CONFIG[activeHospArea].color}-400 hover:text-${AREA_CONFIG[activeHospArea].color}-500 transition-all bg-white`}
+                          onClick={() => handleOpenAdd('hosp', activeHospArea)}
+                          className={`h-60 rounded-[2.5rem] border-4 border-dashed border-slate-100 flex flex-col items-center justify-center gap-4 text-slate-300 hover:border-${AREA_CONFIG[activeHospArea].color}-400 hover:text-${AREA_CONFIG[activeHospArea].color}-500 transition-all bg-white group`}
                         >
-                           <Plus size={32} />
+                           <div className={`w-14 h-14 bg-slate-50 rounded-2xl flex items-center justify-center group-hover:bg-${AREA_CONFIG[activeHospArea].color}-50 transition-colors`}><Plus size={24} /></div>
                            <p className="text-[10px] font-black uppercase">Añadir Cama</p>
                         </button>
                      )}
@@ -374,6 +419,54 @@ const HospitalMonitor: React.FC<HospitalMonitorProps> = ({ patients, onUpdatePat
           </>
         )}
       </div>
+
+      {/* MODAL DE GESTIÓN DE INFRAESTRUCTURA */}
+      {modalConfig.isOpen && (
+        <div className="fixed inset-0 z-[300] flex items-center justify-center p-6 bg-slate-900/90 backdrop-blur-md animate-in fade-in">
+           <div className="bg-white w-full max-w-lg rounded-[3rem] shadow-2xl p-12 flex flex-col space-y-8 border border-white/20">
+              <div className="flex items-center gap-6">
+                 <div className={`w-14 h-14 rounded-2xl flex items-center justify-center shadow-lg ${modalConfig.type === 'delete' ? 'bg-rose-100 text-rose-600' : 'bg-blue-100 text-blue-600'}`}>
+                    {modalConfig.type === 'delete' ? <AlertTriangle size={28} /> : modalConfig.type === 'add' ? <Plus size={28} /> : <Edit2 size={28} />}
+                 </div>
+                 <div>
+                    <h3 className="text-xl font-black uppercase text-slate-900 tracking-tight">
+                       {modalConfig.type === 'add' ? 'Nuevo Espacio' : modalConfig.type === 'rename' ? 'Renombrar Espacio' : 'Eliminar Espacio'}
+                    </h3>
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">
+                       {modalConfig.contextModule === 'hosp' ? modalConfig.contextArea : modalConfig.contextModule}
+                    </p>
+                 </div>
+              </div>
+
+              {modalConfig.type === 'delete' ? (
+                 <p className="text-sm font-medium text-slate-600 leading-relaxed bg-rose-50 p-6 rounded-2xl border border-rose-100">
+                    ¿Confirma que desea eliminar permanentemente el espacio <strong>{modalConfig.targetId}</strong>? Esta acción no se puede deshacer y afectará los registros históricos asociados a esta ubicación.
+                 </p>
+              ) : (
+                 <div className="space-y-4">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-2">Identificador del Espacio</label>
+                    <input 
+                      autoFocus
+                      className="w-full p-6 bg-slate-50 border border-slate-200 rounded-[2rem] text-xl font-black uppercase outline-none focus:ring-4 focus:ring-blue-100 transition-all text-center"
+                      placeholder="Ej: C-10, BOX-05, CAMA-01"
+                      value={modalConfig.inputValue}
+                      onChange={(e) => setModalConfig({...modalConfig, inputValue: e.target.value})}
+                    />
+                 </div>
+              )}
+
+              <div className="flex gap-4 pt-4">
+                 <button onClick={() => setModalConfig({...modalConfig, isOpen: false})} className="flex-1 py-4 bg-slate-100 text-slate-500 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-200 transition-all">Cancelar</button>
+                 <button 
+                   onClick={executeInfraAction}
+                   className={`flex-[2] py-4 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl transition-all ${modalConfig.type === 'delete' ? 'bg-rose-600 hover:bg-rose-700' : 'bg-slate-900 hover:bg-blue-600'}`}
+                 >
+                    {modalConfig.type === 'delete' ? 'Confirmar Eliminación' : 'Guardar Cambios'}
+                 </button>
+              </div>
+           </div>
+        </div>
+      )}
     </div>
   );
 };

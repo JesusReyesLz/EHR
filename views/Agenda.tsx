@@ -6,10 +6,8 @@ import {
   ChevronLeft, 
   ChevronRight, 
   Plus, 
-  PlayCircle,
   Clock,
   CheckCircle2,
-  AlertTriangle,
   XCircle,
   Printer,
   History,
@@ -21,13 +19,14 @@ import {
   X,
   User as UserIcon,
   ShieldAlert,
-  Save,
-  FileText,
   UserMinus,
   CheckCircle,
-  MoreVertical
+  MoreVertical,
+  MapPin,
+  AlertTriangle,
+  Stethoscope
 } from 'lucide-react';
-import { Patient, PatientStatus, ModuleType, AgendaStatus } from '../types';
+import { Patient, PatientStatus, ModuleType, AgendaStatus, PriorityLevel } from '../types';
 
 // Función auxiliar para normalizar texto (quitar acentos y pasar a minúsculas)
 const cleanStr = (str: string) => 
@@ -41,7 +40,7 @@ interface AgendaProps {
 const Agenda: React.FC<AgendaProps> = ({ onUpdateStatus, patients }) => {
   const navigate = useNavigate();
 
-  // Helper para fecha local (Asegura hoy = 24/12/2025)
+  // Helper para fecha local (Asegura hoy = YYYY-MM-DD)
   const getLocalDateString = (date: Date = new Date()) => {
     const year = date.getFullYear();
     const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -53,18 +52,27 @@ const Agenda: React.FC<AgendaProps> = ({ onUpdateStatus, patients }) => {
   const [selectedDate, setSelectedDate] = useState(today);
   const [activeTab, setActiveTab] = useState<'pending' | 'arrived' | 'noshow' | 'modified'>('pending');
   const [searchTerm, setSearchTerm] = useState('');
-  const [showPrintModal, setShowPrintModal] = useState(false);
-  const [printDate, setPrintDate] = useState(today);
   
-  // Estado para controlar qué menú de arribo está abierto
-  const [openArriboMenuId, setOpenArriboMenuId] = useState<string | null>(null);
+  // Estado para el Modal de Arribo
+  const [arrivalModalOpen, setArrivalModalOpen] = useState(false);
+  const [selectedAppointment, setSelectedAppointment] = useState<Patient | null>(null);
+
+  // Mapeo de colores de Triage para franja lateral
+  const priorityColors: Record<string, string> = {
+    '0': 'bg-slate-200',
+    '1': 'bg-rose-500',
+    '2': 'bg-orange-500',
+    '3': 'bg-amber-500',
+    '4': 'bg-emerald-500',
+    '5': 'bg-blue-500'
+  };
 
   // Búsqueda global para encontrar en qué fecha está un paciente
   const globalSearchResults = useMemo(() => {
     if (searchTerm.length < 3) return [];
     const search = cleanStr(searchTerm);
     return patients
-      .filter(p => !p.id.startsWith('OLD-')) // No mostrar duplicados históricos en búsqueda global
+      .filter(p => !p.id.startsWith('OLD-')) // En búsqueda global ocultamos los históricos para evitar duplicidad visual
       .filter(p => cleanStr(p.name).includes(search) || cleanStr(p.curp).includes(search))
       .sort((a, b) => (b.scheduledDate || '').localeCompare(a.scheduledDate || ''));
   }, [patients, searchTerm]);
@@ -81,10 +89,24 @@ const Agenda: React.FC<AgendaProps> = ({ onUpdateStatus, patients }) => {
     PatientStatus.WAITING_FOR_SAMPLES
   ].includes(p.status);
 
-  // Filtrado por fecha seleccionada en la vista principal
+  // Filtrado por fecha seleccionada y orden por hora
+  // NOTA: Aquí quitamos el filtro !startsWith('OLD-') para permitir ver las citas movidas en el día original (tab Modificados)
   const dayAppointments = useMemo(() => {
-    return patients.filter(p => p.scheduledDate === selectedDate);
+    return patients
+      .filter(p => p.scheduledDate === selectedDate)
+      .sort((a, b) => (a.appointmentTime || '').localeCompare(b.appointmentTime || ''));
   }, [patients, selectedDate]);
+
+  // Identificar conflictos de horario (mismo bloque de tiempo)
+  const timeConflicts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    dayAppointments.forEach(p => {
+      if (p.appointmentTime && !isActuallyArrived(p)) {
+        counts[p.appointmentTime] = (counts[p.appointmentTime] || 0) + 1;
+      }
+    });
+    return Object.keys(counts).filter(time => counts[time] > 1);
+  }, [dayAppointments]);
 
   const filteredAppointments = useMemo(() => {
     const search = cleanStr(searchTerm);
@@ -92,133 +114,94 @@ const Agenda: React.FC<AgendaProps> = ({ onUpdateStatus, patients }) => {
       const matchesSearch = cleanStr(p.name).includes(search) || cleanStr(p.curp).includes(search);
       const arrived = isActuallyArrived(p);
       const modified = p.agendaStatus === AgendaStatus.CANCELLED || p.agendaStatus === AgendaStatus.RESCHEDULED;
+      const noShow = p.agendaStatus === AgendaStatus.NO_SHOW;
 
-      if (activeTab === 'pending') return matchesSearch && !arrived && !modified && p.agendaStatus === AgendaStatus.PENDING;
-      if (activeTab === 'arrived') return matchesSearch && arrived && !modified;
-      if (activeTab === 'noshow') return matchesSearch && p.agendaStatus === AgendaStatus.NO_SHOW;
-      if (activeTab === 'modified') return matchesSearch && modified;
+      if (activeTab === 'pending') {
+        return matchesSearch && !arrived && !modified && !noShow;
+      }
+      if (activeTab === 'arrived') {
+        return matchesSearch && arrived && !modified;
+      }
+      if (activeTab === 'noshow') {
+        return matchesSearch && noShow;
+      }
+      if (activeTab === 'modified') {
+        return matchesSearch && modified;
+      }
       return matchesSearch;
     });
   }, [dayAppointments, activeTab, searchTerm]);
 
-  const handleStartInTake = (p: Patient, status: AgendaStatus) => {
-    setOpenArriboMenuId(null);
+  const handleOpenArrivalModal = (p: Patient) => {
+    setSelectedAppointment(p);
+    setArrivalModalOpen(true);
+  };
+
+  const handleStartInTake = (status: AgendaStatus) => {
+    if (!selectedAppointment) return;
     
     if (status === AgendaStatus.NO_SHOW) {
-      onUpdateStatus(p.id, PatientStatus.ATTENDED, AgendaStatus.NO_SHOW);
-      return;
+      onUpdateStatus(selectedAppointment.id, PatientStatus.ATTENDED, AgendaStatus.NO_SHOW);
+    } else {
+      onUpdateStatus(
+        selectedAppointment.id, 
+        selectedAppointment.assignedModule === ModuleType.AUXILIARY ? PatientStatus.WAITING_FOR_SAMPLES : PatientStatus.WAITING, 
+        status
+      );
     }
-
-    onUpdateStatus(p.id, p.assignedModule === ModuleType.AUXILIARY ? PatientStatus.WAITING_FOR_SAMPLES : PatientStatus.WAITING, status);
+    setArrivalModalOpen(false);
+    setSelectedAppointment(null);
   };
 
   const handleCancel = (p: Patient) => {
-    if (window.confirm(`¿Confirmar cancelación de cita para ${p.name}? Se mantendrá el registro para fines de auditoría.`)) {
+    if (window.confirm(`¿Confirmar cancelación definitiva de la cita para ${p.name}?`)) {
       onUpdateStatus(p.id, PatientStatus.ATTENDED, AgendaStatus.CANCELLED);
     }
   };
 
-  // MODAL DE PREVISUALIZACIÓN DE IMPRESIÓN
-  const PrintPreviewModal = () => {
-    const printList = patients.filter(p => p.scheduledDate === printDate)
-      .sort((a, b) => (a.appointmentTime || '').localeCompare(b.appointmentTime || ''));
-
-    return (
-      <div className="fixed inset-0 z-[200] flex items-center justify-center p-6 bg-slate-900/90 backdrop-blur-md animate-in fade-in no-print">
-        <div className="bg-white w-full max-w-5xl max-h-[90vh] rounded-[3rem] shadow-2xl flex flex-col overflow-hidden">
-          <div className="p-8 bg-slate-50 border-b border-slate-200 flex justify-between items-center">
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 bg-blue-600 rounded-2xl flex items-center justify-center text-white shadow-lg"><Printer size={24} /></div>
-              <div>
-                 <h2 className="text-xl font-black text-slate-900 uppercase">Previsualización de Agenda</h2>
-                 <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Seleccione fecha y verifique la lista antes de imprimir</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-4">
-               <div className="flex items-center gap-3 bg-white border border-slate-200 p-2 rounded-xl">
-                  <span className="text-[9px] font-black text-slate-400 uppercase ml-2">Fecha a Imprimir:</span>
-                  <input 
-                    type="date" 
-                    className="p-1 text-xs font-black outline-none bg-transparent" 
-                    value={printDate} 
-                    onChange={e => setPrintDate(e.target.value)} 
-                  />
-               </div>
-               <button onClick={() => window.print()} className="px-8 py-3 bg-slate-900 text-white rounded-xl font-black text-[10px] uppercase shadow-lg hover:bg-blue-600 transition-all">Imprimir Ahora</button>
-               <button onClick={() => setShowPrintModal(false)} className="p-3 hover:bg-rose-50 rounded-xl transition-all border border-slate-200"><X size={24} className="text-slate-400" /></button>
-            </div>
-          </div>
-
-          <div className="flex-1 overflow-y-auto p-16 print:p-0 bg-white">
-            <div className="max-w-4xl mx-auto space-y-10">
-               <div className="flex justify-between border-b-4 border-slate-900 pb-8">
-                  <div className="space-y-2">
-                    <h1 className="text-3xl font-black uppercase tracking-tighter">AGENDA DE ATENCIÓN CLÍNICA</h1>
-                    <p className="text-sm font-bold text-slate-500 uppercase">Unidad Médica Especializada • Hospital San Rafael</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Fecha del Reporte</p>
-                    <p className="text-lg font-black text-slate-900 uppercase">{new Date(printDate + 'T12:00:00').toLocaleDateString('es-MX', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
-                  </div>
-               </div>
-
-               <table className="w-full text-left border-collapse">
-                  <thead>
-                     <tr className="bg-slate-100 text-[9px] font-black uppercase text-slate-500 tracking-widest border-b-2 border-slate-900">
-                        <th className="p-4 w-20">Hora</th>
-                        <th className="p-4">Paciente / CURP</th>
-                        <th className="p-4">Módulo / Motivo</th>
-                        <th className="p-4 text-center">Estatus Agenda</th>
-                        <th className="p-4 text-right">Responsable Mod.</th>
-                     </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                     {printList.map(p => {
-                        const isMod = p.agendaStatus === AgendaStatus.CANCELLED || p.agendaStatus === AgendaStatus.RESCHEDULED;
-                        return (
-                          <tr key={p.id} className={`text-[11px] ${isMod ? 'opacity-50 grayscale' : ''}`}>
-                             <td className={`p-4 font-black ${isMod ? 'line-through' : ''}`}>{p.appointmentTime || '--:--'}</td>
-                             <td className="p-4">
-                                <p className={`font-black uppercase ${isMod ? 'line-through' : ''}`}>{p.name}</p>
-                                <p className="text-[8px] text-slate-400 font-mono">{p.curp}</p>
-                             </td>
-                             <td className="p-4">
-                                <p className="font-bold uppercase text-[9px]">{p.assignedModule}</p>
-                                <p className="text-[9px] text-slate-500 italic truncate max-w-[180px]">{p.reason}</p>
-                             </td>
-                             <td className="p-4 text-center">
-                                <span className={`px-2 py-1 rounded text-[8px] font-black uppercase ${
-                                  p.agendaStatus === AgendaStatus.PENDING ? 'bg-slate-100 text-slate-600' :
-                                  p.agendaStatus === AgendaStatus.CANCELLED ? 'bg-rose-100 text-rose-700' :
-                                  p.agendaStatus === AgendaStatus.RESCHEDULED ? 'bg-amber-100 text-amber-700' :
-                                  p.agendaStatus === AgendaStatus.ARRIVED_LATE ? 'bg-orange-100 text-orange-700' :
-                                  p.agendaStatus === AgendaStatus.NO_SHOW ? 'bg-rose-50 text-rose-800' :
-                                  'bg-emerald-100 text-emerald-700'
-                                }`}>
-                                  {p.agendaStatus}
-                                </span>
-                             </td>
-                             <td className="p-4 text-right text-[8px] font-bold text-slate-400">
-                                {p.modifiedBy ? `ID: ${p.modifiedBy}` : 'SISTEMA'}
-                             </td>
-                          </tr>
-                        );
-                     })}
-                     {printList.length === 0 && (
-                        <tr><td colSpan={5} className="p-32 text-center text-slate-300 font-black uppercase tracking-[0.4em]">Sin pacientes programados para este día</td></tr>
-                     )}
-                  </tbody>
-               </table>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  };
-
   return (
     <div className="max-w-full space-y-10 animate-in fade-in duration-500 pb-20">
-      {showPrintModal && <PrintPreviewModal />}
+      {/* MODAL DE ARRIBO */}
+      {arrivalModalOpen && selectedAppointment && (
+        <div className="fixed inset-0 z-[300] flex items-center justify-center p-6 bg-slate-900/90 backdrop-blur-md animate-in fade-in">
+           <div className="bg-white w-full max-w-lg rounded-[3rem] shadow-2xl p-10 flex flex-col gap-8 animate-in zoom-in-95">
+              <div className="flex justify-between items-start">
+                 <div className="space-y-2">
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Registrar Asistencia</p>
+                    <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">{selectedAppointment.name}</h3>
+                    <p className="text-xs font-bold text-blue-600 uppercase flex items-center gap-2"><Clock size={14}/> Cita Programada: {selectedAppointment.appointmentTime} hrs</p>
+                 </div>
+                 <button onClick={() => setArrivalModalOpen(false)} className="p-3 bg-slate-50 hover:bg-slate-100 rounded-full transition-all"><X size={20} className="text-slate-400" /></button>
+              </div>
+
+              <div className="space-y-3">
+                 <button onClick={() => handleStartInTake(AgendaStatus.ARRIVED_ON_TIME)} className="w-full flex items-center gap-4 p-5 bg-emerald-50 border border-emerald-100 hover:bg-emerald-600 hover:text-white rounded-2xl transition-all group">
+                    <div className="w-10 h-10 rounded-xl bg-emerald-200 text-emerald-700 flex items-center justify-center group-hover:bg-white group-hover:text-emerald-600"><CheckCircle size={20}/></div>
+                    <div className="text-left">
+                       <p className="text-sm font-black uppercase">Llegó a Tiempo</p>
+                       <p className="text-[10px] font-bold opacity-70 uppercase">Enviar a Monitor Activo</p>
+                    </div>
+                 </button>
+
+                 <button onClick={() => handleStartInTake(AgendaStatus.ARRIVED_LATE)} className="w-full flex items-center gap-4 p-5 bg-amber-50 border border-amber-100 hover:bg-amber-500 hover:text-white rounded-2xl transition-all group">
+                    <div className="w-10 h-10 rounded-xl bg-amber-200 text-amber-700 flex items-center justify-center group-hover:bg-white group-hover:text-amber-600"><Clock size={20}/></div>
+                    <div className="text-left">
+                       <p className="text-sm font-black uppercase">Llegó Tarde</p>
+                       <p className="text-[10px] font-bold opacity-70 uppercase">Registrar con retardo</p>
+                    </div>
+                 </button>
+
+                 <button onClick={() => handleStartInTake(AgendaStatus.NO_SHOW)} className="w-full flex items-center gap-4 p-5 bg-rose-50 border border-rose-100 hover:bg-rose-600 hover:text-white rounded-2xl transition-all group">
+                    <div className="w-10 h-10 rounded-xl bg-rose-200 text-rose-700 flex items-center justify-center group-hover:bg-white group-hover:text-rose-600"><UserMinus size={20}/></div>
+                    <div className="text-left">
+                       <p className="text-sm font-black uppercase">No Asistió / Falta</p>
+                       <p className="text-[10px] font-bold opacity-70 uppercase">Marcar inasistencia y archivar</p>
+                    </div>
+                 </button>
+              </div>
+           </div>
+        </div>
+      )}
 
       <div className="flex flex-col xl:flex-row xl:items-end justify-between gap-8 no-print">
         <div className="space-y-1">
@@ -232,9 +215,6 @@ const Agenda: React.FC<AgendaProps> = ({ onUpdateStatus, patients }) => {
         </div>
 
         <div className="flex flex-wrap gap-4 items-center">
-          <button onClick={() => setShowPrintModal(true)} className="p-5 bg-white border border-slate-200 text-slate-400 hover:text-blue-600 rounded-2xl shadow-sm transition-all">
-            <Printer size={24} />
-          </button>
           <button onClick={() => navigate('/new-patient')} className="flex items-center px-12 py-5 bg-slate-900 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-2xl hover:bg-blue-600 transition-all group">
             <Plus className="w-5 h-5 mr-3 group-hover:rotate-90 transition-transform" /> Agendar Paciente
           </button>
@@ -247,7 +227,7 @@ const Agenda: React.FC<AgendaProps> = ({ onUpdateStatus, patients }) => {
         </div>
         <input 
           className="w-full pl-20 pr-8 py-7 bg-white border border-slate-200 rounded-[2.5rem] shadow-xl outline-none focus:ring-4 focus:ring-blue-50 focus:border-blue-400 transition-all text-xl font-black uppercase placeholder-slate-300" 
-          placeholder="Buscar paciente para ver fecha de registro (Ej: PEREZ)..." 
+          placeholder="Buscar paciente en el histórico..." 
           value={searchTerm}
           onChange={e => setSearchTerm(e.target.value)}
         />
@@ -262,7 +242,7 @@ const Agenda: React.FC<AgendaProps> = ({ onUpdateStatus, patients }) => {
                 {globalSearchResults.map(p => (
                    <div key={p.id} className="p-8 flex items-center justify-between hover:bg-blue-50 transition-all border-b border-slate-50 last:border-0 group/row">
                       <div className="flex items-center gap-6">
-                         <div className="w-14 h-14 rounded-2xl bg-slate-100 text-slate-400 flex items-center justify-center font-black group-hover/row:bg-blue-600 group-hover/row:text-white transition-all text-xl">{p.name.charAt(0)}</div>
+                         <div className="w-14 h-14 rounded-2xl bg-slate-100 text-slate-400 flex items-center justify-center font-black text-xl">{p.name.charAt(0)}</div>
                          <div>
                             <p className="text-sm font-black text-slate-900 uppercase tracking-tight">{p.name}</p>
                             <p className="text-[10px] text-slate-400 font-mono mt-1">{p.curp}</p>
@@ -271,7 +251,7 @@ const Agenda: React.FC<AgendaProps> = ({ onUpdateStatus, patients }) => {
                       <div className="flex items-center gap-10">
                          <div className="text-right">
                             <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Fecha Agendada</p>
-                            <p className="text-sm font-black text-blue-600 uppercase">{new Date(p.scheduledDate + 'T12:00:00').toLocaleDateString('es-MX', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
+                            <p className="text-sm font-black text-blue-600 uppercase">{p.scheduledDate}</p>
                          </div>
                          <button onClick={() => { setSelectedDate(p.scheduledDate!); setSearchTerm(''); }} className="p-4 bg-slate-900 text-white rounded-2xl hover:bg-blue-600 transition-all shadow-md flex items-center gap-2 text-[9px] font-black uppercase tracking-widest">
                             <CalendarDays size={16} /> Ir al día
@@ -312,25 +292,16 @@ const Agenda: React.FC<AgendaProps> = ({ onUpdateStatus, patients }) => {
                 const ds = getLocalDateString(new Date(new Date(selectedDate + 'T12:00:00').getFullYear(), new Date(selectedDate + 'T12:00:00').getMonth(), d));
                 const isSel = selectedDate === ds;
                 const isT = today === ds;
-                const hasA = patients.filter(p => !p.id.startsWith('OLD-')).some(p => p.scheduledDate === ds);
+                const hasA = patients.some(p => p.scheduledDate === ds && !p.id.startsWith('OLD-'));
                 return (
-                  <button key={d} onClick={() => setSelectedDate(ds)} className={`aspect-square flex items-center justify-center rounded-2xl text-[11px] font-black transition-all ${isSel ? 'bg-blue-600 text-white shadow-xl scale-110' : isT ? 'bg-amber-100 text-amber-700 ring-2 ring-amber-400' : 'hover:bg-slate-50 text-slate-700'}`}>
+                  <button key={d} onClick={() => setSelectedDate(ds)} className={`aspect-square flex items-center justify-center rounded-2xl text-[11px] font-black transition-all relative ${isSel ? 'bg-blue-600 text-white shadow-xl scale-110' : isT ? 'bg-amber-100 text-amber-700 ring-2 ring-amber-400' : 'hover:bg-slate-50 text-slate-700'}`}>
                     {d}
                     {hasA && !isSel && <div className="absolute bottom-1 w-1 h-1 bg-blue-400 rounded-full" />}
                   </button>
                 );
               })}
             </div>
-            <button onClick={() => setSelectedDate(today)} className="mt-10 w-full py-4 bg-slate-50 border border-slate-100 text-slate-400 rounded-2xl text-[9px] font-black uppercase tracking-widest hover:bg-blue-600 hover:text-white transition-all">Hoy (24 Dic)</button>
-          </div>
-
-          <div className="bg-slate-900 text-white rounded-[3rem] p-10 shadow-xl space-y-6 relative overflow-hidden">
-             <History className="absolute -right-6 -bottom-6 w-32 h-32 opacity-10" />
-             <h4 className="text-[10px] font-black text-blue-400 uppercase tracking-widest">Auditoría del Día</h4>
-             <div className="grid grid-cols-2 gap-6 relative z-10">
-                <div><p className="text-3xl font-black">{dayAppointments.filter(p => !p.id.startsWith('OLD-')).length}</p><p className="text-[9px] font-bold text-slate-500 uppercase">Citados</p></div>
-                <div><p className="text-3xl font-black text-emerald-400">{dayAppointments.filter(p => isActuallyArrived(p)).length}</p><p className="text-[9px] font-bold text-slate-500 uppercase">Presentes</p></div>
-             </div>
+            <button onClick={() => setSelectedDate(today)} className="mt-10 w-full py-4 bg-slate-50 border border-slate-100 text-slate-400 rounded-2xl text-[9px] font-black uppercase tracking-widest hover:bg-blue-600 hover:text-white transition-all">Hoy ({new Date().getDate()} {new Date().toLocaleDateString('es-MX', { month: 'short' })})</button>
           </div>
         </div>
 
@@ -344,14 +315,13 @@ const Agenda: React.FC<AgendaProps> = ({ onUpdateStatus, patients }) => {
                      </div>
                      <div>
                         <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tight leading-none">
-                          {selectedDate === today ? 'Hoy: ' : ''}
                           {new Date(selectedDate + 'T12:00:00').toLocaleDateString('es-MX', { day: 'numeric', month: 'long', year: 'numeric' })}
                         </h3>
                         <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">Sincronizado con Monitor Activo</p>
                      </div>
                   </div>
-                  <div className="flex bg-slate-50 border border-slate-100 p-1.5 rounded-2xl shadow-inner gap-1">
-                     <button onClick={() => setActiveTab('pending')} className={`px-5 py-2.5 rounded-xl text-[10px] font-black uppercase transition-all ${activeTab === 'pending' ? 'bg-white text-blue-600 shadow-md' : 'text-slate-400'}`}>Pendientes ({dayAppointments.filter(p => p.agendaStatus === AgendaStatus.PENDING && !isActuallyArrived(p)).length})</button>
+                  <div className="flex flex-wrap bg-slate-50 border border-slate-100 p-1.5 rounded-2xl shadow-inner gap-1">
+                     <button onClick={() => setActiveTab('pending')} className={`px-5 py-2.5 rounded-xl text-[10px] font-black uppercase transition-all ${activeTab === 'pending' ? 'bg-white text-blue-600 shadow-md' : 'text-slate-400'}`}>Pendientes ({dayAppointments.filter(p => (p.agendaStatus === AgendaStatus.PENDING || !p.agendaStatus) && !isActuallyArrived(p)).length})</button>
                      <button onClick={() => setActiveTab('arrived')} className={`px-5 py-2.5 rounded-xl text-[10px] font-black uppercase transition-all ${activeTab === 'arrived' ? 'bg-white text-emerald-600 shadow-md' : 'text-slate-400'}`}>Arribados</button>
                      <button onClick={() => setActiveTab('noshow')} className={`px-5 py-2.5 rounded-xl text-[10px] font-black uppercase transition-all ${activeTab === 'noshow' ? 'bg-white text-rose-600 shadow-md' : 'text-slate-400'}`}>Faltas</button>
                      <button onClick={() => setActiveTab('modified')} className={`px-5 py-2.5 rounded-xl text-[10px] font-black uppercase transition-all ${activeTab === 'modified' ? 'bg-white text-amber-600 shadow-md' : 'text-slate-400'}`}>Modificados</button>
@@ -363,11 +333,19 @@ const Agenda: React.FC<AgendaProps> = ({ onUpdateStatus, patients }) => {
               {filteredAppointments.length > 0 ? filteredAppointments.map((appt) => {
                 const arrived = isActuallyArrived(appt);
                 const isMod = appt.agendaStatus === AgendaStatus.CANCELLED || appt.agendaStatus === AgendaStatus.RESCHEDULED;
+                const hasConflict = timeConflicts.includes(appt.appointmentTime || '');
+                const priorityId = appt.priority.split(' ')[0];
 
                 return (
-                  <div key={appt.id} className="p-10 flex flex-col md:flex-row items-center hover:bg-slate-50/50 transition-all group gap-10">
-                    <div className="w-24 text-center border-r border-slate-100 pr-10 shrink-0">
-                      <p className={`text-3xl font-black leading-none ${arrived || isMod ? 'text-slate-300' : 'text-slate-900'} ${isMod ? 'line-through' : ''}`}>{appt.appointmentTime || '--:--'}</p>
+                  <div key={appt.id} className="relative flex flex-col md:flex-row items-center hover:bg-slate-50/50 transition-all group p-10 gap-10">
+                    {/* Franja lateral de color según Triage */}
+                    <div className={`absolute left-0 top-0 bottom-0 w-2 ${priorityColors[priorityId]}`}></div>
+                    
+                    <div className="w-24 text-center shrink-0">
+                      <p className={`text-3xl font-black leading-none ${hasConflict && !arrived ? 'text-rose-600' : arrived || isMod ? 'text-slate-300' : 'text-slate-900'} ${isMod ? 'line-through' : ''}`}>
+                        {appt.appointmentTime || '--:--'}
+                      </p>
+                      {hasConflict && !arrived && <p className="text-[7px] font-black text-rose-500 uppercase mt-2 animate-pulse">SATURADO</p>}
                       <p className="text-[9px] text-slate-400 font-black uppercase mt-3 tracking-widest">HORA</p>
                     </div>
                     
@@ -377,6 +355,11 @@ const Agenda: React.FC<AgendaProps> = ({ onUpdateStatus, patients }) => {
                           <span className={`px-4 py-1.5 rounded-xl text-[9px] font-black uppercase border shadow-sm ${appt.assignedModule === ModuleType.AUXILIARY ? 'bg-indigo-50 text-indigo-700' : 'bg-blue-50 text-blue-700'}`}>
                              {appt.assignedModule}
                           </span>
+                          {arrived && (
+                            <div className="flex items-center gap-2 px-3 py-1.5 bg-emerald-50 text-emerald-700 rounded-lg text-[8px] font-black uppercase border border-emerald-100">
+                               <MapPin size={10} className="text-emerald-500" /> {appt.bedNumber ? `En Consultorio ${appt.bedNumber}` : 'En Sala de Espera'}
+                            </div>
+                          )}
                        </div>
                        
                        <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
@@ -395,9 +378,9 @@ const Agenda: React.FC<AgendaProps> = ({ onUpdateStatus, patients }) => {
                                 {appt.agendaStatus === AgendaStatus.RESCHEDULED ? 'Cita Reagendada' : appt.agendaStatus === AgendaStatus.CANCELLED ? 'Cita Cancelada' : appt.agendaStatus}
                              </div>
                           )}
-                          {appt.modifiedBy && (
-                            <div className="px-4 py-1.5 bg-blue-50 text-blue-600 rounded-lg text-[8px] font-black uppercase flex items-center gap-2">
-                               <ShieldAlert size={12} /> Usuario: {appt.modifiedBy}
+                          {isMod && appt.agendaStatus === AgendaStatus.RESCHEDULED && (
+                            <div className="px-4 py-1.5 bg-slate-100 text-slate-500 rounded-lg text-[8px] font-black uppercase flex items-center gap-2">
+                               <CalendarIcon size={12} /> Fecha anterior: {appt.lastVisit}
                             </div>
                           )}
                        </div>
@@ -405,48 +388,28 @@ const Agenda: React.FC<AgendaProps> = ({ onUpdateStatus, patients }) => {
 
                     <div className="flex gap-3 shrink-0">
                        {!arrived && !isMod && appt.agendaStatus !== AgendaStatus.NO_SHOW && (
-                         <div className="flex gap-2 items-center relative">
-                            <button onClick={() => handleCancel(appt)} className="p-5 text-slate-300 hover:text-rose-600 hover:bg-rose-50 rounded-2xl transition-all" title="Cancelar"><XCircle size={24} /></button>
-                            <button onClick={() => navigate(`/edit-patient/${appt.id}`)} className="p-5 text-slate-300 hover:text-blue-600 hover:bg-blue-50 rounded-2xl transition-all" title="Modificar"><Edit3 size={24} /></button>
+                         <div className="flex gap-2 items-center">
+                            <button onClick={() => handleCancel(appt)} className="p-5 text-slate-300 hover:text-rose-600 hover:bg-rose-50 rounded-2xl transition-all" title="Cancelar Cita"><XCircle size={24} /></button>
+                            <button onClick={() => navigate(`/edit-patient/${appt.id}`)} className="p-5 text-slate-300 hover:text-blue-600 hover:bg-blue-50 rounded-2xl transition-all" title="Modificar Datos"><Edit3 size={24} /></button>
                             
-                            {selectedDate === today && (
-                              <div className="relative">
-                                <button 
-                                  onClick={() => setOpenArriboMenuId(openArriboMenuId === appt.id ? null : appt.id)}
-                                  className="flex items-center px-10 py-5 bg-slate-900 text-white rounded-2xl text-[10px] font-black uppercase shadow-xl hover:bg-blue-600 transition-all gap-2"
-                                >
-                                  Arribo <MoreVertical size={14} />
-                                </button>
-                                
-                                {openArriboMenuId === appt.id && (
-                                  <div className="absolute bottom-full right-0 mb-4 w-56 bg-white border border-slate-200 rounded-3xl shadow-2xl z-[100] p-2 animate-in slide-in-from-bottom-2">
-                                     <button onClick={() => handleStartInTake(appt, AgendaStatus.ARRIVED_ON_TIME)} className="w-full flex items-center gap-3 px-4 py-3 hover:bg-emerald-50 rounded-2xl transition-all group">
-                                        <div className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-600 flex items-center justify-center group-hover:bg-emerald-600 group-hover:text-white transition-all"><CheckCircle size={16}/></div>
-                                        <span className="text-[10px] font-black uppercase text-slate-700">A Tiempo</span>
-                                     </button>
-                                     <button onClick={() => handleStartInTake(appt, AgendaStatus.ARRIVED_LATE)} className="w-full flex items-center gap-3 px-4 py-3 hover:bg-amber-50 rounded-2xl transition-all group">
-                                        <div className="w-8 h-8 rounded-lg bg-amber-100 text-amber-600 flex items-center justify-center group-hover:bg-amber-600 group-hover:text-white transition-all"><Clock size={16}/></div>
-                                        <span className="text-[10px] font-black uppercase text-slate-700">Tarde</span>
-                                     </button>
-                                     <div className="h-px bg-slate-100 my-1 mx-2"></div>
-                                     <button onClick={() => handleStartInTake(appt, AgendaStatus.NO_SHOW)} className="w-full flex items-center gap-3 px-4 py-3 hover:bg-rose-50 rounded-2xl transition-all group">
-                                        <div className="w-8 h-8 rounded-lg bg-rose-100 text-rose-600 flex items-center justify-center group-hover:bg-rose-600 group-hover:text-white transition-all"><UserMinus size={16}/></div>
-                                        <span className="text-[10px] font-black uppercase text-slate-700">Faltó / No Llegó</span>
-                                     </button>
-                                  </div>
-                                )}
-                              </div>
-                            )}
+                            <button 
+                              onClick={() => handleOpenArrivalModal(appt)}
+                              className="flex items-center px-8 py-5 bg-slate-900 text-white rounded-2xl text-[10px] font-black uppercase shadow-xl hover:bg-blue-600 transition-all gap-3"
+                            >
+                              Registrar Arribo <MapPin size={14} className="animate-pulse" />
+                            </button>
                          </div>
                        )}
-                       {arrived && <button onClick={() => navigate(`/patient/${appt.id}`)} className="px-8 py-4 bg-white border border-slate-200 text-slate-400 rounded-2xl text-[10px] font-black uppercase hover:text-blue-600 transition-all">Expediente</button>}
+                       {arrived && <button onClick={() => navigate(`/patient/${appt.id}`)} className="px-8 py-4 bg-white border border-slate-200 text-slate-400 rounded-2xl text-[10px] font-black uppercase hover:text-blue-600 transition-all flex items-center gap-2"><Stethoscope size={14} /> Ver Expediente</button>}
                        
-                       {/* Si faltó, permitir ver expediente o reagendar desde tab faltas */}
                        {appt.agendaStatus === AgendaStatus.NO_SHOW && activeTab === 'noshow' && (
                          <div className="flex gap-2">
                             <button onClick={() => navigate(`/edit-patient/${appt.id}`)} className="p-5 text-slate-300 hover:text-blue-600 hover:bg-blue-50 rounded-2xl transition-all" title="Reagendar"><Edit3 size={24} /></button>
                             <button onClick={() => navigate(`/patient/${appt.id}`)} className="px-8 py-4 bg-white border border-slate-200 text-slate-400 rounded-2xl text-[10px] font-black uppercase hover:text-blue-600 transition-all">Ficha</button>
                          </div>
+                       )}
+                       {isMod && (
+                         <button onClick={() => navigate(`/edit-patient/${appt.id}`)} className="px-8 py-4 bg-slate-100 text-slate-600 rounded-2xl font-black uppercase hover:bg-blue-600 hover:text-white transition-all">Reagendar</button>
                        )}
                     </div>
                   </div>

@@ -7,7 +7,7 @@ import {
   MapPin, AlertTriangle, Printer, Microscope, ClipboardList,
   ChevronDown, MapPinned, Users, Info, X, Check, Timer, ArrowRight
 } from 'lucide-react';
-import { ModuleType, Patient, PatientStatus, PriorityLevel } from '../types';
+import { ModuleType, Patient, PatientStatus, PriorityLevel, AgendaStatus } from '../types';
 
 interface DashboardProps {
   module: ModuleType;
@@ -89,7 +89,21 @@ const Dashboard: React.FC<DashboardProps> = ({
     const search = cleanStr(searchTerm);
     const matchesSearch = cleanStr(p.name).includes(search) || cleanStr(p.id).includes(search);
     const matchesModule = p.assignedModule === module;
-    return matchesSearch && matchesModule && p.status !== PatientStatus.ATTENDED && p.status !== PatientStatus.READY_RESULTS;
+    
+    // LOGICA DE FILTRADO CORRECTA PARA MONITOR ACTIVO
+    // 1. Debe coincidir con el módulo actual.
+    // 2. NO debe estar Atendido/Finalizado.
+    // 3. NO debe estar solo Programado (debe haber hecho Arribo en la Agenda).
+    // 4. NO debe estar Cancelado ni ser No Show.
+    const isActiveStatus = p.status !== PatientStatus.ATTENDED && 
+                           p.status !== PatientStatus.READY_RESULTS &&
+                           p.status !== PatientStatus.SCHEDULED; // CRÍTICO: Excluir Programados
+
+    const isValidAgenda = p.agendaStatus !== AgendaStatus.CANCELLED && 
+                          p.agendaStatus !== AgendaStatus.NO_SHOW &&
+                          p.agendaStatus !== AgendaStatus.RESCHEDULED;
+
+    return matchesSearch && matchesModule && isActiveStatus && isValidAgenda;
   });
 
   const handlePatientAction = (p: Patient) => {
@@ -240,7 +254,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                     <th className="px-10 py-6 text-right">Acción</th>
                  </tr>
               </thead>
-              <tbody className="divide-y divide-slate-50">
+              <tbody className="divide-y divide-slate-100">
                  {filteredPatients.map(p => {
                     // Lógica solicitada: si tiene consultorio asignado dice "En Consulta", si no "En sala de espera"
                     const displayStatus = p.bedNumber ? "En Consulta" : "En sala de espera";

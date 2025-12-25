@@ -131,9 +131,34 @@ export const NOTE_CATEGORIES = [
     notes: [
       'Historia Clínica Medica',
       'Nota de Evolución',
-      'Resumen Clínico',
       'Nota Inicial de Urgencias',
+      'Nota de Interconsulta',
+      'Nota Pre-operatoria',
+      'Nota Post-operatoria',
       'Nota de Egreso / Alta'
+    ]
+  },
+  {
+    title: 'Documentos Legales',
+    notes: [
+      'Carta de Consentimiento Informado',
+      'Hoja de Egreso Voluntario',
+      'Notificación al Ministerio Público',
+      'Certificado de Defunción',
+      'Consentimiento Telemedicina'
+    ]
+  },
+  {
+    title: 'Servicios y Otros',
+    notes: [
+      'Solicitud de Estudios',
+      'Hoja de Enfermería',
+      'Receta Médica',
+      'Registro de Transfusión',
+      'Estudio Socioeconómico',
+      'Expediente Estomatológico',
+      'Estudio Epidemiológico',
+      'Reporte de ESAVI'
     ]
   }
 ];

@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { 
   ChevronLeft, Printer, QrCode, Plus, Trash2, Eye, 
@@ -11,7 +11,7 @@ import {
   ArrowRight
 } from 'lucide-react';
 import { Patient, MedicationPrescription, MedicationStock, Vitals, DoctorInfo, ClinicalNote } from '../types';
-import { VADEMECUM_DB } from '../constants';
+import { VADEMECUM_DB, INITIAL_STOCK } from '../constants';
 
 const Prescription: React.FC<{ patients: Patient[], doctorInfo: DoctorInfo, onSaveNote: (n: ClinicalNote) => void }> = ({ patients, doctorInfo, onSaveNote }) => {
   const { id } = useParams();
@@ -22,7 +22,15 @@ const Prescription: React.FC<{ patients: Patient[], doctorInfo: DoctorInfo, onSa
   const [isPreview, setIsPreview] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
-  const [suggestions, setSuggestions] = useState<MedicationStock[]>([]);
+  
+  // Modificado: Ahora las sugerencias incluyen el dato de stock
+  const [suggestions, setSuggestions] = useState<(MedicationStock & { inStock: number })[]>([]);
+  
+  // CORRECCIÓN: Cargar inventario real desde LocalStorage O usar INITIAL_STOCK por defecto
+  const inventory: MedicationStock[] = useMemo(() => {
+    const saved = localStorage.getItem('med_inventory_v6');
+    return saved ? JSON.parse(saved) : INITIAL_STOCK;
+  }, []);
   
   const dataFromNote = location.state as { diagnosis?: string, meds?: MedicationPrescription[], generalPlan?: string, cieCode?: string } | null;
 
@@ -44,17 +52,42 @@ const Prescription: React.FC<{ patients: Patient[], doctorInfo: DoctorInfo, onSa
   const handleSearchMed = (val: string) => {
     setSearchTerm(val);
     if (val.length > 1) {
-      const filtered = VADEMECUM_DB.filter(m => 
-        m.name.toLowerCase().includes(val.toLowerCase()) || 
-        m.genericName.toLowerCase().includes(val.toLowerCase())
-      );
-      setSuggestions(filtered);
+      const term = val.toLowerCase();
+
+      // 1. Buscar primero en el INVENTARIO REAL (Prioridad)
+      const stockMatches = inventory.filter(i => 
+        i.name.toLowerCase().includes(term) || 
+        i.genericName.toLowerCase().includes(term)
+      ).map(i => ({ 
+        ...i, 
+        inStock: i.currentStock // Usar stock real
+      }));
+
+      // 2. Buscar en VADEMECUM (Catálogo global) lo que NO esté en inventario
+      const catalogMatches = VADEMECUM_DB.filter(v => 
+        (v.name.toLowerCase().includes(term) || v.genericName.toLowerCase().includes(term)) &&
+        !stockMatches.some(s => s.name === v.name) // Evitar duplicados si ya salió del stock
+      ).map(v => ({ 
+        ...v, 
+        inStock: 0 // No está en farmacia
+      }));
+
+      // Combinar resultados
+      setSuggestions([...stockMatches, ...catalogMatches]);
     } else {
       setSuggestions([]);
     }
   };
 
-  const selectMedFromDB = (med: MedicationStock) => {
+  const selectMedFromDB = (med: MedicationStock & { inStock: number }) => {
+    // Validación de Stock (Advertencia no bloqueante)
+    if (med.inStock <= 0) {
+      const confirmAdd = window.confirm(
+        `⚠️ STOCK AGOTADO: El medicamento ${med.name} no tiene existencias en Farmacia interna.\n\n¿Desea agregarlo a la receta para compra externa?`
+      );
+      if (!confirmAdd) return;
+    }
+
     const newMed: MedicationPrescription = {
       id: `MED-${Date.now()}`,
       name: med.name,
@@ -64,7 +97,8 @@ const Prescription: React.FC<{ patients: Patient[], doctorInfo: DoctorInfo, onSa
       frequency: 'Cada 8 horas',
       duration: '7 días',
       route: 'Oral',
-      instructions: ''
+      // Nota automática si no hay stock
+      instructions: med.inStock === 0 ? '' : ''
     };
     setMedications([...medications, newMed]);
     setSearchTerm('');
@@ -149,17 +183,22 @@ const Prescription: React.FC<{ patients: Patient[], doctorInfo: DoctorInfo, onSa
                 <div className="relative">
                    <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
                    <input 
-                     className="pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-[10px] font-black uppercase outline-none focus:bg-white w-48 shadow-sm transition-all" 
-                     placeholder="Añadir fármaco..." 
+                     className="pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-[10px] font-black uppercase outline-none focus:bg-white w-64 shadow-sm transition-all focus:ring-2 focus:ring-blue-100" 
+                     placeholder="Buscar fármaco en stock..." 
                      value={searchTerm} 
                      onChange={e => handleSearchMed(e.target.value)} 
                    />
                    {suggestions.length > 0 && (
-                     <div className="absolute top-full left-0 w-full mt-1 bg-white border border-slate-200 rounded-xl shadow-2xl z-[100] overflow-hidden animate-in zoom-in-95">
+                     <div className="absolute top-full left-0 w-80 mt-2 bg-white border border-slate-200 rounded-2xl shadow-2xl z-[100] overflow-hidden animate-in zoom-in-95 max-h-80 overflow-y-auto custom-scrollbar">
                         {suggestions.map(s => (
-                          <button key={s.id} onClick={() => selectMedFromDB(s)} className="w-full text-left p-3 hover:bg-blue-50 border-b border-slate-50 last:border-0">
-                            <p className="text-[10px] font-black uppercase text-slate-900">{s.name}</p>
-                            <p className="text-[8px] text-slate-400 font-bold uppercase">{s.genericName}</p>
+                          <button key={s.id} onClick={() => selectMedFromDB(s)} className="w-full text-left p-4 hover:bg-slate-50 border-b border-slate-50 last:border-0 transition-colors flex justify-between items-center group">
+                            <div>
+                               <p className="text-[10px] font-black uppercase text-slate-900">{s.name}</p>
+                               <p className="text-[8px] text-slate-400 font-bold uppercase">{s.genericName}</p>
+                            </div>
+                            <div className={`px-2 py-1 rounded-lg text-[8px] font-black uppercase border ${s.inStock > 0 ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-rose-50 text-rose-600 border-rose-100'}`}>
+                               {s.inStock > 0 ? `Stock: ${s.inStock}` : 'Agotado'}
+                            </div>
                           </button>
                         ))}
                      </div>
@@ -232,6 +271,12 @@ const Prescription: React.FC<{ patients: Patient[], doctorInfo: DoctorInfo, onSa
                     </div>
                   </div>
                 ))}
+                {medications.length === 0 && (
+                    <div className="py-20 text-center opacity-30">
+                        <Pill size={48} className="mx-auto mb-4 text-slate-400" />
+                        <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Utilice el buscador superior para agregar fármacos</p>
+                    </div>
+                )}
               </div>
             </div>
           </div>
@@ -321,7 +366,15 @@ const PrescriptionDoc = ({ patient, vitals, meds, data, doctor, label }: any) =>
               </div>
            </div>
 
-           <div className="space-y-5 min-h-[220px]">
+           {/* Diagnóstico Section Added */}
+           <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
+              <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">Diagnóstico Médico</p>
+              <p className="text-[10px] font-black text-slate-900 uppercase leading-snug">
+                 {data.diagnostico || 'DIAGNÓSTICO RESERVADO'}
+              </p>
+           </div>
+
+           <div className="space-y-5 min-h-[200px]">
               <div className="flex items-center gap-3 mb-4">
                  <span className="text-[18px] font-black text-slate-900 italic">Rp.</span>
                  <div className="h-[2px] flex-1 bg-slate-900/5"></div>

@@ -7,16 +7,10 @@ import {
   User, 
   Save,
   AlertTriangle,
-  CheckCircle2,
   Calendar as CalendarIcon,
   Clock,
-  Microscope,
-  Stethoscope,
-  FlaskConical,
   Search,
   Plus,
-  X,
-  ImageIcon,
   Mail,
   Activity,
   Zap,
@@ -24,7 +18,11 @@ import {
   Check,
   ChevronDown,
   Bed,
-  Minus
+  Minus,
+  Edit,
+  Stethoscope,
+  FlaskConical,
+  Tag
 } from 'lucide-react';
 import { Patient, PatientStatus, ModuleType, PriorityLevel, AgendaStatus } from '../types';
 import { LAB_CATALOG, IMAGING_CATALOG } from '../constants';
@@ -34,15 +32,18 @@ interface NewPatientProps {
   patients: Patient[];
 }
 
+const QUICK_TAGS = ["Control Crónicos", "Certificado Médico", "Seguimiento", "Interpretación Labs", "Urgencia Menor"];
+
 const NewPatient: React.FC<NewPatientProps> = ({ onAdd, patients }) => {
   const navigate = useNavigate();
   const { id } = useParams();
   const isEditing = !!id;
   const calendarRef = useRef<HTMLDivElement>(null);
   
-  const existingPatient = patients.find(p => p.id === id);
+  // Buscar paciente si estamos editando
+  const existingPatient = useMemo(() => patients.find(p => p.id === id), [patients, id]);
 
-  // FIX: Lógica de fecha local estricta
+  // Helper para fecha local (Asegura hoy = YYYY-MM-DD)
   const getLocalDateString = (date: Date = new Date()) => {
     const year = date.getFullYear();
     const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -81,15 +82,29 @@ const NewPatient: React.FC<NewPatientProps> = ({ onAdd, patients }) => {
     agendaStatus: AgendaStatus.PENDING
   });
 
+  // Cargar datos al montar si es edición
   useEffect(() => {
     if (existingPatient) {
       setForm(existingPatient);
       if (existingPatient.assignedModule === ModuleType.AUXILIARY) {
         setSelectedStudies(existingPatient.reason?.split(', ').filter(s => s) || []);
       }
+      // Determinar si fue inmediato (no programado)
       setIsImmediate(existingPatient.status !== PatientStatus.SCHEDULED && existingPatient.status !== PatientStatus.ATTENDED);
     }
   }, [existingPatient]);
+
+  // Validación de disponibilidad
+  const timeConflict = useMemo(() => {
+    if (!form.scheduledDate || !form.appointmentTime) return false;
+    return patients.some(p => 
+      p.id !== id && 
+      p.scheduledDate === form.scheduledDate && 
+      p.appointmentTime === form.appointmentTime &&
+      p.status !== PatientStatus.ATTENDED &&
+      !p.id.startsWith('OLD-')
+    );
+  }, [patients, form.scheduledDate, form.appointmentTime, id]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -132,44 +147,62 @@ const NewPatient: React.FC<NewPatientProps> = ({ onAdd, patients }) => {
       ? selectedStudies.join(', ') 
       : form.reason;
 
-    const finalStatus = isImmediate 
-      ? (form.assignedModule === ModuleType.AUXILIARY ? PatientStatus.WAITING_FOR_SAMPLES : PatientStatus.WAITING)
-      : PatientStatus.SCHEDULED;
+    // Detectar si hubo cambio de fecha (Reagenda real)
+    const dateChanged = isEditing && existingPatient && existingPatient.scheduledDate !== form.scheduledDate;
 
-    // Auditar si es reagenda
-    let isRescheduling = false;
-    if (isEditing && existingPatient && existingPatient.scheduledDate !== form.scheduledDate) {
-      isRescheduling = true;
+    // 1. SI HUBO CAMBIO DE FECHA: Crear registro "fantasma" para el día anterior
+    // Esto asegura que en el día original aparezca en "Modificados"
+    if (dateChanged && existingPatient) {
+        const ghostRecord: Patient = {
+            ...existingPatient, // Copia datos originales
+            id: `OLD-${existingPatient.id}-${Date.now()}`, // ID único para el historial
+            scheduledDate: existingPatient.scheduledDate, // Mantiene fecha vieja
+            appointmentTime: existingPatient.appointmentTime, // Mantiene hora vieja
+            agendaStatus: AgendaStatus.RESCHEDULED, // Se marca como reagendada
+            status: PatientStatus.ATTENDED, // Se marca atendido/cerrado para que no salga en monitor activo
+            modifiedBy: "SISTEMA_REAGENDA_HISTORICO"
+        };
+        onAdd(ghostRecord); // Guardamos el rastro en el día viejo
+    }
+
+    // 2. Configurar el registro ACTIVO (El que se mueve al nuevo día)
+    let finalStatus = form.status || PatientStatus.SCHEDULED;
+    let finalAgendaStatus = form.agendaStatus || AgendaStatus.PENDING;
+    let lastVisitDate = existingPatient?.lastVisit || getLocalDateString();
+
+    if (isImmediate) {
+       finalStatus = form.assignedModule === ModuleType.AUXILIARY ? PatientStatus.WAITING_FOR_SAMPLES : PatientStatus.WAITING;
+       finalAgendaStatus = AgendaStatus.ARRIVED_ON_TIME;
+    } else {
+       finalStatus = PatientStatus.SCHEDULED;
+    }
+
+    if (dateChanged) {
+        // Si cambió fecha, en el nuevo día debe aparecer como PENDIENTE (Normal)
+        finalAgendaStatus = AgendaStatus.PENDING;
+        // Guardamos referencia de la fecha anterior
+        lastVisitDate = existingPatient?.scheduledDate || lastVisitDate; 
     }
 
     const patientData: Patient = {
       ...form as Patient,
-      id: isEditing ? (id as string) : Math.random().toString(36).substr(2, 7).toUpperCase(),
+      id: isEditing ? (existingPatient?.id || id!) : Math.random().toString(36).substr(2, 7).toUpperCase(),
       name: form.name?.toUpperCase() || '',
       curp: form.curp?.toUpperCase() || '',
-      lastVisit: isEditing ? (existingPatient?.lastVisit || getLocalDateString()) : getLocalDateString(),
+      lastVisit: lastVisitDate,
       reason: finalReason || 'Ingreso a sistema',
       priority: form.priority || PriorityLevel.NONE,
       status: finalStatus,
-      agendaStatus: isImmediate ? AgendaStatus.ARRIVED_ON_TIME : AgendaStatus.PENDING,
-      modifiedBy: isRescheduling ? "USER-12345678" : form.modifiedBy
+      agendaStatus: finalAgendaStatus,
+      modifiedBy: isEditing ? "RECEPCION" : undefined
     };
 
-    // Si es reagenda, guardamos una copia del registro anterior tachado
-    if (isRescheduling && existingPatient) {
-       const historicRecord: Patient = {
-          ...existingPatient,
-          id: `OLD-${existingPatient.id}-${Date.now()}`, // Nueva ID para el record histórico
-          agendaStatus: AgendaStatus.RESCHEDULED,
-          modifiedBy: "USER-12345678"
-       };
-       onAdd(historicRecord); // Guardar copia histórica
-    }
-
-    onAdd(patientData); // Guardar o actualizar registro principal
-    if (isEditing) navigate(`/patient/${id}`);
-    else if (isImmediate) navigate('/');
-    else navigate('/agenda');
+    onAdd(patientData); 
+    
+    // Navegación
+    if (isEditing) navigate('/agenda'); // Volver a agenda tras editar
+    else if (isImmediate) navigate('/'); // Ir a monitor si es inmediato
+    else navigate('/agenda'); // Ir a agenda si es programado nuevo
   };
 
   const priorityColors: Record<string, string> = {
@@ -189,10 +222,13 @@ const NewPatient: React.FC<NewPatientProps> = ({ onAdd, patients }) => {
             <ChevronLeft className="w-6 h-6 text-slate-600" />
           </button>
           <div>
-            <h1 className="text-3xl font-black text-slate-900 tracking-tight uppercase leading-none">
-              {isEditing ? 'Gestión de Expediente' : 'Admisión Médica'}
+            <h1 className="text-3xl font-black text-slate-900 tracking-tight uppercase leading-none flex items-center gap-3">
+              {isEditing ? <Edit className="text-blue-600" /> : <User className="text-emerald-600" />}
+              {isEditing ? 'Modificar / Reagendar Cita' : 'Admisión Médica'}
             </h1>
-            <p className="text-[10px] text-blue-600 font-black uppercase tracking-[0.2em] mt-2">Sincronización Hospitalaria • {getLocalDateString()}</p>
+            <p className="text-[10px] text-blue-600 font-black uppercase tracking-[0.2em] mt-2">
+               {isEditing ? 'Edición de Datos y Citas' : 'Sincronización Hospitalaria'} • {getLocalDateString()}
+            </p>
           </div>
         </div>
         
@@ -202,7 +238,7 @@ const NewPatient: React.FC<NewPatientProps> = ({ onAdd, patients }) => {
         </div>
 
         <button onClick={handleSave} className="px-10 py-4 bg-emerald-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-2xl hover:bg-slate-900 transition-all flex items-center gap-3">
-          <Save className="w-5 h-5" /> Finalizar Registro
+          <Save className="w-5 h-5" /> {isEditing ? 'Guardar Cambios' : 'Finalizar Registro'}
         </button>
       </div>
 
@@ -310,13 +346,13 @@ const NewPatient: React.FC<NewPatientProps> = ({ onAdd, patients }) => {
 
                    <div className="space-y-4">
                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2 flex items-center gap-2">
-                        <Clock size={14} className="text-blue-600" /> Horario de Atención
+                        <Clock size={14} className="text-blue-600" /> Horario de Atención {timeConflict && <span className="text-rose-600 animate-pulse ml-2 font-black">(SATURADO)</span>}
                       </label>
                       <div className="flex items-center gap-4">
                          <div className="relative flex-1">
                            <input 
                              type="time" 
-                             className="w-full p-6 bg-slate-900 text-white border-none rounded-3xl text-2xl font-black text-center outline-none shadow-xl focus:ring-4 focus:ring-blue-500/20" 
+                             className={`w-full p-6 border-none rounded-3xl text-2xl font-black text-center outline-none shadow-xl focus:ring-4 focus:ring-blue-500/20 transition-all ${timeConflict ? 'bg-rose-50 border-rose-300 border-2 text-rose-700' : 'bg-slate-900 text-white'}`} 
                              value={form.appointmentTime} 
                              onChange={e => setForm({...form, appointmentTime: e.target.value})} 
                            />
@@ -391,6 +427,12 @@ const NewPatient: React.FC<NewPatientProps> = ({ onAdd, patients }) => {
                   </div>
                 ) : (
                   <div className="space-y-3 pt-8 border-t border-slate-50">
+                     <div className="flex items-center gap-2 mb-2"><Tag size={16} className="text-blue-600" /><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Etiquetas Rápidas de Motivo</label></div>
+                     <div className="flex flex-wrap gap-2 mb-4">
+                        {QUICK_TAGS.map(tag => (
+                          <button key={tag} onClick={() => setForm({...form, reason: tag})} className={`px-4 py-2 rounded-full text-[9px] font-black uppercase transition-all border ${form.reason === tag ? 'bg-blue-600 text-white border-blue-600 shadow-md' : 'bg-white text-slate-500 border-slate-200 hover:border-blue-400'}`}>{tag}</button>
+                        ))}
+                     </div>
                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Motivo / Especialidad</label>
                      <textarea className="w-full p-8 bg-slate-50 border border-slate-200 rounded-[2.5rem] h-32 text-sm font-bold outline-none focus:bg-white shadow-inner" value={form.reason} onChange={e => setForm({...form, reason: e.target.value})} placeholder="Ej: Control Diabetes, Ingreso Programado Cirugía..." />
                   </div>
@@ -420,7 +462,7 @@ const NewPatient: React.FC<NewPatientProps> = ({ onAdd, patients }) => {
                     </div>
                     <div className="space-y-1">
                        <p className="text-[8px] font-black text-slate-500 uppercase tracking-widest">Hora</p>
-                       <p className="text-xs font-bold text-white">{form.appointmentTime} hrs</p>
+                       <p className={`text-xs font-bold ${timeConflict ? 'text-rose-400 animate-pulse' : 'text-white'}`}>{form.appointmentTime} hrs</p>
                     </div>
                  </div>
 
@@ -438,6 +480,18 @@ const NewPatient: React.FC<NewPatientProps> = ({ onAdd, patients }) => {
                  </div>
               </div>
            </div>
+
+           {timeConflict && (
+              <div className="bg-rose-50 border border-rose-200 rounded-[2.5rem] p-8 flex items-start gap-5 shadow-sm animate-bounce">
+                <AlertTriangle className="w-6 h-6 text-rose-600 mt-1 flex-shrink-0" />
+                <div className="space-y-1">
+                  <p className="text-[10px] font-black text-rose-900 uppercase tracking-widest leading-none">Conflicto de Horario</p>
+                  <p className="text-[10px] text-rose-700 font-medium leading-relaxed mt-2">
+                    Ya existe una cita programada para las {form.appointmentTime}. Se recomienda ajustar el horario para evitar demoras en la atención.
+                  </p>
+                </div>
+              </div>
+           )}
 
            <div className="bg-amber-50 border border-amber-200 rounded-[2.5rem] p-8 flex items-start gap-5 shadow-sm">
              <AlertTriangle className="w-6 h-6 text-amber-600 mt-1 flex-shrink-0" />

@@ -9,17 +9,17 @@ import {
   Clock, Clipboard, X, Heart, AlertTriangle, CheckCircle2, Maximize2, Scale, Ruler
 } from 'lucide-react';
 import { Patient, ClinicalNote, Vitals, MedicationPrescription, MedicationStock } from '../../types';
-import { VADEMECUM_DB } from '../../constants';
+import { VADEMECUM_DB, INITIAL_STOCK } from '../../constants';
 
 const EvolutionNote: React.FC<{ patients: Patient[], notes: ClinicalNote[], onSaveNote: (n: ClinicalNote) => void }> = ({ patients, notes, onSaveNote }) => {
   const { id, noteId } = useParams();
   const navigate = useNavigate();
   const patient = patients.find(p => p.id === id);
 
-  // Cargar inventario real desde LocalStorage para validar stock
+  // Cargar inventario real desde LocalStorage O usar INITIAL_STOCK por defecto
   const inventory: MedicationStock[] = useMemo(() => {
     const saved = localStorage.getItem('med_inventory_v6');
-    return saved ? JSON.parse(saved) : [];
+    return saved ? JSON.parse(saved) : INITIAL_STOCK;
   }, []);
 
   const [form, setForm] = useState({
@@ -66,21 +66,41 @@ const EvolutionNote: React.FC<{ patients: Patient[], notes: ClinicalNote[], onSa
   const handleSearchMed = (val: string) => {
     setSearchTerm(val);
     if (val.length > 1) {
-      // Cruzar Vademécum con Inventario Real
-      const filtered = VADEMECUM_DB.map(v => {
-        const stockItem = inventory.find(i => i.name === v.name || i.genericName === v.genericName);
-        return { ...v, inStock: stockItem ? stockItem.currentStock : 0 };
-      }).filter(m => 
-        m.name.toLowerCase().includes(val.toLowerCase()) || 
-        m.genericName.toLowerCase().includes(val.toLowerCase())
-      );
-      setSuggestions(filtered);
+      const term = val.toLowerCase();
+
+      // 1. Buscar primero en el INVENTARIO REAL (Prioridad)
+      const stockMatches = inventory.filter(i => 
+        i.name.toLowerCase().includes(term) || 
+        i.genericName.toLowerCase().includes(term)
+      ).map(i => ({ 
+        ...i, 
+        inStock: i.currentStock 
+      }));
+
+      // 2. Buscar en VADEMECUM (Catálogo global) lo que NO esté en inventario
+      const catalogMatches = VADEMECUM_DB.filter(v => 
+        (v.name.toLowerCase().includes(term) || v.genericName.toLowerCase().includes(term)) &&
+        !stockMatches.some(s => s.name === v.name)
+      ).map(v => ({ 
+        ...v, 
+        inStock: 0 
+      }));
+
+      setSuggestions([...stockMatches, ...catalogMatches]);
     } else {
       setSuggestions([]);
     }
   };
 
   const addMed = (med?: MedicationStock & { inStock?: number }) => {
+    // Validación de Stock (Solo Advertencia)
+    if (med && (med.inStock === undefined || med.inStock <= 0)) {
+      const confirmAdd = window.confirm(
+        `⚠️ STOCK AGOTADO: El medicamento ${med.name} no tiene existencias en Farmacia interna.\n\n¿Desea agregarlo al plan terapéutico para compra externa?`
+      );
+      if (!confirmAdd) return;
+    }
+
     const newMed: MedicationPrescription = {
       id: `MED-${Date.now()}`,
       name: med?.name || 'NUEVO FÁRMACO / INSUMO',
@@ -89,7 +109,7 @@ const EvolutionNote: React.FC<{ patients: Patient[], notes: ClinicalNote[], onSa
       frequency: 'Cada 8 horas',
       duration: '7 días',
       route: 'Oral',
-      instructions: med && med.inStock === 0 ? 'NOTA: SIN EXISTENCIAS EN FARMACIA.' : ''
+      instructions: med && (!med.inStock || med.inStock === 0) ? '' : ''
     };
     setMedications([...medications, newMed]);
     setSearchTerm('');
@@ -406,7 +426,7 @@ const EvolutionNote: React.FC<{ patients: Patient[], notes: ClinicalNote[], onSa
                           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-3.5 h-3.5" />
                           <input 
                             className="pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-[10px] font-black uppercase outline-none focus:bg-white focus:border-blue-400 w-64 shadow-sm transition-all"
-                            placeholder="Buscar Fármaco (Vademécum)..."
+                            placeholder="Buscar Fármaco (Stock)..."
                             value={searchTerm}
                             onChange={e => handleSearchMed(e.target.value)}
                           />
