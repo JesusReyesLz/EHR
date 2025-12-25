@@ -87,16 +87,6 @@ export interface DiuresisEntry {
   color: string;
 }
 
-export interface MedicationLog {
-  id: string;
-  medName: string;
-  dosage: string;
-  time: string;
-  status: 'Aplicado' | 'No Aplicado' | 'Pendiente';
-  nurse: string;
-  date: string;
-}
-
 export interface MedicationPrescription {
   id: string;
   name: string;
@@ -136,7 +126,6 @@ export interface Patient {
   currentVitals?: Vitals;
   vitalsHistory?: Vitals[];
   diuresisHistory?: DiuresisEntry[];
-  medicationLogs?: MedicationLog[];
   attachments?: Attachment[];
   history?: any;
   bedNumber?: string;
