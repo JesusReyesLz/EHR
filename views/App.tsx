@@ -65,12 +65,13 @@ function Layout({ children, currentModule, onModuleChange, doctorInfo }: any) {
     <div className="min-h-screen flex flex-col bg-slate-50 text-slate-900">
       <nav className="bg-white border-b border-slate-200 sticky top-0 z-[60] shadow-sm no-print">
         <div className="max-w-full px-6 flex justify-between h-16 items-center">
-          <div className="flex items-center gap-8">
-            <div className="flex items-center gap-3">
+          <div className="flex items-center gap-8 overflow-hidden">
+            <div className="flex items-center gap-3 shrink-0">
               <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center shadow-lg"><ShieldCheck className="text-white w-6 h-6" /></div>
               <span className="text-xl font-black tracking-tighter uppercase hidden md:block">MedExpediente <span className="text-blue-600">MX</span></span>
             </div>
-            <div className="hidden lg:flex items-center bg-slate-100 rounded-xl p-1 gap-1">
+            {/* Se cambió 'hidden lg:flex' por 'flex overflow-x-auto' para visibilidad en todas las pantallas */}
+            <div className="flex overflow-x-auto items-center bg-slate-100 rounded-xl p-1 gap-1 scrollbar-hide">
               {modules.map((mod) => (
                 <button
                   key={mod}
@@ -78,20 +79,20 @@ function Layout({ children, currentModule, onModuleChange, doctorInfo }: any) {
                     onModuleChange(mod);
                     if (location.pathname !== '/') navigate('/');
                   }}
-                  className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${currentModule === mod && location.pathname === '/' ? 'bg-white text-blue-700 shadow-sm border border-slate-200' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/50'}`}
+                  className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${currentModule === mod && location.pathname === '/' ? 'bg-white text-blue-700 shadow-sm border border-slate-200' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/50'}`}
                 >
                   {mod}
                 </button>
               ))}
               <button
                 onClick={() => navigate('/billing')}
-                className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${location.pathname === '/billing' ? 'bg-white text-blue-700 shadow-sm border border-slate-200' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/50'}`}
+                className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${location.pathname === '/billing' ? 'bg-white text-blue-700 shadow-sm border border-slate-200' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/50'}`}
               >
                 Caja
               </button>
             </div>
           </div>
-          <div className="flex items-center gap-6">
+          <div className="flex items-center gap-6 shrink-0">
             <div className="text-right hidden sm:block">
               <p className="text-xs font-black uppercase tracking-tighter">Dr. {doctorInfo?.name}</p>
               <p className="text-[9px] font-bold text-blue-600 uppercase">Cédula: {doctorInfo?.cedula}</p>
@@ -101,12 +102,13 @@ function Layout({ children, currentModule, onModuleChange, doctorInfo }: any) {
         </div>
       </nav>
       <div className="flex flex-1 overflow-hidden">
-        <aside className="w-20 lg:w-72 bg-white border-r border-slate-200 fixed left-0 top-16 h-full z-50 no-print flex flex-col">
+        <aside className="w-20 lg:w-72 bg-white border-r border-slate-200 fixed left-0 top-16 h-full z-50 no-print flex flex-col transition-all duration-300">
           <div className="flex-1 py-8 px-4 space-y-2 overflow-y-auto custom-scrollbar">
             {menuItems.map((item) => (
               <Link key={item.label} to={item.path} className={`flex items-center px-4 py-3.5 rounded-2xl transition-all ${location.pathname === item.path ? 'bg-slate-900 text-white shadow-xl' : 'text-slate-600 hover:bg-slate-50'}`}>
                 <div className={location.pathname === item.path ? 'text-blue-400' : 'text-slate-500'}>{item.icon}</div>
-                <span className="ml-4 font-black text-xs uppercase tracking-widest hidden lg:block">{item.label}</span>
+                {/* Se eliminó 'hidden lg:block' para que el texto siempre sea visible (block) */}
+                <span className="ml-4 font-black text-xs uppercase tracking-widest block">{item.label}</span>
               </Link>
             ))}
           </div>
