@@ -59,61 +59,49 @@ function Layout({ children, currentModule, onModuleChange, doctorInfo }: any) {
     { icon: <Settings className="w-5 h-5" />, label: 'Configuración', path: '/settings' },
   ];
 
-  const modules = [ModuleType.OUTPATIENT, ModuleType.EMERGENCY, ModuleType.HOSPITALIZATION, ModuleType.AUXILIARY];
-
   return (
     <div className="min-h-screen flex flex-col bg-slate-50 text-slate-900">
       <nav className="bg-white border-b border-slate-200 sticky top-0 z-[60] shadow-sm no-print">
-        <div className="max-w-full px-6 flex justify-between h-16 items-center">
-          <div className="flex items-center gap-8 overflow-hidden">
+        <div className="max-w-full px-2 lg:px-6 flex justify-between h-16 items-center gap-2">
+          {/* Left Section: Logo */}
+          <div className="flex items-center gap-4 flex-1 min-w-0"> 
             <div className="flex items-center gap-3 shrink-0">
-              <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center shadow-lg"><ShieldCheck className="text-white w-6 h-6" /></div>
-              <span className="text-xl font-black tracking-tighter uppercase hidden md:block">MedExpediente <span className="text-blue-600">MX</span></span>
-            </div>
-            {/* Se cambió 'hidden lg:flex' por 'flex overflow-x-auto' para visibilidad en todas las pantallas */}
-            <div className="flex overflow-x-auto items-center bg-slate-100 rounded-xl p-1 gap-1 scrollbar-hide">
-              {modules.map((mod) => (
-                <button
-                  key={mod}
-                  onClick={() => {
-                    onModuleChange(mod);
-                    if (location.pathname !== '/') navigate('/');
-                  }}
-                  className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${currentModule === mod && location.pathname === '/' ? 'bg-white text-blue-700 shadow-sm border border-slate-200' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/50'}`}
-                >
-                  {mod}
-                </button>
-              ))}
-              <button
-                onClick={() => navigate('/billing')}
-                className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${location.pathname === '/billing' ? 'bg-white text-blue-700 shadow-sm border border-slate-200' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/50'}`}
-              >
-                Caja
-              </button>
+              <div className="w-8 h-8 lg:w-10 lg:h-10 bg-blue-600 rounded-xl flex items-center justify-center shadow-lg"><ShieldCheck className="text-white w-5 h-5 lg:w-6 lg:h-6" /></div>
+              <span className="text-xl font-black tracking-tighter uppercase block">MedExpediente <span className="text-blue-600">MX</span></span>
             </div>
           </div>
-          <div className="flex items-center gap-6 shrink-0">
-            <div className="text-right hidden sm:block">
+          
+          {/* Right Section: User Info & Logout */}
+          <div className="flex items-center gap-3 shrink-0">
+            <div className="text-right hidden md:block">
               <p className="text-xs font-black uppercase tracking-tighter">Dr. {doctorInfo?.name}</p>
               <p className="text-[9px] font-bold text-blue-600 uppercase">Cédula: {doctorInfo?.cedula}</p>
             </div>
-            <button className="p-2.5 text-slate-500 hover:text-red-600 bg-slate-50 rounded-xl border border-slate-100"><LogOut className="w-5 h-5" /></button>
+            <button className="p-2 lg:p-2.5 text-slate-500 hover:text-red-600 bg-slate-50 rounded-xl border border-slate-100"><LogOut className="w-5 h-5" /></button>
           </div>
         </div>
       </nav>
+      
       <div className="flex flex-1 overflow-hidden">
-        <aside className="w-20 lg:w-72 bg-white border-r border-slate-200 fixed left-0 top-16 h-full z-50 no-print flex flex-col transition-all duration-300">
-          <div className="flex-1 py-8 px-4 space-y-2 overflow-y-auto custom-scrollbar">
+        {/* Sidebar Navigation */}
+        <aside className="w-16 lg:w-72 bg-white border-r border-slate-200 fixed left-0 top-16 h-full z-50 no-print flex flex-col transition-all duration-300">
+          <div className="flex-1 py-4 lg:py-8 px-2 lg:px-4 space-y-2 overflow-y-auto custom-scrollbar">
             {menuItems.map((item) => (
-              <Link key={item.label} to={item.path} className={`flex items-center px-4 py-3.5 rounded-2xl transition-all ${location.pathname === item.path ? 'bg-slate-900 text-white shadow-xl' : 'text-slate-600 hover:bg-slate-50'}`}>
-                <div className={location.pathname === item.path ? 'text-blue-400' : 'text-slate-500'}>{item.icon}</div>
-                {/* Se eliminó 'hidden lg:block' para que el texto siempre sea visible (block) */}
-                <span className="ml-4 font-black text-xs uppercase tracking-widest block">{item.label}</span>
+              <Link 
+                key={item.label} 
+                to={item.path} 
+                title={item.label}
+                className={`flex items-center justify-center lg:justify-start px-0 lg:px-4 py-3 rounded-2xl transition-all group ${location.pathname === item.path ? 'bg-slate-900 text-white shadow-xl' : 'text-slate-600 hover:bg-slate-50'}`}
+              >
+                <div className={`shrink-0 ${location.pathname === item.path ? 'text-blue-400' : 'text-slate-500'}`}>{item.icon}</div>
+                <span className="ml-4 font-black text-xs uppercase tracking-widest hidden lg:block whitespace-nowrap overflow-hidden text-ellipsis">{item.label}</span>
               </Link>
             ))}
           </div>
         </aside>
-        <main className="flex-1 ml-20 lg:ml-72 p-8 overflow-y-auto">{children}</main>
+        
+        {/* Main Content Area */}
+        <main className="flex-1 ml-16 lg:ml-72 p-4 lg:p-8 overflow-y-auto transition-all duration-300 w-full">{children}</main>
       </div>
     </div>
   );
@@ -140,7 +128,6 @@ const App: React.FC = () => {
     setPatients(prev => prev.map(p => p.id === id ? { ...p, priority } : p));
   };
 
-  // Función inteligente para guardar (nuevo) o actualizar (existente) paciente
   const handleSavePatient = (p: Patient) => {
     setPatients(prev => {
       const index = prev.findIndex(item => item.id === p.id);

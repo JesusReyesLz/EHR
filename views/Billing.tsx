@@ -1,15 +1,18 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { 
   CreditCard, Search, Plus, Printer, FileText, DollarSign, 
   UserCheck, Calendar, Clock, Trash2, CheckCircle2, AlertTriangle,
   Download, Receipt, LayoutList, RefreshCw, X, ShoppingCart, Store, ChevronRight,
-  PenTool
+  PenTool, ChevronLeft, Wallet
 } from 'lucide-react';
 import { Patient, PatientAccount, ChargeItem, PriceItem, ClinicalNote, PriceType } from '../types';
 import { INITIAL_PRICES } from '../constants';
 
 const Billing: React.FC<{ patients: Patient[], notes: ClinicalNote[] }> = ({ patients, notes }) => {
+  const navigate = useNavigate();
+  
   // Estado local para cuentas
   const [accounts, setAccounts] = useState<PatientAccount[]>(() => {
     const saved = localStorage.getItem('med_accounts_v1');
@@ -351,9 +354,14 @@ const Billing: React.FC<{ patients: Patient[], notes: ClinicalNote[] }> = ({ pat
   return (
     <div className="max-w-7xl mx-auto space-y-8 pb-20 animate-in fade-in">
       <div className="flex flex-col md:flex-row justify-between items-end gap-6 no-print">
-        <div>
-          <h1 className="text-4xl font-black text-slate-900 uppercase">Caja</h1>
-          <p className="text-slate-500 text-sm font-bold uppercase mt-1">Terminal de Cobro y Facturación</p>
+        <div className="flex items-center gap-4">
+          <button onClick={() => navigate(-1)} className="p-3 bg-white border border-slate-200 rounded-2xl hover:bg-slate-50 transition-all shadow-sm">
+             <ChevronLeft size={24} className="text-slate-600" />
+          </button>
+          <div>
+            <h1 className="text-4xl font-black text-slate-900 uppercase">Caja</h1>
+            <p className="text-slate-500 text-sm font-bold uppercase mt-1">Terminal de Cobro y Facturación</p>
+          </div>
         </div>
         <div className="bg-white p-2 rounded-2xl shadow-sm border border-slate-200 flex gap-2">
            <div className="px-4 py-2 bg-emerald-50 text-emerald-700 rounded-xl text-[10px] font-black uppercase flex items-center gap-2">

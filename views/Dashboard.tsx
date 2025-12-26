@@ -5,7 +5,8 @@ import {
   Search, UserPlus, Clock, Activity, ChevronRight, 
   FlaskConical, Beaker, FileText, CheckCircle2, 
   MapPin, AlertTriangle, Printer, Microscope, ClipboardList,
-  ChevronDown, MapPinned, Users, Info, X, Check, Timer, ArrowRight
+  ChevronDown, MapPinned, Users, Info, X, Check, Timer, ArrowRight,
+  ShoppingBag
 } from 'lucide-react';
 import { ModuleType, Patient, PatientStatus, PriorityLevel, AgendaStatus } from '../types';
 
@@ -84,6 +85,8 @@ const Dashboard: React.FC<DashboardProps> = ({
   const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState('');
   const isAuxiliary = module === ModuleType.AUXILIARY;
+  
+  const modules = [ModuleType.OUTPATIENT, ModuleType.EMERGENCY, ModuleType.HOSPITALIZATION, ModuleType.AUXILIARY];
 
   const filteredPatients = patients.filter(p => {
     const search = cleanStr(searchTerm);
@@ -91,13 +94,9 @@ const Dashboard: React.FC<DashboardProps> = ({
     const matchesModule = p.assignedModule === module;
     
     // LOGICA DE FILTRADO CORRECTA PARA MONITOR ACTIVO
-    // 1. Debe coincidir con el módulo actual.
-    // 2. NO debe estar Atendido/Finalizado.
-    // 3. NO debe estar solo Programado (debe haber hecho Arribo en la Agenda).
-    // 4. NO debe estar Cancelado ni ser No Show.
     const isActiveStatus = p.status !== PatientStatus.ATTENDED && 
                            p.status !== PatientStatus.READY_RESULTS &&
-                           p.status !== PatientStatus.SCHEDULED; // CRÍTICO: Excluir Programados
+                           p.status !== PatientStatus.SCHEDULED; 
 
     const isValidAgenda = p.agendaStatus !== AgendaStatus.CANCELLED && 
                           p.agendaStatus !== AgendaStatus.NO_SHOW &&
@@ -120,7 +119,31 @@ const Dashboard: React.FC<DashboardProps> = ({
     const processing = filteredPatients.filter(p => p.status === PatientStatus.PROCESSING_RESULTS);
 
     return (
-      <div className="max-w-full space-y-10 animate-in fade-in duration-500">
+      <div className="max-w-full space-y-6 animate-in fade-in duration-500">
+        
+        {/* Module Selector - Integrated within Dashboard */}
+        <div className="flex flex-wrap items-center gap-1.5 bg-slate-100 p-1.5 rounded-2xl w-full lg:w-fit overflow-x-auto no-scrollbar mb-4">
+          {modules.map(mod => (
+            <button
+              key={mod}
+              onClick={() => onModuleChange(mod)}
+              className={`px-4 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest whitespace-nowrap transition-all flex-shrink-0 ${
+                module === mod 
+                  ? 'bg-white text-blue-700 shadow-sm' 
+                  : 'text-slate-500 hover:text-slate-900 hover:bg-slate-200/50'
+              }`}
+            >
+              {mod}
+            </button>
+          ))}
+          <button
+            onClick={() => navigate('/billing')}
+            className="px-4 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest whitespace-nowrap transition-all flex-shrink-0 text-slate-500 hover:text-slate-900 hover:bg-slate-200/50 flex items-center gap-2"
+          >
+            <ShoppingBag size={14} className="mb-0.5" /> Caja / Tickets
+          </button>
+        </div>
+
         <div className="flex justify-between items-end">
           <div className="space-y-2">
             <p className="text-[10px] font-black text-indigo-600 uppercase tracking-[0.3em]">Servicios de Diagnóstico</p>
@@ -207,7 +230,31 @@ const Dashboard: React.FC<DashboardProps> = ({
   }
 
   return (
-    <div className="max-w-full space-y-10 animate-in fade-in duration-500">
+    <div className="max-w-full space-y-6 animate-in fade-in duration-500">
+      
+      {/* Module Selector - Integrated within Dashboard */}
+      <div className="flex flex-wrap items-center gap-1.5 bg-slate-100 p-1.5 rounded-2xl w-full lg:w-fit overflow-x-auto no-scrollbar mb-4">
+        {modules.map(mod => (
+          <button
+            key={mod}
+            onClick={() => onModuleChange(mod)}
+            className={`px-4 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest whitespace-nowrap transition-all flex-shrink-0 ${
+              module === mod 
+                ? 'bg-white text-blue-700 shadow-sm' 
+                : 'text-slate-500 hover:text-slate-900 hover:bg-slate-200/50'
+            }`}
+          >
+            {mod}
+          </button>
+        ))}
+        <button
+            onClick={() => navigate('/billing')}
+            className="px-4 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest whitespace-nowrap transition-all flex-shrink-0 text-slate-500 hover:text-slate-900 hover:bg-slate-200/50 flex items-center gap-2"
+        >
+            <ShoppingBag size={14} className="mb-0.5" /> Caja / Tickets
+        </button>
+      </div>
+
       <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-8">
         <div className="space-y-2">
           <div className="flex items-center space-x-2 text-slate-400 uppercase text-[10px] font-black tracking-[0.3em]">
@@ -256,7 +303,6 @@ const Dashboard: React.FC<DashboardProps> = ({
               </thead>
               <tbody className="divide-y divide-slate-100">
                  {filteredPatients.map(p => {
-                    // Lógica solicitada: si tiene consultorio asignado dice "En Consulta", si no "En sala de espera"
                     const displayStatus = p.bedNumber ? "En Consulta" : "En sala de espera";
                     
                     return (
