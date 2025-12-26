@@ -265,12 +265,29 @@ const Inventory: React.FC = () => {
       }).filter(m => m.batches.length > 0));
   };
 
+  // FUNCION CORREGIDA: Eliminación Total con Registro en Kardex
   const handleDeleteMed = (med: MedicationStock) => {
       const total = getTotalStock(med);
-      if (total > 0) {
-          if(!window.confirm(`Hay ${total} unidades en total. ¿Eliminar todo el registro y sus lotes?`)) return;
-          addLog(med.id, med.name, 'TODOS', 'OUT', total, 'Baja Total de Medicamento');
+      
+      // Siempre pedir confirmación, incluso si es 0
+      if (!window.confirm(`ATENCIÓN: ¿Está seguro de eliminar el insumo "${med.name}" del catálogo?\n\n• Se darán de baja ${total} unidades del inventario.\n• Se registrará la eliminación en el Kardex.\n• Esta acción no se puede deshacer.`)) {
+          return;
       }
+
+      // Crear log de salida definitiva
+      const deleteLog: StockMovement = {
+          id: generateId('MOV-DEL'),
+          medicationId: med.id,
+          medicationName: med.name,
+          batch: 'BAJA-CATALOGO',
+          type: 'OUT',
+          quantity: total,
+          reason: 'Eliminación definitiva de registro / Depuración',
+          date: new Date().toLocaleString('es-MX'),
+          responsible: 'Administrador Farmacia'
+      };
+
+      setMovements(prev => [deleteLog, ...prev]);
       setStock(prev => prev.filter(m => m.id !== med.id));
   };
 
@@ -612,7 +629,13 @@ const Inventory: React.FC = () => {
                                     <div className="flex justify-end gap-2" onClick={e => e.stopPropagation()}>
                                        <button onClick={() => { setSelectedMed(med); setShowBatchModal(true); }} className="p-2 bg-white border border-slate-200 rounded-lg text-slate-500 hover:text-blue-600 hover:border-blue-300 transition-all" title="Agregar Lote"><Layers size={16}/></button>
                                        <button onClick={() => { setSelectedMed(med); setMedForm(med); setIsEditingMed(true); }} className="p-2 bg-white border border-slate-200 rounded-lg text-slate-500 hover:text-amber-600 hover:border-amber-300 transition-all" title="Editar Maestro"><Edit size={16}/></button>
-                                       <button onClick={() => handleDeleteMed(med)} className="p-2 bg-white border border-slate-200 rounded-lg text-slate-500 hover:text-rose-600 hover:border-rose-300 transition-all" title="Borrar Fármaco"><Trash2 size={16}/></button>
+                                       <button 
+                                          onClick={(e) => { e.stopPropagation(); handleDeleteMed(med); }} 
+                                          className="p-2 bg-white border border-slate-200 rounded-lg text-slate-500 hover:text-rose-600 hover:border-rose-300 transition-all" 
+                                          title="Borrar Fármaco"
+                                       >
+                                          <Trash2 size={16}/>
+                                       </button>
                                     </div>
                                  </td>
                               </tr>
@@ -834,7 +857,7 @@ const Inventory: React.FC = () => {
                         )}
                      </div>
 
-                     {/* CARRITO DE SESIÓN */}
+                     {/* CARRITO DE SESIÓN (NUEVO) */}
                      {sessionCart.length > 0 && (
                         <div className="bg-emerald-50 border border-emerald-200 rounded-[2.5rem] p-6 shadow-sm space-y-4 animate-in slide-in-from-bottom-4">
                            <h4 className="text-[10px] font-black text-emerald-800 uppercase tracking-widest flex items-center gap-2 border-b border-emerald-200 pb-2">
