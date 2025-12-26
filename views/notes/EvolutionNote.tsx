@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { 
@@ -19,7 +18,21 @@ const EvolutionNote: React.FC<{ patients: Patient[], notes: ClinicalNote[], onSa
   // Cargar inventario real desde LocalStorage O usar INITIAL_STOCK por defecto
   const inventory: MedicationStock[] = useMemo(() => {
     const saved = localStorage.getItem('med_inventory_v6');
-    return saved ? JSON.parse(saved) : INITIAL_STOCK;
+    let data = saved ? JSON.parse(saved) : INITIAL_STOCK;
+    
+    // Migración simple para asegurar compatibilidad si los datos vienen sin 'batches'
+    if (data.length > 0 && !data[0].batches) {
+        data = data.map((item: any) => ({
+            ...item,
+            batches: [{
+                id: `BATCH-${Date.now()}-${Math.random()}`,
+                batchNumber: item.batch || 'S/L',
+                expiryDate: item.expiryDate || '',
+                currentStock: item.currentStock || 0
+            }]
+        }));
+    }
+    return data;
   }, []);
 
   const [form, setForm] = useState({
@@ -74,7 +87,7 @@ const EvolutionNote: React.FC<{ patients: Patient[], notes: ClinicalNote[], onSa
         i.genericName.toLowerCase().includes(term)
       ).map(i => ({ 
         ...i, 
-        inStock: i.currentStock 
+        inStock: (i.batches || []).reduce((acc, b) => acc + b.currentStock, 0)
       }));
 
       // 2. Buscar en VADEMECUM (Catálogo global) lo que NO esté en inventario

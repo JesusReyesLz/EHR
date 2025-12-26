@@ -50,6 +50,15 @@ export enum MedicationCategory {
   CONTROLLED = 'Controlado'
 }
 
+export enum SupplyType {
+  MEDICATION = 'Medicamento',
+  SOLUTION = 'Solución / Suero',
+  HEALING_MATERIAL = 'Material de Curación',
+  SURGICAL = 'Instrumental / Quirúrgico',
+  EQUIPMENT = 'Equipo Médico',
+  OTHER = 'Diverso'
+}
+
 export interface DoctorInfo {
   name: string;
   cedula: string;
@@ -190,20 +199,26 @@ export interface ConsultationRecord {
   module: ModuleType;
 }
 
+export interface MedicationBatch {
+  id: string;
+  batchNumber: string;
+  expiryDate: string;
+  currentStock: number;
+}
+
 export interface MedicationStock {
   id: string;
   name: string;
   genericName: string;
   presentation: string;
   concentration: string;
-  batch: string;
-  expiryDate: string;
-  currentStock: number;
+  batches: MedicationBatch[]; 
   minStock: number;
   unit: string;
   supplier: string;
   registroCofepris: string;
   category: MedicationCategory;
+  supplyType: SupplyType; // Nuevo campo
 }
 
 export interface StockMovement {
@@ -211,7 +226,7 @@ export interface StockMovement {
   medicationId: string;
   medicationName: string;
   batch: string;
-  type: 'IN' | 'OUT';
+  type: 'IN' | 'OUT' | 'UPDATE';
   quantity: number;
   date: string;
   reason: string;

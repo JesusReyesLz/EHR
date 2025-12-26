@@ -23,13 +23,22 @@ const Prescription: React.FC<{ patients: Patient[], doctorInfo: DoctorInfo, onSa
   const [isSaved, setIsSaved] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   
-  // Modificado: Ahora las sugerencias incluyen el dato de stock
-  const [suggestions, setSuggestions] = useState<(MedicationStock & { inStock: number })[]>([]);
+  // Modificado: Ahora las sugerencias incluyen el dato de stock total
+  const [suggestions, setSuggestions] = useState<(MedicationStock & { totalStock: number })[]>([]);
   
-  // CORRECCIÓN: Cargar inventario real desde LocalStorage O usar INITIAL_STOCK por defecto
+  // Cargar inventario real desde LocalStorage O usar INITIAL_STOCK por defecto
   const inventory: MedicationStock[] = useMemo(() => {
     const saved = localStorage.getItem('med_inventory_v6');
-    return saved ? JSON.parse(saved) : INITIAL_STOCK;
+    let data = saved ? JSON.parse(saved) : INITIAL_STOCK;
+    
+    // Asegurar estructura de lotes si es legacy
+    if (data.length > 0 && !data[0].batches) {
+        data = data.map((item: any) => ({
+            ...item,
+            batches: [{ id: 'LEGACY', batchNumber: item.batch || 'N/A', expiryDate: item.expiryDate, currentStock: item.currentStock || 0 }]
+        }));
+    }
+    return data;
   }, []);
   
   const dataFromNote = location.state as { diagnosis?: string, meds?: MedicationPrescription[], generalPlan?: string, cieCode?: string } | null;
@@ -54,40 +63,33 @@ const Prescription: React.FC<{ patients: Patient[], doctorInfo: DoctorInfo, onSa
     if (val.length > 1) {
       const term = val.toLowerCase();
 
-      // 1. Buscar primero en el INVENTARIO REAL (Prioridad)
+      // 1. Buscar en INVENTARIO REAL (Suma de lotes)
       const stockMatches = inventory.filter(i => 
         i.name.toLowerCase().includes(term) || 
         i.genericName.toLowerCase().includes(term)
       ).map(i => ({ 
         ...i, 
-        inStock: i.currentStock // Usar stock real
+        totalStock: i.batches ? i.batches.reduce((acc, b) => acc + b.currentStock, 0) : 0
       }));
 
       // 2. Buscar en VADEMECUM (Catálogo global) lo que NO esté en inventario
       const catalogMatches = VADEMECUM_DB.filter(v => 
         (v.name.toLowerCase().includes(term) || v.genericName.toLowerCase().includes(term)) &&
-        !stockMatches.some(s => s.name === v.name) // Evitar duplicados si ya salió del stock
+        !stockMatches.some(s => s.name === v.name) 
       ).map(v => ({ 
         ...v, 
-        inStock: 0 // No está en farmacia
+        batches: [],
+        totalStock: 0 
       }));
 
-      // Combinar resultados
       setSuggestions([...stockMatches, ...catalogMatches]);
     } else {
       setSuggestions([]);
     }
   };
 
-  const selectMedFromDB = (med: MedicationStock & { inStock: number }) => {
-    // Validación de Stock (Advertencia no bloqueante)
-    if (med.inStock <= 0) {
-      const confirmAdd = window.confirm(
-        `⚠️ STOCK AGOTADO: El medicamento ${med.name} no tiene existencias en Farmacia interna.\n\n¿Desea agregarlo a la receta para compra externa?`
-      );
-      if (!confirmAdd) return;
-    }
-
+  const selectMedFromDB = (med: MedicationStock & { totalStock: number }) => {
+    // Ya NO bloquea si stock es 0, solo es informativo en la UI de búsqueda
     const newMed: MedicationPrescription = {
       id: `MED-${Date.now()}`,
       name: med.name,
@@ -97,8 +99,7 @@ const Prescription: React.FC<{ patients: Patient[], doctorInfo: DoctorInfo, onSa
       frequency: 'Cada 8 horas',
       duration: '7 días',
       route: 'Oral',
-      // Nota automática si no hay stock
-      instructions: med.inStock === 0 ? '' : ''
+      instructions: ''
     };
     setMedications([...medications, newMed]);
     setSearchTerm('');
@@ -149,9 +150,8 @@ const Prescription: React.FC<{ patients: Patient[], doctorInfo: DoctorInfo, onSa
 
     onSaveNote(newNote);
     setIsSaved(true);
-    setIsPreview(true); // Abrir previsualización automáticamente
+    setIsPreview(true);
     
-    // Notificación táctica
     const toast = document.createElement('div');
     toast.className = 'fixed bottom-10 left-1/2 -translate-x-1/2 bg-emerald-600 text-white px-10 py-5 rounded-3xl font-black text-xs uppercase tracking-widest shadow-2xl z-[300] animate-in slide-in-from-bottom-4';
     toast.innerHTML = 'Receta registrada en el Historial del Paciente';
@@ -189,15 +189,15 @@ const Prescription: React.FC<{ patients: Patient[], doctorInfo: DoctorInfo, onSa
                      onChange={e => handleSearchMed(e.target.value)} 
                    />
                    {suggestions.length > 0 && (
-                     <div className="absolute top-full left-0 w-80 mt-2 bg-white border border-slate-200 rounded-2xl shadow-2xl z-[100] overflow-hidden animate-in zoom-in-95 max-h-80 overflow-y-auto custom-scrollbar">
+                     <div className="absolute top-full left-0 w-96 mt-2 bg-white border border-slate-200 rounded-2xl shadow-2xl z-[100] overflow-hidden animate-in zoom-in-95 max-h-80 overflow-y-auto custom-scrollbar">
                         {suggestions.map(s => (
                           <button key={s.id} onClick={() => selectMedFromDB(s)} className="w-full text-left p-4 hover:bg-slate-50 border-b border-slate-50 last:border-0 transition-colors flex justify-between items-center group">
                             <div>
                                <p className="text-[10px] font-black uppercase text-slate-900">{s.name}</p>
                                <p className="text-[8px] text-slate-400 font-bold uppercase">{s.genericName}</p>
                             </div>
-                            <div className={`px-2 py-1 rounded-lg text-[8px] font-black uppercase border ${s.inStock > 0 ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-rose-50 text-rose-600 border-rose-100'}`}>
-                               {s.inStock > 0 ? `Stock: ${s.inStock}` : 'Agotado'}
+                            <div className={`px-2 py-1 rounded-lg text-[8px] font-black uppercase border ${s.totalStock > 0 ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-rose-50 text-rose-600 border-rose-100'}`}>
+                               {s.totalStock > 0 ? `Stock: ${s.totalStock}` : 'Agotado (Ext.)'}
                             </div>
                           </button>
                         ))}
@@ -301,6 +301,7 @@ const Prescription: React.FC<{ patients: Patient[], doctorInfo: DoctorInfo, onSa
         </div>
       ) : (
         <div className="bg-white shadow-2xl rounded-[3.5rem] overflow-hidden flex flex-col print:shadow-none print:rounded-none">
+           {/* El componente de impresión PrescriptionDoc se reutiliza aquí */}
            <PrescriptionDoc patient={patient} vitals={vitals} meds={medications} data={prescriptionData} doctor={doctorInfo} label="ORIGINAL - EXPEDIENTE" />
            <div className="h-12 bg-slate-50 flex items-center justify-center no-print border-y border-slate-100 relative">
               <div className="w-full border-t-2 border-dashed border-slate-300 mx-10"></div>
@@ -366,7 +367,6 @@ const PrescriptionDoc = ({ patient, vitals, meds, data, doctor, label }: any) =>
               </div>
            </div>
 
-           {/* Diagnóstico Section Added */}
            <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
               <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">Diagnóstico Médico</p>
               <p className="text-[10px] font-black text-slate-900 uppercase leading-snug">

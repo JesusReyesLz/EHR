@@ -1,5 +1,5 @@
 
-import { Patient, PatientStatus, ModuleType, MedicationStock, MedicationCategory, PriorityLevel, AgendaStatus } from './types';
+import { Patient, PatientStatus, ModuleType, MedicationStock, MedicationCategory, PriorityLevel, AgendaStatus, SupplyType } from './types';
 
 // Helper local para asegurar consistencia en fechas de demo
 const getLocalToday = () => {
@@ -89,16 +89,14 @@ export const IMAGING_STUDIES = [
 export const LAB_CATALOG = LAB_STUDIES.map(s => ({ name: s, preparation: 'Ayuno requerido.', indications: 'Muestra venosa.' }));
 export const IMAGING_CATALOG = IMAGING_STUDIES.map(s => ({ name: s, preparation: 'Consultar indicaciones.', indications: 'Gabinete.' }));
 
-export const VADEMECUM_DB: MedicationStock[] = [
+export const VADEMECUM_DB: any[] = [
   {
     id: 'DB-001',
     name: 'TEMPRA (PARACETAMOL)',
     genericName: 'PARACETAMOL',
     presentation: 'Tabletas',
     concentration: '500mg',
-    batch: 'N/A',
-    expiryDate: '2030-01-01',
-    currentStock: 999,
+    batches: [],
     minStock: 0,
     unit: 'Tabletas',
     supplier: 'Genérico',
@@ -114,14 +112,20 @@ export const INITIAL_STOCK: MedicationStock[] = [
     genericName: 'PARACETAMOL',
     presentation: 'Tabletas',
     concentration: '500mg',
-    batch: '23K098',
-    expiryDate: '2025-10-25',
-    currentStock: 45,
+    batches: [
+      {
+        id: 'BATCH-001',
+        batchNumber: '23K098',
+        expiryDate: '2025-10-25',
+        currentStock: 45
+      }
+    ],
     minStock: 10,
     unit: 'Cajas',
     supplier: 'Genérico Pharma',
     registroCofepris: '123M2015 SSA',
-    category: MedicationCategory.GENERAL
+    category: MedicationCategory.GENERAL,
+    supplyType: SupplyType.MEDICATION
   }
 ];
 
