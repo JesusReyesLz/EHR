@@ -1,5 +1,5 @@
 
-import { Patient, PatientStatus, ModuleType, MedicationStock, MedicationCategory, PriorityLevel, AgendaStatus, SupplyType } from './types';
+import { Patient, PatientStatus, ModuleType, MedicationStock, MedicationCategory, PriorityLevel, AgendaStatus, SupplyType, PriceItem, PriceType } from './types';
 
 // Helper local para asegurar consistencia en fechas de demo
 const getLocalToday = () => {
@@ -121,12 +121,23 @@ export const INITIAL_STOCK: MedicationStock[] = [
       }
     ],
     minStock: 10,
+    idealStock: 100, // Stock Ideal
     unit: 'Cajas',
     supplier: 'Genérico Pharma',
     registroCofepris: '123M2015 SSA',
     category: MedicationCategory.GENERAL,
     supplyType: SupplyType.MEDICATION
   }
+];
+
+// Datos iniciales para el Catálogo de Precios
+export const INITIAL_PRICES: PriceItem[] = [
+  { id: 'P-001', code: 'CON-GEN', name: 'Consulta Médica General', type: PriceType.SERVICE, category: 'Honorarios', price: 500, taxPercent: 16 },
+  { id: 'P-002', code: 'CON-ESP', name: 'Consulta Especialidad', type: PriceType.SERVICE, category: 'Honorarios', price: 900, taxPercent: 16 },
+  { id: 'P-003', code: 'URG-BAS', name: 'Atención Urgencias Básica', type: PriceType.SERVICE, category: 'Urgencias', price: 800, taxPercent: 16 },
+  { id: 'P-004', code: 'TEMPRA', name: 'Tempra (Paracetamol) 500mg', type: PriceType.PRODUCT, category: 'Farmacia', price: 120, taxPercent: 0, linkedInventoryId: 'S-001' },
+  { id: 'P-005', code: 'CURACION', name: 'Kit de Curación Básica', type: PriceType.PRODUCT, category: 'Material', price: 250, taxPercent: 16 },
+  { id: 'P-006', code: 'LAB-BH', name: 'Biometría Hemática', type: PriceType.SERVICE, category: 'Laboratorio', price: 350, taxPercent: 16 },
 ];
 
 export const NOTE_CATEGORIES = [

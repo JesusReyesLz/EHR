@@ -1,10 +1,10 @@
 
 import React, { useState, useEffect } from 'react';
-import { HashRouter as Router, Routes, Route, Navigate, Link, useLocation } from 'react-router-dom';
+import { HashRouter as Router, Routes, Route, Navigate, Link, useLocation, useNavigate } from 'react-router-dom';
 import { 
   Users, Calendar, Settings, ShieldCheck, LogOut, ClipboardList,
   FileSpreadsheet, Package, Monitor as MonitorIcon, History, FileText,
-  Activity, FlaskConical, HeartPulse, Bed
+  Activity, FlaskConical, HeartPulse, Bed, ShoppingBag, Tag
 } from 'lucide-react';
 import Dashboard from './views/Dashboard';
 import PatientProfile from './views/PatientProfile';
@@ -38,17 +38,22 @@ import StomatologyExpedient from './views/StomatologyExpedient';
 import EpidemiologyStudy from './views/EpidemiologyStudy';
 import TelemedicineConsent from './views/TelemedicineConsent';
 import HospitalMonitor from './views/HospitalMonitor';
-import { ModuleType, Patient, ClinicalNote, PatientStatus, PriorityLevel, DoctorInfo } from './types';
+import Billing from './views/Billing';
+import PriceCatalog from './views/PriceCatalog';
+import { ModuleType, Patient, ClinicalNote, PatientStatus, PriorityLevel, DoctorInfo, AgendaStatus } from './types';
 import { INITIAL_PATIENTS } from './constants';
 
 function Layout({ children, currentModule, onModuleChange, doctorInfo }: any) {
   const location = useLocation();
+  const navigate = useNavigate();
   const menuItems = [
     { icon: <Users className="w-5 h-5" />, label: 'Monitor Activo', path: '/' },
     { icon: <MonitorIcon className="w-5 h-5" />, label: 'Centro de Mando', path: '/monitor' },
+    { icon: <ShoppingBag className="w-5 h-5" />, label: 'Caja', path: '/billing' },
     { icon: <History className="w-5 h-5" />, label: 'Archivo Histórico', path: '/history-registry' },
     { icon: <Calendar className="w-5 h-5" />, label: 'Agenda Operativa', path: '/agenda' },
     { icon: <Package className="w-5 h-5" />, label: 'Farmacia / Stock', path: '/inventory' },
+    { icon: <Tag className="w-5 h-5" />, label: 'Catálogo Precios', path: '/prices' },
     { icon: <FileSpreadsheet className="w-5 h-5" />, label: 'Hoja Diaria (SUIVE)', path: '/daily-report' },
     { icon: <ClipboardList className="w-5 h-5" />, label: 'Bitácoras', path: '/logs' },
     { icon: <Settings className="w-5 h-5" />, label: 'Configuración', path: '/settings' },
@@ -69,12 +74,21 @@ function Layout({ children, currentModule, onModuleChange, doctorInfo }: any) {
               {modules.map((mod) => (
                 <button
                   key={mod}
-                  onClick={() => onModuleChange(mod)}
-                  className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${currentModule === mod ? 'bg-white text-blue-700 shadow-sm border border-slate-200' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/50'}`}
+                  onClick={() => {
+                    onModuleChange(mod);
+                    if (location.pathname !== '/') navigate('/');
+                  }}
+                  className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${currentModule === mod && location.pathname === '/' ? 'bg-white text-blue-700 shadow-sm border border-slate-200' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/50'}`}
                 >
                   {mod}
                 </button>
               ))}
+              <button
+                onClick={() => navigate('/billing')}
+                className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${location.pathname === '/billing' ? 'bg-white text-blue-700 shadow-sm border border-slate-200' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/50'}`}
+              >
+                Caja
+              </button>
             </div>
           </div>
           <div className="flex items-center gap-6">
@@ -87,8 +101,8 @@ function Layout({ children, currentModule, onModuleChange, doctorInfo }: any) {
         </div>
       </nav>
       <div className="flex flex-1 overflow-hidden">
-        <aside className="w-20 lg:w-72 bg-white border-r border-slate-200 fixed left-0 top-16 h-full z-50 no-print">
-          <div className="py-8 px-4 space-y-2">
+        <aside className="w-20 lg:w-72 bg-white border-r border-slate-200 fixed left-0 top-16 h-full z-50 no-print flex flex-col">
+          <div className="flex-1 py-8 px-4 space-y-2 overflow-y-auto custom-scrollbar">
             {menuItems.map((item) => (
               <Link key={item.label} to={item.path} className={`flex items-center px-4 py-3.5 rounded-2xl transition-all ${location.pathname === item.path ? 'bg-slate-900 text-white shadow-xl' : 'text-slate-600 hover:bg-slate-50'}`}>
                 <div className={location.pathname === item.path ? 'text-blue-400' : 'text-slate-500'}>{item.icon}</div>
@@ -116,7 +130,7 @@ const App: React.FC = () => {
 
   const updatePatient = (updated: Patient) => setPatients(prev => prev.map(p => p.id === updated.id ? updated : p));
   
-  const updatePatientStatus = (id: string, status: PatientStatus, agendaStatus?: any) => {
+  const updatePatientStatus = (id: string, status: PatientStatus, agendaStatus?: AgendaStatus) => {
     setPatients(prev => prev.map(p => p.id === id ? { ...p, status, agendaStatus: agendaStatus || p.agendaStatus } : p));
   };
 
@@ -129,12 +143,10 @@ const App: React.FC = () => {
     setPatients(prev => {
       const index = prev.findIndex(item => item.id === p.id);
       if (index >= 0) {
-        // Actualizar existente
         const newPatients = [...prev];
         newPatients[index] = p;
         return newPatients;
       }
-      // Agregar nuevo
       return [...prev, p];
     });
   };
@@ -146,6 +158,8 @@ const App: React.FC = () => {
       <Layout currentModule={currentModule} onModuleChange={setCurrentModule} doctorInfo={doctorInfo}>
         <Routes>
           <Route path="/" element={<Dashboard module={currentModule} patients={patients} onUpdateStatus={updatePatientStatus} onUpdatePriority={updatePatientPriority} onModuleChange={setCurrentModule} onUpdatePatient={updatePatient} doctorInfo={doctorInfo} />} />
+          <Route path="/billing" element={<Billing patients={patients} notes={notes} />} />
+          <Route path="/prices" element={<PriceCatalog />} />
           <Route path="/patient/:id" element={<PatientProfile patients={patients} notes={notes} onUpdatePatient={updatePatient} onSaveNote={addNote} doctorInfo={doctorInfo} />} />
           <Route path="/patient/:id/nursing-sheet" element={<NursingSheet patients={patients} onSaveNote={addNote} onUpdatePatient={updatePatient} />} />
           <Route path="/patient/:id/auxiliary-report" element={<AuxiliaryReport patients={patients} onSaveNote={addNote} onUpdatePatient={updatePatient} />} />

@@ -6,7 +6,9 @@ export enum ModuleType {
   AUXILIARY = 'Auxiliares',
   ADMIN = 'Gestión y Normatividad',
   INVENTORY = 'Inventario Farmacéutico',
-  MONITOR = 'Monitor Hospitalario'
+  MONITOR = 'Monitor Hospitalario',
+  BILLING = 'Caja y Facturación', // NUEVO
+  PRICING = 'Catálogo de Precios' // NUEVO
 }
 
 export enum PatientStatus {
@@ -58,6 +60,55 @@ export enum SupplyType {
   EQUIPMENT = 'Equipo Médico',
   OTHER = 'Diverso'
 }
+
+// --- NUEVOS TIPOS PARA FACTURACIÓN Y PRECIOS ---
+
+export enum PriceType {
+  SERVICE = 'Servicio / Honorario',
+  PRODUCT = 'Producto / Insumo',
+  PACKAGE = 'Paquete'
+}
+
+export interface PriceItem {
+  id: string;
+  code: string; // SKU o Código Interno
+  name: string;
+  type: PriceType;
+  category: string; // Consulta, Farmacia, Lab, etc.
+  price: number;
+  taxPercent: number; // IVA
+  linkedInventoryId?: string; // Para vincular con el stock físico
+}
+
+export interface ChargeItem {
+  id: string;
+  date: string;
+  concept: string;
+  quantity: number;
+  unitPrice: number;
+  total: number;
+  type: 'Farmacia' | 'Honorarios' | 'Hospitalizacion' | 'Estudios' | 'Otro';
+  status: 'Pendiente' | 'Pagado' | 'Cancelado';
+  sourceId?: string; // ID de la nota, receta o venta de farmacia que generó el cargo
+}
+
+export interface PatientAccount {
+  patientId: string;
+  charges: ChargeItem[];
+  payments: Payment[];
+  balance: number;
+  status: 'Abierta' | 'Cerrada';
+}
+
+export interface Payment {
+  id: string;
+  date: string;
+  amount: number;
+  method: 'Efectivo' | 'Tarjeta' | 'Transferencia' | 'Seguro';
+  reference?: string;
+}
+
+// --- FIN NUEVOS TIPOS ---
 
 export interface DoctorInfo {
   name: string;
@@ -214,11 +265,12 @@ export interface MedicationStock {
   concentration: string;
   batches: MedicationBatch[]; 
   minStock: number;
+  idealStock?: number; // NUEVO: Para análisis de reposición
   unit: string;
   supplier: string;
   registroCofepris: string;
   category: MedicationCategory;
-  supplyType: SupplyType; // Nuevo campo
+  supplyType: SupplyType; 
 }
 
 export interface StockMovement {

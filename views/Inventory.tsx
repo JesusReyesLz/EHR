@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo, useEffect } from 'react';
 import { 
   Package, Search, Plus, AlertTriangle, Calendar, ClipboardList, TrendingUp, TrendingDown, 
@@ -6,10 +5,11 @@ import {
   Database, ArrowUpRight, ArrowDownLeft, Printer, FileText, QrCode, User, Pill, ShoppingBag, 
   Clock, ChevronLeft, Stethoscope, Archive, ExternalLink, RefreshCw, UserMinus, ShoppingCart, 
   Trash2, Edit, Copy, AlertOctagon, ChevronDown, ChevronRight, Layers,
-  Droplet, Scissors, Monitor, Box, CalendarOff, Maximize, FileSpreadsheet
+  Droplet, Scissors, Monitor, Box, CalendarOff, Maximize, FileSpreadsheet,
+  AlertCircle, Receipt
 } from 'lucide-react';
-import { MedicationStock, StockMovement, MedicationCategory, ClinicalNote, Patient, MedicationBatch, SupplyType } from '../types';
-import { INITIAL_STOCK } from '../constants';
+import { MedicationStock, StockMovement, MedicationCategory, ClinicalNote, Patient, MedicationBatch, SupplyType, PriceItem, PatientAccount } from '../types';
+import { INITIAL_STOCK, INITIAL_PRICES } from '../constants';
 
 // Interfaces locales para manejo de UI
 interface CartItem {
@@ -19,14 +19,21 @@ interface CartItem {
   batch: string;
   quantity: number;
   isExtra: boolean;
+  price?: number; // Precio unitario vinculado
 }
 
 // Helper para generar IDs únicos
 const generateId = (prefix: string) => `${prefix}-${Date.now()}-${Math.floor(Math.random() * 100000)}`;
 
 const Inventory: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'stock' | 'movements' | 'dispense'>('stock');
+  const [activeTab, setActiveTab] = useState<'stock' | 'movements' | 'dispense' | 'replenish'>('stock');
   
+  // Cargar Precios y Cuentas para vinculación
+  const [prices] = useState<PriceItem[]>(() => {
+    const saved = localStorage.getItem('med_price_catalog_v1');
+    return saved ? JSON.parse(saved) : INITIAL_PRICES;
+  });
+
   // Estado de inventario con migración de datos legacy
   const [stock, setStock] = useState<MedicationStock[]>(() => {
     const saved = localStorage.getItem('med_inventory_v6');
@@ -69,6 +76,7 @@ const Inventory: React.FC = () => {
   const [showBatchModal, setShowBatchModal] = useState(false);
   const [showMovementModal, setShowMovementModal] = useState(false);
   const [isEditingMed, setIsEditingMed] = useState(false);
+  const [showTicketModal, setShowTicketModal] = useState(false); // Nuevo modal ticket
 
   // Estados para manejo de "No Caduca"
   const [noExpiry, setNoExpiry] = useState(false);
@@ -83,10 +91,10 @@ const Inventory: React.FC = () => {
   const [movementReason, setMovementReason] = useState('');
   const [outReasonCategory, setOutReasonCategory] = useState('Dispensación / Venta'); 
 
-  // Formulario Nuevo Medicamento / Edición
+  // Formulario Nuevo Medicamento / Edición (AHORA CON IDEAL STOCK)
   const [medForm, setMedForm] = useState<Partial<MedicationStock>>({
     name: '', genericName: '', presentation: 'Unidad', concentration: '',
-    minStock: 10, unit: 'Pieza', supplier: '', registroCofepris: '', 
+    minStock: 10, idealStock: 50, unit: 'Pieza', supplier: '', registroCofepris: '', 
     category: MedicationCategory.GENERAL, supplyType: SupplyType.MEDICATION
   });
   
@@ -171,6 +179,12 @@ const Inventory: React.FC = () => {
     }
   };
 
+  // Helper para obtener precio del catálogo vinculado
+  const getItemPrice = (inventoryId: string): number => {
+    const priceItem = prices.find(p => p.linkedInventoryId === inventoryId);
+    return priceItem ? priceItem.price * (1 + priceItem.taxPercent / 100) : 0;
+  };
+
   // --- ACTIONS ---
 
   const handleCreateMed = () => {
@@ -196,6 +210,7 @@ const Inventory: React.FC = () => {
         category: medForm.category || MedicationCategory.GENERAL,
         supplyType: medForm.supplyType || SupplyType.MEDICATION,
         minStock: Number(medForm.minStock) || 10,
+        idealStock: Number(medForm.idealStock) || 50, // NUEVO
         batches: [{
             id: newBatchId,
             batchNumber: batchForm.batchNumber!.toUpperCase(),
@@ -224,7 +239,8 @@ const Inventory: React.FC = () => {
           concentration: medForm.concentration || '',
           category: medForm.category || MedicationCategory.GENERAL,
           supplyType: medForm.supplyType || SupplyType.MEDICATION,
-          minStock: Number(medForm.minStock) || 10
+          minStock: Number(medForm.minStock) || 10,
+          idealStock: Number(medForm.idealStock) || 50 // NUEVO
       } : m));
 
       addLog(selectedMed.id, selectedMed.name, 'N/A', 'UPDATE', 0, `Edición Maestro: ${movementReason}`);
@@ -336,7 +352,7 @@ const Inventory: React.FC = () => {
   };
 
   const resetForms = () => {
-      setMedForm({ name: '', genericName: '', presentation: 'Unidad', concentration: '', minStock: 10, category: MedicationCategory.GENERAL, supplyType: SupplyType.MEDICATION });
+      setMedForm({ name: '', genericName: '', presentation: 'Unidad', concentration: '', minStock: 10, idealStock: 50, category: MedicationCategory.GENERAL, supplyType: SupplyType.MEDICATION });
       setBatchForm({ batchNumber: '', expiryDate: '', currentStock: 0 });
       setMovementQty(0);
       setMovementReason('');
@@ -486,14 +502,15 @@ const Inventory: React.FC = () => {
                 responsible: 'Farmacia'
             });
             
-            // Preparar item para Carrito
+            // Preparar item para Carrito - AHORA CON PRECIO
             newCartItems.push({ 
                 id: generateId('CART'), 
                 medId: med.id, 
                 name: med.name, 
                 batch: batch.batchNumber, 
                 quantity: take, 
-                isExtra 
+                isExtra,
+                price: getItemPrice(med.id) // Vinculación de precio
             });
 
             return { ...batch, currentStock: batch.currentStock - take };
@@ -517,20 +534,56 @@ const Inventory: React.FC = () => {
      return sessionCart.filter(item => item.medId === medId).reduce((acc, curr) => acc + curr.quantity, 0);
   };
 
-  // NUEVO: Finalización correcta de transacción
+  // NUEVO: Finalización correcta de transacción con TICKET y CUENTA
   const handleFinalizeTransaction = () => {
     if (sessionCart.length === 0) {
-        // Si no hay nada en carrito, solo cerramos
         setFoundPrescription(null);
         setIsDirectSaleMode(false);
         return;
     }
     
-    // Si hay items, mostramos confirmación de éxito
-    const totalItems = sessionCart.reduce((acc, i) => acc + i.quantity, 0);
-    alert(`TRANSACCIÓN REGISTRADA CORRECTAMENTE\n\nTotal de Artículos: ${totalItems}\nPaciente: ${directSalePatientName || 'Venta Mostrador'}\n\nLos movimientos se han guardado en el Kardex.`);
-    
-    // Limpieza de estado
+    // Si hay items, mostramos ticket
+    setShowTicketModal(true);
+  };
+
+  // Función real de cierre tras ver ticket
+  const confirmCloseTransaction = () => {
+    // Si hay paciente identificado, agregar a su cuenta
+    if (foundPrescription?.patientId) {
+        const patientAccount = JSON.parse(localStorage.getItem('med_accounts_v1') || '[]') as PatientAccount[];
+        let acc = patientAccount.find(a => a.patientId === foundPrescription.patientId && a.status === 'Abierta');
+        
+        // Crear items de cargo para la cuenta
+        const newCharges = sessionCart.map(item => ({
+            id: `CHG-${Date.now()}-${Math.random()}`,
+            date: new Date().toLocaleString('es-MX'),
+            concept: `${item.name} (${item.quantity})`,
+            quantity: item.quantity,
+            unitPrice: item.price || 0,
+            total: (item.price || 0) * item.quantity,
+            type: 'Farmacia',
+            status: 'Pendiente'
+        }));
+
+        if (acc) {
+            acc.charges.push(...newCharges as any);
+            acc.balance += newCharges.reduce((s, c) => s + c.total, 0);
+        } else {
+            // Si no existe, crear (aunque Billing debería manejar esto, lo hacemos defensivo)
+            acc = {
+                patientId: foundPrescription.patientId,
+                charges: newCharges as any,
+                payments: [],
+                balance: newCharges.reduce((s, c) => s + c.total, 0),
+                status: 'Abierta'
+            };
+            patientAccount.push(acc);
+        }
+        localStorage.setItem('med_accounts_v1', JSON.stringify(patientAccount));
+    }
+
+    // Limpieza
+    setShowTicketModal(false);
     setFoundPrescription(null);
     setIsDirectSaleMode(false);
     setSessionCart([]);
@@ -555,6 +608,14 @@ const Inventory: React.FC = () => {
       );
   }, [movements, kardexSearch]);
 
+  // Filtro de Reposición (Stock < Ideal)
+  const replenishmentList = useMemo(() => {
+      return stock.filter(m => {
+          const total = getTotalStock(m);
+          return total < (m.idealStock || m.minStock);
+      });
+  }, [stock]);
+
   return (
     <div className="max-w-7xl mx-auto space-y-8 pb-20 animate-in fade-in">
        {/* HEADER & TABS */}
@@ -564,9 +625,9 @@ const Inventory: React.FC = () => {
              <p className="text-slate-500 text-sm font-bold uppercase mt-1">Gestión de Lotes e Insumos Médicos</p>
           </div>
           <div className="flex bg-white p-1.5 rounded-2xl shadow-sm border border-slate-200">
-             {['stock', 'dispense', 'movements'].map((t: any) => (
+             {['stock', 'dispense', 'movements', 'replenish'].map((t: any) => (
                 <button key={t} onClick={() => { setActiveTab(t); setFoundPrescription(null); setIsDirectSaleMode(false); }} className={`px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === t ? 'bg-slate-900 text-white shadow-lg' : 'text-slate-500 hover:bg-slate-50'}`}>
-                   {t === 'stock' ? 'Inventario' : t === 'dispense' ? 'Surtido' : 'Kardex'}
+                   {t === 'stock' ? 'Inventario' : t === 'dispense' ? 'Surtido' : t === 'movements' ? 'Kardex' : 'Reposición'}
                 </button>
              ))}
           </div>
@@ -589,12 +650,12 @@ const Inventory: React.FC = () => {
                         <th className="px-8 py-4 w-10"></th>
                         <th className="px-4 py-4">Descripción</th>
                         <th className="px-4 py-4 text-center">Tipo</th>
-                        <th className="px-4 py-4 text-center">Total Stock</th>
+                        <th className="px-4 py-4 text-center">Stock / Ideal</th>
                         <th className="px-4 py-4">Próx. Caducidad</th>
                         <th className="px-8 py-4 text-right">Acciones</th>
                      </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-50">
+                  <tbody className="divide-y divide-slate-100">
                      {filteredStock.map(med => {
                         const total = getTotalStock(med);
                         const nextExp = getNextExpiry(med);
@@ -616,6 +677,8 @@ const Inventory: React.FC = () => {
                                  </td>
                                  <td className="px-4 py-6 text-center">
                                     <span className={`text-lg font-black ${total <= med.minStock ? 'text-rose-600' : 'text-slate-900'}`}>{total}</span>
+                                    <span className="text-slate-300 text-xs mx-1">/</span>
+                                    <span className="text-xs font-bold text-emerald-600">{med.idealStock || 50}</span>
                                     <p className="text-[8px] font-bold text-slate-400 uppercase">{med.unit}</p>
                                  </td>
                                  <td className="px-4 py-6">
@@ -681,7 +744,7 @@ const Inventory: React.FC = () => {
          </div>
        )}
 
-       {/* KARDEX TAB (NUEVO: VISUALIZACIÓN DE MOVIMIENTOS) */}
+       {/* KARDEX TAB */}
        {activeTab === 'movements' && (
           <div className="bg-white border border-slate-200 rounded-[2.5rem] shadow-sm overflow-hidden min-h-[600px] animate-in slide-in-from-right-4">
              <div className="p-8 border-b border-slate-100 flex items-center justify-between gap-4">
@@ -739,6 +802,64 @@ const Inventory: React.FC = () => {
                       ))}
                       {filteredMovements.length === 0 && (
                          <tr><td colSpan={6} className="py-20 text-center opacity-30 text-xs font-black uppercase text-slate-400 tracking-widest">Sin movimientos registrados</td></tr>
+                      )}
+                   </tbody>
+                </table>
+             </div>
+          </div>
+       )}
+
+       {/* REPLENISHMENT REPORT (NUEVO) */}
+       {activeTab === 'replenish' && (
+          <div className="bg-white border border-slate-200 rounded-[2.5rem] shadow-sm overflow-hidden min-h-[600px] animate-in slide-in-from-right-4">
+             <div className="p-8 border-b border-slate-100 flex items-center justify-between gap-4 bg-amber-50/50">
+                <div className="flex items-center gap-4 flex-1">
+                   <Truck className="text-amber-600" />
+                   <div>
+                      <h3 className="text-xl font-black text-slate-900 uppercase">Análisis de Reposición</h3>
+                      <p className="text-[10px] font-bold text-amber-600 uppercase tracking-widest">Comparativa Stock Actual vs Ideal</p>
+                   </div>
+                </div>
+                <button onClick={() => window.print()} className="px-6 py-3 bg-amber-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-lg flex items-center gap-2 hover:bg-slate-900 transition-all">
+                   <Printer size={16} /> Imprimir Orden de Compra
+                </button>
+             </div>
+             
+             <div className="overflow-x-auto p-8">
+                <table className="w-full text-left">
+                   <thead className="bg-amber-100 text-[9px] font-black uppercase text-amber-800 tracking-widest rounded-xl">
+                      <tr>
+                         <th className="px-6 py-4 rounded-l-xl">Insumo / Descripción</th>
+                         <th className="px-4 py-4 text-center">Stock Actual</th>
+                         <th className="px-4 py-4 text-center">Stock Ideal</th>
+                         <th className="px-4 py-4 text-center">Déficit</th>
+                         <th className="px-4 py-4 text-center rounded-r-xl">Estado</th>
+                      </tr>
+                   </thead>
+                   <tbody className="divide-y divide-amber-50">
+                      {replenishmentList.map(med => {
+                         const total = getTotalStock(med);
+                         const ideal = med.idealStock || med.minStock || 50;
+                         const deficit = ideal - total;
+                         return (
+                            <tr key={med.id} className="hover:bg-amber-50/30">
+                               <td className="px-6 py-4">
+                                  <p className="text-xs font-black text-slate-900 uppercase">{med.name}</p>
+                                  <p className="text-[9px] text-slate-500 font-bold uppercase">{med.genericName}</p>
+                               </td>
+                               <td className="px-4 py-4 text-center font-bold text-slate-700">{total}</td>
+                               <td className="px-4 py-4 text-center font-bold text-blue-600">{ideal}</td>
+                               <td className="px-4 py-4 text-center font-black text-rose-600 text-lg">{deficit}</td>
+                               <td className="px-4 py-4 text-center">
+                                  <span className="px-3 py-1 bg-rose-100 text-rose-700 rounded-lg text-[8px] font-black uppercase border border-rose-200">
+                                     Pedir Urgente
+                                  </span>
+                               </td>
+                            </tr>
+                         );
+                      })}
+                      {replenishmentList.length === 0 && (
+                         <tr><td colSpan={5} className="py-20 text-center text-slate-400 font-black uppercase text-xs">Inventario saludable. No se requieren compras.</td></tr>
                       )}
                    </tbody>
                 </table>
@@ -823,13 +944,16 @@ const Inventory: React.FC = () => {
                         </div>
                         {stockSearchResults.length > 0 && (
                            <div className="max-h-60 overflow-y-auto space-y-2 pr-1 custom-scrollbar">
-                              {stockSearchResults.map(s => (
+                              {stockSearchResults.map(s => {
+                                 const price = getItemPrice(s.id);
+                                 return (
                                  <div key={s.id} className="flex justify-between items-center p-3 bg-slate-50 rounded-xl border border-slate-100 hover:border-blue-300 transition-all">
                                     <div>
                                        <p className="text-[10px] font-black text-slate-900 uppercase flex items-center gap-1">
                                           {getTypeIcon(s.supplyType)} {s.name}
                                        </p>
                                        <p className="text-[8px] text-slate-500 font-bold uppercase">{s.genericName} • Stock: {getTotalStock(s)}</p>
+                                       <p className="text-[9px] font-black text-blue-600">${price.toFixed(2)}</p>
                                     </div>
                                     <div className="flex items-center gap-1">
                                        <input 
@@ -852,7 +976,8 @@ const Inventory: React.FC = () => {
                                        </button>
                                     </div>
                                  </div>
-                              ))}
+                                 );
+                              })}
                            </div>
                         )}
                      </div>
@@ -870,13 +995,19 @@ const Inventory: React.FC = () => {
                                        <p className="font-bold text-emerald-900 uppercase">{item.name}</p>
                                        <p className="text-[8px] text-emerald-700">Lote: {item.batch}</p>
                                     </div>
-                                    <div className="font-black text-emerald-800">{item.quantity} pzas</div>
+                                    <div className="text-right">
+                                       <p className="font-black text-emerald-800">{item.quantity} pzas</p>
+                                       <p className="font-bold text-emerald-600">${((item.price || 0) * item.quantity).toFixed(2)}</p>
+                                    </div>
                                  </div>
                               ))}
                            </div>
-                           <div className="pt-2 border-t border-emerald-200 text-right">
+                           <div className="pt-2 border-t border-emerald-200 flex justify-between items-end">
                               <p className="text-xs font-black text-emerald-900 uppercase">
                                  Total Ítems: {sessionCart.length}
+                              </p>
+                              <p className="text-lg font-black text-emerald-700">
+                                 ${sessionCart.reduce((acc, i) => acc + ((i.price || 0) * i.quantity), 0).toFixed(2)}
                               </p>
                            </div>
                         </div>
@@ -1158,6 +1289,16 @@ const Inventory: React.FC = () => {
                       <label className="text-[9px] font-black uppercase text-slate-400 ml-2">Concentración / Medida</label>
                       <input className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-bold uppercase" value={medForm.concentration} onChange={e => setMedForm({...medForm, concentration: e.target.value})} />
                    </div>
+                   
+                   {/* NUEVO CAMPO: Stock Ideal para reposición */}
+                   <div className="space-y-2">
+                      <label className="text-[9px] font-black uppercase text-slate-400 ml-2">Stock Mínimo (Alerta)</label>
+                      <input type="number" className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-bold uppercase" value={medForm.minStock} onChange={e => setMedForm({...medForm, minStock: parseInt(e.target.value) || 0})} />
+                   </div>
+                   <div className="space-y-2">
+                      <label className="text-[9px] font-black uppercase text-blue-600 ml-2">Stock Ideal (Reposición)</label>
+                      <input type="number" className="w-full p-4 bg-blue-50 border border-blue-200 rounded-2xl text-xs font-bold uppercase" value={medForm.idealStock} onChange={e => setMedForm({...medForm, idealStock: parseInt(e.target.value) || 0})} />
+                   </div>
                 </div>
 
                 {!isEditingMed && (
@@ -1190,6 +1331,41 @@ const Inventory: React.FC = () => {
                 <div className="flex gap-4">
                    <button onClick={() => { setShowAddModal(false); setIsEditingMed(false); }} className="flex-1 py-4 bg-slate-100 rounded-2xl font-black text-[10px] uppercase text-slate-500 hover:bg-slate-200">Cancelar</button>
                    <button onClick={isEditingMed ? handleUpdateMedMaster : handleCreateMed} className="flex-[2] py-4 bg-slate-900 rounded-2xl font-black text-[10px] uppercase text-white shadow-xl hover:bg-blue-600">{isEditingMed ? 'Guardar Cambios' : 'Registrar Insumo'}</button>
+                </div>
+             </div>
+          </div>
+       )}
+
+       {/* MODAL TICKET DE VENTA (NUEVO) */}
+       {showTicketModal && (
+          <div className="fixed inset-0 z-[400] bg-slate-900/95 backdrop-blur flex items-center justify-center p-4">
+             <div className="bg-white w-80 rounded-none shadow-2xl p-6 text-center animate-in zoom-in-95 font-mono">
+                <div className="border-b-2 border-dashed border-slate-300 pb-4 mb-4">
+                   <h2 className="text-xl font-bold uppercase">Farmacia Central</h2>
+                   <p className="text-xs uppercase">Hospital San Rafael</p>
+                   <p className="text-[10px] mt-2">{new Date().toLocaleString()}</p>
+                   {directSalePatientName && <p className="text-[10px] font-bold mt-1 uppercase">CLTE: {directSalePatientName}</p>}
+                </div>
+                
+                <div className="text-left text-xs space-y-2 mb-4">
+                   {sessionCart.map((item, idx) => (
+                      <div key={idx} className="flex justify-between">
+                         <span>{item.quantity} x {item.name.substr(0,15)}</span>
+                         <span>${((item.price || 0) * item.quantity).toFixed(2)}</span>
+                      </div>
+                   ))}
+                </div>
+
+                <div className="border-t-2 border-dashed border-slate-300 pt-4 mb-6">
+                   <div className="flex justify-between font-bold text-lg">
+                      <span>TOTAL</span>
+                      <span>${sessionCart.reduce((acc, i) => acc + ((i.price || 0) * i.quantity), 0).toFixed(2)}</span>
+                   </div>
+                </div>
+
+                <div className="space-y-2 no-print">
+                   <button onClick={() => window.print()} className="w-full py-3 bg-slate-100 hover:bg-slate-200 text-xs font-bold uppercase rounded">Imprimir Ticket</button>
+                   <button onClick={confirmCloseTransaction} className="w-full py-3 bg-slate-900 text-white hover:bg-blue-600 text-xs font-bold uppercase rounded">Cerrar Venta</button>
                 </div>
              </div>
           </div>
