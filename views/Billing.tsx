@@ -1,19 +1,20 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { 
   CreditCard, Search, Plus, Printer, FileText, DollarSign, 
   UserCheck, Calendar, Clock, Trash2, CheckCircle2, AlertTriangle,
   Download, Receipt, LayoutList, RefreshCw, X, ShoppingCart, Store, ChevronRight,
-  PenTool, ChevronLeft, Wallet
+  PenTool, ChevronLeft, Wallet, Package, Tag, User, ShoppingBag
 } from 'lucide-react';
-import { Patient, PatientAccount, ChargeItem, PriceItem, ClinicalNote, PriceType } from '../types';
-import { INITIAL_PRICES } from '../constants';
+import { Patient, PatientAccount, ChargeItem, PriceItem, ClinicalNote, PriceType, MedicationStock, StockMovement } from '../types';
+import { INITIAL_PRICES, INITIAL_STOCK } from '../constants';
 
 const Billing: React.FC<{ patients: Patient[], notes: ClinicalNote[] }> = ({ patients, notes }) => {
   const navigate = useNavigate();
+  const location = useLocation();
   
-  // Estado local para cuentas
+  // --- ESTADOS PERSISTENTES ---
   const [accounts, setAccounts] = useState<PatientAccount[]>(() => {
     const saved = localStorage.getItem('med_accounts_v1');
     return saved ? JSON.parse(saved) : [];
@@ -24,60 +25,225 @@ const Billing: React.FC<{ patients: Patient[], notes: ClinicalNote[] }> = ({ pat
     return saved ? JSON.parse(saved) : INITIAL_PRICES;
   });
 
+  const [inventory, setInventory] = useState<MedicationStock[]>(() => {
+    const saved = localStorage.getItem('med_inventory_v6');
+    return saved ? JSON.parse(saved) : INITIAL_STOCK;
+  });
+
+  const [movements, setMovements] = useState<StockMovement[]>(() => {
+    const saved = localStorage.getItem('med_movements_v6');
+    return saved ? JSON.parse(saved) : [];
+  });
+
+  // --- ESTADOS UI ---
+  const [mode, setMode] = useState<'patient' | 'direct'>('patient'); // Nuevo selector de modo
   const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [showChargeModal, setShowChargeModal] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
-  
-  // Estado para impresión
   const [printMode, setPrintMode] = useState<'none' | 'ticket' | 'invoice'>('none');
 
+  // Estado Local para Venta de Mostrador
+  const [directSaleAccount, setDirectSaleAccount] = useState<PatientAccount>({
+    patientId: 'WALK_IN',
+    charges: [],
+    payments: [],
+    balance: 0,
+    status: 'Abierta'
+  });
+  const [directClientName, setDirectClientName] = useState('PÚBLICO EN GENERAL');
+
+  // --- EFECTO DE PRE-SELECCIÓN DE PACIENTE ---
+  useEffect(() => {
+    if (location.state && location.state.patientId) {
+        setMode('patient');
+        setSelectedPatientId(location.state.patientId);
+    }
+  }, [location]);
+
+  // --- EFECTOS DE PERSISTENCIA ---
   useEffect(() => {
     localStorage.setItem('med_accounts_v1', JSON.stringify(accounts));
   }, [accounts]);
 
-  // Obtener cuenta del paciente seleccionado o crear una temporal si no existe
+  useEffect(() => {
+    localStorage.setItem('med_inventory_v6', JSON.stringify(inventory));
+    localStorage.setItem('med_movements_v6', JSON.stringify(movements));
+  }, [inventory, movements]);
+
+  // --- LÓGICA DE NEGOCIO ---
+
+  // Obtener cuenta activa (Dinámico según modo)
   const activeAccount = useMemo(() => {
+    if (mode === 'direct') {
+        return directSaleAccount;
+    }
     if (!selectedPatientId) return null;
     let acc = accounts.find(a => a.patientId === selectedPatientId && a.status === 'Abierta');
     if (!acc) {
-      // Crear estructura base si no existe cuenta abierta
       return { patientId: selectedPatientId, charges: [], payments: [], balance: 0, status: 'Abierta' } as PatientAccount;
     }
     return acc;
-  }, [accounts, selectedPatientId]);
+  }, [accounts, selectedPatientId, mode, directSaleAccount]);
 
-  const patient = patients.find(p => p.id === selectedPatientId);
+  const patient = mode === 'patient' ? patients.find(p => p.id === selectedPatientId) : { name: directClientName, id: 'MOSTRADOR' } as any;
 
   const filteredPatients = patients.filter(p => 
     p.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
     p.curp.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  // --- ACCIONES DE CUENTA ---
+  // --- GESTIÓN DE INVENTARIO (DEDUCCIÓN/REVERSIÓN) ---
 
-  const handleCreateOrUpdateAccount = (updatedAccount: PatientAccount) => {
-    setAccounts(prev => {
-      const idx = prev.findIndex(a => a.patientId === updatedAccount.patientId && a.status === 'Abierta');
-      if (idx >= 0) {
-        const newAccounts = [...prev];
-        newAccounts[idx] = updatedAccount;
-        return newAccounts;
-      }
-      return [...prev, updatedAccount];
+  const deductFromInventory = (inventoryId: string, quantity: number, patientName: string): boolean => {
+    const itemIndex = inventory.findIndex(i => i.id === inventoryId);
+    if (itemIndex === -1) return false;
+
+    const item = inventory[itemIndex];
+    let remaining = quantity;
+    const newBatches = [...(item.batches || [])].sort((a, b) => {
+        if (a.expiryDate === 'N/A') return 1; 
+        if (b.expiryDate === 'N/A') return -1;
+        return new Date(a.expiryDate).getTime() - new Date(b.expiryDate).getTime();
     });
+
+    // Verificar stock total suficiente
+    const totalStock = newBatches.reduce((acc, b) => acc + b.currentStock, 0);
+    if (totalStock < quantity) {
+        alert(`Stock insuficiente para ${item.name}. Disponible: ${totalStock}, Requerido: ${quantity}`);
+        return false;
+    }
+
+    const newLogs: StockMovement[] = [];
+
+    const updatedBatches = newBatches.map(batch => {
+        if (remaining <= 0) return batch;
+        if (batch.currentStock > 0) {
+            const take = Math.min(remaining, batch.currentStock);
+            remaining -= take;
+            
+            newLogs.push({
+                id: `MOV-OUT-${Date.now()}-${Math.random()}`,
+                medicationId: item.id,
+                medicationName: item.name,
+                batch: batch.batchNumber,
+                type: 'OUT',
+                quantity: take,
+                reason: `Venta Caja - ${patientName}`,
+                date: new Date().toLocaleString('es-MX'),
+                responsible: 'Caja Principal'
+            });
+
+            return { ...batch, currentStock: batch.currentStock - take };
+        }
+        return batch;
+    });
+
+    // Actualizar estados
+    const newInventory = [...inventory];
+    newInventory[itemIndex] = { ...item, batches: updatedBatches };
+    
+    setInventory(newInventory);
+    setMovements(prev => [...newLogs, ...prev]);
+    return true;
+  };
+
+  const revertInventory = (inventoryId: string, quantity: number, patientName: string) => {
+    const itemIndex = inventory.findIndex(i => i.id === inventoryId);
+    if (itemIndex === -1) return;
+
+    const item = inventory[itemIndex];
+    // Revertir al primer lote (simplificado)
+    const targetBatchIndex = item.batches.length > 0 ? 0 : -1;
+
+    if (targetBatchIndex === -1) {
+        item.batches.push({ id: `BATCH-RET-${Date.now()}`, batchNumber: 'DEVOLUCION', expiryDate: 'N/A', currentStock: 0 });
+    }
+
+    const updatedBatches = item.batches.map((b, i) => i === 0 ? { ...b, currentStock: b.currentStock + quantity } : b);
+    
+    const newLog: StockMovement = {
+        id: `MOV-RET-${Date.now()}`,
+        medicationId: item.id,
+        medicationName: item.name,
+        batch: updatedBatches[0].batchNumber,
+        type: 'IN',
+        quantity: quantity,
+        reason: `Cancelación Venta - ${patientName}`,
+        date: new Date().toLocaleString('es-MX'),
+        responsible: 'Caja Principal'
+    };
+
+    const newInventory = [...inventory];
+    newInventory[itemIndex] = { ...item, batches: updatedBatches };
+
+    setInventory(newInventory);
+    setMovements(prev => [newLog, ...prev]);
+  };
+
+  // --- GESTIÓN DE CUENTA ---
+
+  const updateActiveAccountState = (updatedAccount: PatientAccount) => {
+      if (mode === 'direct') {
+          setDirectSaleAccount(updatedAccount);
+      } else {
+          setAccounts(prev => {
+            const idx = prev.findIndex(a => a.patientId === updatedAccount.patientId && a.status === 'Abierta');
+            if (idx >= 0) {
+              const newAccounts = [...prev];
+              newAccounts[idx] = updatedAccount;
+              return newAccounts;
+            }
+            return [...prev, updatedAccount];
+          });
+      }
   };
 
   const addCharge = (charge: ChargeItem) => {
     if (!activeAccount) return;
+
+    // Si tiene inventario vinculado, intentar descontar stock
+    if (charge.linkedInventoryId) {
+        const pName = mode === 'direct' ? directClientName : patient?.name || 'Paciente';
+        const success = deductFromInventory(charge.linkedInventoryId, charge.quantity, pName);
+        if (!success) return; // Cancelar cargo si no hay stock
+    }
+
     const updatedCharges = [...activeAccount.charges, charge];
     const newBalance = updatedCharges.reduce((sum, c) => sum + (c.status !== 'Cancelado' ? c.total : 0), 0) - 
                        activeAccount.payments.reduce((sum, p) => sum + p.amount, 0);
     
-    handleCreateOrUpdateAccount({
+    updateActiveAccountState({
       ...activeAccount,
       charges: updatedCharges,
       balance: newBalance
+    });
+  };
+
+  const cancelCharge = (chargeId: string) => {
+    if (!activeAccount) return;
+    
+    const charge = activeAccount.charges.find(c => c.id === chargeId);
+    if (!charge || charge.status === 'Cancelado') return;
+
+    if (!window.confirm("¿Cancelar este cargo? Si es un producto, el stock será devuelto.")) return;
+
+    // Devolución de stock si aplica
+    if (charge.linkedInventoryId) {
+        const pName = mode === 'direct' ? directClientName : patient?.name || 'Paciente';
+        revertInventory(charge.linkedInventoryId, charge.quantity, pName);
+    }
+
+    const updatedCharges = activeAccount.charges.map(c => c.id === chargeId ? { ...c, status: 'Cancelado' as const } : c);
+    
+    // Recalcular balance
+    const newBalance = updatedCharges.reduce((sum, c) => sum + (c.status !== 'Cancelado' ? c.total : 0), 0) - 
+                       activeAccount.payments.reduce((sum, p) => sum + p.amount, 0);
+
+    updateActiveAccountState({
+        ...activeAccount,
+        charges: updatedCharges,
+        balance: newBalance
     });
   };
 
@@ -94,71 +260,92 @@ const Billing: React.FC<{ patients: Patient[], notes: ClinicalNote[] }> = ({ pat
     const chargesTotal = activeAccount.charges.reduce((sum, c) => sum + (c.status !== 'Cancelado' ? c.total : 0), 0);
     const paymentsTotal = updatedPayments.reduce((sum, p) => sum + p.amount, 0);
     
-    handleCreateOrUpdateAccount({
+    // Guardar estado actualizado (Importante para que el ticket salga bien antes de limpiar)
+    const finalAccountState = {
       ...activeAccount,
       payments: updatedPayments,
       balance: chargesTotal - paymentsTotal
-    });
+    };
+    
+    updateActiveAccountState(finalAccountState);
     setShowPaymentModal(false);
+
+    // Si es venta directa y el saldo es 0, ofrecer imprimir ticket y limpiar
+    if (mode === 'direct' && (chargesTotal - paymentsTotal) <= 0.5) {
+        setPrintMode('ticket'); // Abrir ticket automáticamente
+    }
+  };
+
+  // Función para "Cerrar Venta" en mostrador (Resetear)
+  const finishDirectSale = () => {
+      setDirectSaleAccount({
+        patientId: 'WALK_IN',
+        charges: [],
+        payments: [],
+        balance: 0,
+        status: 'Abierta'
+      });
+      setDirectClientName('PÚBLICO EN GENERAL');
+      setPrintMode('none');
   };
 
   const syncFromNotes = () => {
-    if (!selectedPatientId || !activeAccount) return;
+    if (mode === 'direct' || !selectedPatientId || !activeAccount) return;
     
     const patientNotes = notes.filter(n => n.patientId === selectedPatientId);
     let newChargesCount = 0;
 
     patientNotes.forEach(note => {
-      const exists = activeAccount.charges.some(c => c.sourceId === note.id);
-      if (exists) return;
+      if (activeAccount.charges.some(c => c.sourceId === note.id)) return;
 
-      let priceCode = '';
-      if (note.type.includes('Consulta')) priceCode = 'CON-GEN';
-      if (note.type.includes('Urgencias')) priceCode = 'URG-BAS';
-      if (note.type.includes('Especialidad') || note.type.includes('Interconsulta')) priceCode = 'CON-ESP';
+      let consultPriceCode = '';
+      if (note.type.includes('Consulta') || note.type.includes('Historia')) consultPriceCode = 'CON-GEN';
+      if (note.type.includes('Urgencias')) consultPriceCode = 'URG-BAS';
+      if (note.type.includes('Especialidad') || note.type.includes('Interconsulta')) consultPriceCode = 'CON-ESP';
 
-      const priceItem = prices.find(p => p.code === priceCode);
-      
-      if (priceItem) {
-        addCharge({
-          id: `CHG-${Date.now()}-${Math.random()}`,
-          date: note.date,
-          concept: `Honorarios: ${note.type} - ${note.author}`,
-          quantity: 1,
-          unitPrice: priceItem.price,
-          total: priceItem.price,
-          type: 'Honorarios',
-          status: 'Pendiente',
-          sourceId: note.id
-        });
-        newChargesCount++;
+      if (consultPriceCode) {
+          const priceItem = prices.find(p => p.code === consultPriceCode);
+          if (priceItem) {
+            addCharge({
+                id: `CHG-${Date.now()}-${Math.random()}`,
+                date: note.date,
+                concept: `Honorarios: ${note.type} - ${note.author}`,
+                quantity: 1,
+                unitPrice: priceItem.price,
+                total: priceItem.price * (1 + priceItem.taxPercent/100),
+                type: 'Honorarios',
+                status: 'Pendiente',
+                sourceId: note.id
+            });
+            newChargesCount++;
+          }
       }
+      
+      // Sincronización básica de otros items omitida por brevedad, usar misma lógica existente...
     });
 
-    if (newChargesCount > 0) alert(`Se sincronizaron ${newChargesCount} cargos desde el expediente clínico.`);
-    else alert("No se encontraron nuevos cargos pendientes de sincronizar.");
+    if (newChargesCount > 0) alert(`Se sincronizaron ${newChargesCount} cargos nuevos.`);
+    else alert("No se encontraron nuevos cargos pendientes.");
   };
 
   const closeAccount = () => {
     if (!activeAccount) return;
-    if (activeAccount.balance > 0) {
-      alert("No se puede cerrar la cuenta con saldo pendiente. Registre el pago completo primero.");
+    if (activeAccount.balance > 0.5) { 
+      alert("No se puede cerrar la cuenta con saldo pendiente.");
       return;
     }
-    if (window.confirm("¿Confirmar el cierre de caja para este paciente? La cuenta pasará a histórico.")) {
-      handleCreateOrUpdateAccount({ ...activeAccount, status: 'Cerrada' });
+    if (window.confirm("¿Confirmar el cierre de caja para este paciente?")) {
+      updateActiveAccountState({ ...activeAccount, status: 'Cerrada' });
       setSelectedPatientId(null);
     }
   };
 
-  // --- COMPONENTES UI ---
+  // --- MODALES (UI) ---
 
   const AddChargeModal = () => {
     const [searchItem, setSearchItem] = useState('');
     const [selectedPrice, setSelectedPrice] = useState<PriceItem | null>(null);
     const [qty, setQty] = useState(1);
-    
-    // Estado para cargo manual
     const [isManual, setIsManual] = useState(false);
     const [manualData, setManualData] = useState({ name: '', price: 0, tax: 16 });
 
@@ -166,10 +353,7 @@ const Billing: React.FC<{ patients: Patient[], notes: ClinicalNote[] }> = ({ pat
 
     const submit = () => {
       if (isManual) {
-         if (!manualData.name || manualData.price <= 0) {
-            alert("Ingrese un nombre y precio válido.");
-            return;
-         }
+         if (!manualData.name || manualData.price <= 0) { alert("Datos inválidos"); return; }
          const total = manualData.price * qty * (1 + manualData.tax / 100);
          addCharge({
             id: `CHG-${Date.now()}`,
@@ -191,7 +375,8 @@ const Billing: React.FC<{ patients: Patient[], notes: ClinicalNote[] }> = ({ pat
             unitPrice: selectedPrice.price,
             total: parseFloat(total.toFixed(2)),
             type: selectedPrice.category as any || 'Otro',
-            status: 'Pendiente'
+            status: 'Pendiente',
+            linkedInventoryId: selectedPrice.linkedInventoryId
          });
       }
       setShowChargeModal(false);
@@ -259,21 +444,11 @@ const Billing: React.FC<{ patients: Patient[], notes: ClinicalNote[] }> = ({ pat
                       </div>
                    </div>
                 </div>
-
                 <div className="flex items-center justify-center gap-6">
-                   <button onClick={() => setQty(Math.max(1, qty - 1))} className="w-12 h-12 rounded-xl bg-slate-100 flex items-center justify-center hover:bg-slate-200 text-slate-600 font-black text-xl transition-all">-</button>
-                   <div className="text-center">
-                      <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">CANTIDAD</p>
-                      <input type="number" className="w-20 text-center text-3xl font-black bg-transparent outline-none" value={qty} onChange={e => setQty(parseInt(e.target.value) || 1)} />
-                   </div>
-                   <button onClick={() => setQty(qty + 1)} className="w-12 h-12 rounded-xl bg-slate-100 flex items-center justify-center hover:bg-slate-200 text-slate-600 font-black text-xl transition-all">+</button>
+                   <button onClick={() => setQty(Math.max(1, qty - 1))} className="w-12 h-12 rounded-xl bg-slate-100 flex items-center justify-center hover:bg-slate-200 font-black text-xl">-</button>
+                   <div className="text-center"><p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">CANTIDAD</p><input type="number" className="w-20 text-center text-3xl font-black bg-transparent outline-none" value={qty} onChange={e => setQty(parseInt(e.target.value) || 1)} /></div>
+                   <button onClick={() => setQty(qty + 1)} className="w-12 h-12 rounded-xl bg-slate-100 flex items-center justify-center hover:bg-slate-200 font-black text-xl">+</button>
                 </div>
-
-                <div className="p-4 bg-indigo-50 border border-indigo-100 rounded-xl text-center">
-                   <p className="text-[10px] font-black text-indigo-400 uppercase tracking-widest">Total Estimado</p>
-                   <p className="text-2xl font-black text-indigo-900">${(manualData.price * qty * (1 + manualData.tax / 100)).toFixed(2)}</p>
-                </div>
-
                 <div className="flex gap-4">
                    <button onClick={() => setIsManual(false)} className="flex-1 py-4 bg-slate-100 text-slate-500 rounded-2xl font-black uppercase text-xs hover:bg-slate-200 transition-all">Cancelar</button>
                    <button onClick={submit} className="flex-[2] py-4 bg-indigo-600 text-white rounded-2xl font-black uppercase text-xs shadow-xl hover:bg-indigo-700 transition-all">Agregar Manual</button>
@@ -285,17 +460,13 @@ const Billing: React.FC<{ patients: Patient[], notes: ClinicalNote[] }> = ({ pat
                 <p className="text-sm font-black uppercase text-blue-900">{selectedPrice?.name}</p>
                 <p className="text-2xl font-black text-blue-600 mt-2">${selectedPrice?.price.toFixed(2)}</p>
                 <p className="text-[10px] text-blue-400 uppercase font-bold mt-1">+ IVA ({selectedPrice?.taxPercent}%)</p>
+                {selectedPrice.linkedInventoryId && <p className="text-[9px] text-emerald-600 font-bold mt-2 uppercase bg-emerald-100 px-2 py-1 rounded inline-block"><Package size={10} className="inline mr-1"/> Vinculado a Inventario</p>}
               </div>
-              
               <div className="flex items-center justify-center gap-6">
-                <button onClick={() => setQty(Math.max(1, qty - 1))} className="w-12 h-12 rounded-xl bg-slate-100 flex items-center justify-center hover:bg-slate-200 text-slate-600 font-black text-xl transition-all">-</button>
-                <div className="text-center">
-                   <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">CANTIDAD</p>
-                   <input type="number" className="w-20 text-center text-3xl font-black bg-transparent outline-none" value={qty} onChange={e => setQty(parseInt(e.target.value) || 1)} />
-                </div>
-                <button onClick={() => setQty(qty + 1)} className="w-12 h-12 rounded-xl bg-slate-100 flex items-center justify-center hover:bg-slate-200 text-slate-600 font-black text-xl transition-all">+</button>
+                <button onClick={() => setQty(Math.max(1, qty - 1))} className="w-12 h-12 rounded-xl bg-slate-100 flex items-center justify-center hover:bg-slate-200 font-black text-xl">-</button>
+                <div className="text-center"><p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">CANTIDAD</p><input type="number" className="w-20 text-center text-3xl font-black bg-transparent outline-none" value={qty} onChange={e => setQty(parseInt(e.target.value) || 1)} /></div>
+                <button onClick={() => setQty(qty + 1)} className="w-12 h-12 rounded-xl bg-slate-100 flex items-center justify-center hover:bg-slate-200 font-black text-xl">+</button>
               </div>
-
               <div className="flex gap-4">
                 <button onClick={() => setSelectedPrice(null)} className="flex-1 py-4 bg-slate-100 text-slate-500 rounded-2xl font-black uppercase text-xs hover:bg-slate-200 transition-all">Atrás</button>
                 <button onClick={submit} className="flex-[2] py-4 bg-slate-900 text-white rounded-2xl font-black uppercase text-xs shadow-xl hover:bg-blue-600 transition-all">Confirmar Cargo</button>
@@ -318,12 +489,10 @@ const Billing: React.FC<{ patients: Patient[], notes: ClinicalNote[] }> = ({ pat
              <h3 className="text-xl font-black uppercase text-slate-900">Cobrar Cuenta</h3>
              <button onClick={() => setShowPaymentModal(false)}><X size={24} className="text-slate-400" /></button>
           </div>
-          
           <div className="bg-emerald-50 p-6 rounded-2xl border border-emerald-100 text-center">
              <p className="text-[10px] font-black uppercase text-emerald-600 tracking-widest">Saldo Pendiente</p>
              <p className="text-4xl font-black text-emerald-800 tracking-tighter">${activeAccount?.balance.toFixed(2)}</p>
           </div>
-
           <div className="space-y-4">
              <div className="space-y-1">
                 <label className="text-[10px] font-black uppercase text-slate-400 ml-2">Monto a Recibir</label>
@@ -353,6 +522,7 @@ const Billing: React.FC<{ patients: Patient[], notes: ClinicalNote[] }> = ({ pat
 
   return (
     <div className="max-w-7xl mx-auto space-y-8 pb-20 animate-in fade-in">
+      {/* Header */}
       <div className="flex flex-col md:flex-row justify-between items-end gap-6 no-print">
         <div className="flex items-center gap-4">
           <button onClick={() => navigate(-1)} className="p-3 bg-white border border-slate-200 rounded-2xl hover:bg-slate-50 transition-all shadow-sm">
@@ -363,50 +533,70 @@ const Billing: React.FC<{ patients: Patient[], notes: ClinicalNote[] }> = ({ pat
             <p className="text-slate-500 text-sm font-bold uppercase mt-1">Terminal de Cobro y Facturación</p>
           </div>
         </div>
-        <div className="bg-white p-2 rounded-2xl shadow-sm border border-slate-200 flex gap-2">
-           <div className="px-4 py-2 bg-emerald-50 text-emerald-700 rounded-xl text-[10px] font-black uppercase flex items-center gap-2">
-              <Store size={14} /> Caja Abierta
-           </div>
-           <div className="px-4 py-2 text-slate-400 text-[10px] font-bold uppercase">
-              {new Date().toLocaleDateString()}
+        <div className="flex gap-4">
+           <button onClick={() => navigate('/prices')} className="px-6 py-3 bg-white border border-slate-200 rounded-2xl text-[10px] font-black uppercase hover:bg-slate-50 transition-all flex items-center gap-2 shadow-sm text-slate-600">
+              <Tag size={14} /> Catálogo de Precios
+           </button>
+           <div className="bg-white p-2 rounded-2xl shadow-sm border border-slate-200 flex gap-2">
+              <div className="px-4 py-2 bg-emerald-50 text-emerald-700 rounded-xl text-[10px] font-black uppercase flex items-center gap-2">
+                 <Store size={14} /> Caja Abierta
+              </div>
+              <div className="px-4 py-2 text-slate-400 text-[10px] font-bold uppercase">
+                 {new Date().toLocaleDateString()}
+              </div>
            </div>
         </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-         {/* SIDEBAR LISTA PACIENTES (SELECTOR) */}
+         {/* SIDEBAR LISTA PACIENTES / MOSTRADOR */}
          <div className="lg:col-span-4 space-y-6 no-print">
-            <div className="bg-white border border-slate-200 rounded-[2.5rem] p-6 shadow-sm min-h-[600px] flex flex-col">
+            <button 
+                onClick={() => { setMode('direct'); setSelectedPatientId(null); }}
+                className={`w-full p-6 rounded-[2.5rem] shadow-lg flex items-center justify-between group transition-all relative overflow-hidden ${mode === 'direct' ? 'bg-slate-900 text-white ring-4 ring-emerald-100' : 'bg-emerald-600 text-white hover:bg-emerald-700'}`}
+            >
+                <div className="relative z-10 flex items-center gap-4">
+                    <div className="w-12 h-12 bg-white/20 rounded-2xl flex items-center justify-center"><ShoppingBag size={24} /></div>
+                    <div className="text-left">
+                        <p className="text-sm font-black uppercase tracking-tight">Venta Mostrador</p>
+                        <p className="text-[10px] opacity-80 font-medium">Cobro directo sin expediente</p>
+                    </div>
+                </div>
+                {mode === 'direct' && <div className="absolute right-6 w-3 h-3 bg-emerald-400 rounded-full animate-pulse"></div>}
+            </button>
+
+            <div className="bg-white border border-slate-200 rounded-[2.5rem] p-6 shadow-sm min-h-[500px] flex flex-col">
                <div className="relative mb-6">
                   <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
                   <input 
                     className="w-full pl-10 pr-4 py-4 bg-slate-50 border border-slate-100 rounded-2xl text-xs font-bold uppercase outline-none focus:ring-4 focus:ring-blue-100 focus:bg-white transition-all"
-                    placeholder="Buscar paciente para cobro..."
+                    placeholder="Buscar paciente para cuenta..."
                     value={searchTerm}
                     onChange={e => setSearchTerm(e.target.value)}
                   />
                </div>
+               <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-3 ml-2">Cuentas de Pacientes</p>
                <div className="flex-1 overflow-y-auto space-y-2 pr-1 custom-scrollbar">
                   {filteredPatients.map(p => {
-                     // Buscar si tiene saldo pendiente
                      const acc = accounts.find(a => a.patientId === p.id && a.status === 'Abierta');
                      const hasDebt = acc && acc.balance > 0;
+                     const isSelected = mode === 'patient' && selectedPatientId === p.id;
                      return (
                         <button 
                            key={p.id} 
-                           onClick={() => setSelectedPatientId(p.id)}
-                           className={`w-full text-left p-4 rounded-2xl border transition-all flex justify-between items-center group ${selectedPatientId === p.id ? 'bg-slate-900 text-white border-slate-900 shadow-lg scale-105' : 'bg-white border-slate-100 hover:border-blue-300 hover:bg-slate-50'}`}
+                           onClick={() => { setMode('patient'); setSelectedPatientId(p.id); }}
+                           className={`w-full text-left p-4 rounded-2xl border transition-all flex justify-between items-center group ${isSelected ? 'bg-blue-600 text-white border-blue-600 shadow-lg scale-105' : 'bg-white border-slate-100 hover:border-blue-300 hover:bg-slate-50'}`}
                         >
                            <div>
                               <p className="text-xs font-black uppercase tracking-tight">{p.name}</p>
-                              <p className={`text-[9px] font-bold uppercase mt-1 ${selectedPatientId === p.id ? 'text-slate-400' : 'text-slate-400'}`}>ID: {p.id}</p>
+                              <p className={`text-[9px] font-bold uppercase mt-1 ${isSelected ? 'text-blue-200' : 'text-slate-400'}`}>ID: {p.id}</p>
                            </div>
                            {hasDebt ? (
                               <div className="px-2 py-1 bg-rose-500 text-white text-[8px] font-black rounded-lg shadow-sm animate-pulse">
-                                 ${acc.balance}
+                                 ${acc.balance.toFixed(0)}
                               </div>
                            ) : (
-                              <ChevronRight size={16} className={`text-slate-300 ${selectedPatientId === p.id ? 'text-white' : 'group-hover:text-blue-500'}`} />
+                              <ChevronRight size={16} className={`text-slate-300 ${isSelected ? 'text-white' : 'group-hover:text-blue-500'}`} />
                            )}
                         </button>
                      );
@@ -417,8 +607,8 @@ const Billing: React.FC<{ patients: Patient[], notes: ClinicalNote[] }> = ({ pat
 
          {/* DETALLE DE CUENTA / POS */}
          <div className="lg:col-span-8 space-y-6">
-            {activeAccount && patient ? (
-               <div className="bg-white border border-slate-200 rounded-[3rem] shadow-sm h-full flex flex-col relative overflow-hidden">
+            {activeAccount && (mode === 'direct' || patient) ? (
+               <div className="bg-white border border-slate-200 rounded-[3rem] shadow-sm h-full flex flex-col relative overflow-hidden animate-in fade-in">
                   
                   {/* MODAL DE IMPRESIÓN (TICKET/FACTURA) */}
                   {printMode !== 'none' && (
@@ -431,21 +621,18 @@ const Billing: React.FC<{ patients: Patient[], notes: ClinicalNote[] }> = ({ pat
                               <p className="text-[10px] mt-2">{new Date().toLocaleString()}</p>
                               <p className="font-bold mt-2">{printMode === 'invoice' ? 'FACTURA ELECTRÓNICA' : 'NOTA DE VENTA'}</p>
                            </div>
-                           
                            <div className="text-xs mb-6 space-y-1">
-                              <p>CLIENTE: {patient.name}</p>
+                              <p>CLIENTE: {mode === 'direct' ? directClientName : patient?.name}</p>
                               <p>FOLIO: {Math.floor(Math.random()*100000)}</p>
                            </div>
-
                            <div className="mb-6">
                               {activeAccount.charges.filter(c => c.status !== 'Cancelado').map(c => (
-                                 <div key={c.id} className="flex justify-between mb-1">
-                                    <span>{c.quantity} x {c.concept.substr(0, 20)}</span>
+                                 <div key={c.id} className="flex justify-between mb-1 text-xs">
+                                    <span>{c.quantity} x {c.concept.substr(0, 25)}</span>
                                     <span>${c.total.toFixed(2)}</span>
                                  </div>
                               ))}
                            </div>
-
                            <div className="border-t-2 border-dashed border-slate-300 pt-4 mb-8">
                               <div className="flex justify-between font-bold text-lg">
                                  <span>TOTAL</span>
@@ -453,26 +640,51 @@ const Billing: React.FC<{ patients: Patient[], notes: ClinicalNote[] }> = ({ pat
                               </div>
                               <div className="text-[10px] text-right mt-1">IVA INCLUIDO</div>
                            </div>
-
                            <div className="text-center space-y-2 no-print">
                               <button onClick={() => window.print()} className="w-full py-3 bg-slate-900 text-white font-bold uppercase rounded hover:bg-blue-600">Imprimir</button>
-                              <button onClick={() => setPrintMode('none')} className="w-full py-3 bg-slate-100 text-slate-900 font-bold uppercase rounded hover:bg-slate-200">Cerrar</button>
+                              <button 
+                                onClick={() => {
+                                    if (mode === 'direct') finishDirectSale();
+                                    else setPrintMode('none');
+                                }} 
+                                className="w-full py-3 bg-slate-100 text-slate-900 font-bold uppercase rounded hover:bg-slate-200"
+                              >
+                                {mode === 'direct' ? 'Finalizar y Limpiar' : 'Cerrar'}
+                              </button>
                            </div>
                         </div>
                      </div>
                   )}
 
-                  <div className="p-8 border-b border-slate-100 flex justify-between items-start bg-slate-50/50 no-print">
+                  <div className={`p-8 border-b border-slate-100 flex justify-between items-start no-print transition-colors ${mode === 'direct' ? 'bg-slate-900 text-white' : 'bg-slate-50/50'}`}>
                      <div>
-                        <h2 className="text-2xl font-black text-slate-900 uppercase tracking-tight">{patient.name}</h2>
-                        <div className="flex items-center gap-3 mt-2">
-                           <span className="px-3 py-1 bg-white border border-slate-200 rounded-lg text-[9px] font-black uppercase text-slate-500 shadow-sm">{activeAccount.status}</span>
-                           <span className="text-[10px] font-bold text-slate-400 uppercase">Folio Cuenta: #{activeAccount.patientId.substr(0,6)}</span>
-                        </div>
+                        {mode === 'direct' ? (
+                            <div className="space-y-2">
+                                <h2 className="text-2xl font-black uppercase tracking-tight flex items-center gap-3">
+                                    <ShoppingBag /> Venta de Mostrador
+                                </h2>
+                                <div className="flex items-center gap-2">
+                                    <label className="text-[9px] font-black uppercase text-slate-400">Cliente:</label>
+                                    <input 
+                                        className="bg-white/10 border border-white/20 rounded-lg px-2 py-1 text-xs font-bold uppercase text-white outline-none focus:bg-white/20"
+                                        value={directClientName}
+                                        onChange={(e) => setDirectClientName(e.target.value)}
+                                    />
+                                </div>
+                            </div>
+                        ) : (
+                            <>
+                                <h2 className="text-2xl font-black text-slate-900 uppercase tracking-tight">{patient?.name}</h2>
+                                <div className="flex items-center gap-3 mt-2">
+                                <span className="px-3 py-1 bg-white border border-slate-200 rounded-lg text-[9px] font-black uppercase text-slate-500 shadow-sm">{activeAccount.status}</span>
+                                <span className="text-[10px] font-bold text-slate-400 uppercase">Folio Cuenta: #{activeAccount.patientId.substr(0,6)}</span>
+                                </div>
+                            </>
+                        )}
                      </div>
                      <div className="text-right">
-                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Por Pagar</p>
-                        <p className={`text-5xl font-black tracking-tighter ${activeAccount.balance > 0 ? 'text-rose-600' : 'text-emerald-500'}`}>
+                        <p className={`text-[10px] font-black uppercase tracking-widest ${mode === 'direct' ? 'text-slate-400' : 'text-slate-400'}`}>Por Pagar</p>
+                        <p className={`text-5xl font-black tracking-tighter ${activeAccount.balance > 0 ? (mode === 'direct' ? 'text-emerald-400' : 'text-rose-600') : 'text-emerald-500'}`}>
                            ${activeAccount.balance.toFixed(2)}
                         </p>
                      </div>
@@ -480,11 +692,13 @@ const Billing: React.FC<{ patients: Patient[], notes: ClinicalNote[] }> = ({ pat
 
                   <div className="p-4 grid grid-cols-2 lg:grid-cols-4 gap-3 border-b border-slate-100 bg-white no-print">
                      <button onClick={() => setShowChargeModal(true)} className="flex items-center justify-center gap-2 py-4 bg-slate-900 text-white rounded-2xl text-[10px] font-black uppercase shadow-lg hover:bg-blue-600 transition-all active:scale-95">
-                        <Plus size={16}/> Cobrar Servicio
+                        <Plus size={16}/> Agregar Ítem
                      </button>
-                     <button onClick={syncFromNotes} className="flex items-center justify-center gap-2 py-4 bg-indigo-50 text-indigo-700 rounded-2xl text-[10px] font-black uppercase hover:bg-indigo-100 transition-all border border-indigo-100">
-                        <RefreshCw size={16}/> Sincronizar Notas
-                     </button>
+                     {mode === 'patient' && (
+                        <button onClick={syncFromNotes} className="flex items-center justify-center gap-2 py-4 bg-indigo-50 text-indigo-700 rounded-2xl text-[10px] font-black uppercase hover:bg-indigo-100 transition-all border border-indigo-100">
+                            <RefreshCw size={16}/> Sincronizar Notas
+                        </button>
+                     )}
                      <button onClick={() => setPrintMode('ticket')} className="flex items-center justify-center gap-2 py-4 bg-white border border-slate-200 text-slate-600 rounded-2xl text-[10px] font-black uppercase hover:bg-slate-50 transition-all shadow-sm">
                         <Receipt size={16}/> Ticket
                      </button>
@@ -501,15 +715,16 @@ const Billing: React.FC<{ patients: Patient[], notes: ClinicalNote[] }> = ({ pat
                               <th className="px-4 py-4 text-center">Cant</th>
                               <th className="px-4 py-4 text-right">Precio U.</th>
                               <th className="px-6 py-4 text-right rounded-r-xl">Total</th>
+                              <th className="w-10"></th>
                            </tr>
                         </thead>
                         <tbody className="text-xs font-bold text-slate-600">
                            {activeAccount.charges.length === 0 && activeAccount.payments.length === 0 && (
-                              <tr><td colSpan={4} className="py-20 text-center text-slate-300 font-black uppercase tracking-widest text-[10px]">Cuenta sin movimientos</td></tr>
+                              <tr><td colSpan={5} className="py-20 text-center text-slate-300 font-black uppercase tracking-widest text-[10px]">Sin movimientos registrados</td></tr>
                            )}
                            
                            {activeAccount.charges.map(c => (
-                              <tr key={c.id} className={`border-b border-slate-50 last:border-0 hover:bg-slate-50 transition-colors ${c.status === 'Cancelado' ? 'opacity-40 line-through' : ''}`}>
+                              <tr key={c.id} className={`border-b border-slate-50 last:border-0 hover:bg-slate-50 transition-colors group ${c.status === 'Cancelado' ? 'opacity-40 line-through' : ''}`}>
                                  <td className="px-6 py-4">
                                     <p className="text-slate-900">{c.concept}</p>
                                     <p className="text-[9px] text-slate-400 mt-0.5">{c.date} • {c.type}</p>
@@ -517,6 +732,11 @@ const Billing: React.FC<{ patients: Patient[], notes: ClinicalNote[] }> = ({ pat
                                  <td className="px-4 py-4 text-center">{c.quantity}</td>
                                  <td className="px-4 py-4 text-right">${c.unitPrice.toFixed(2)}</td>
                                  <td className="px-6 py-4 text-right font-black text-slate-900">${c.total.toFixed(2)}</td>
+                                 <td className="px-2">
+                                    {c.status !== 'Cancelado' && (
+                                        <button onClick={() => cancelCharge(c.id)} className="p-2 text-slate-300 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-all"><Trash2 size={14}/></button>
+                                    )}
+                                 </td>
                               </tr>
                            ))}
                            
@@ -529,6 +749,7 @@ const Billing: React.FC<{ patients: Patient[], notes: ClinicalNote[] }> = ({ pat
                                  <td className="px-4 py-4 text-center">-</td>
                                  <td className="px-4 py-4 text-right text-emerald-600 font-bold">ABONO</td>
                                  <td className="px-6 py-4 text-right text-emerald-700 font-black">-${p.amount.toFixed(2)}</td>
+                                 <td></td>
                               </tr>
                            ))}
                         </tbody>
@@ -536,7 +757,7 @@ const Billing: React.FC<{ patients: Patient[], notes: ClinicalNote[] }> = ({ pat
                   </div>
 
                   <div className="p-6 border-t border-slate-100 bg-slate-50 no-print flex justify-end gap-4">
-                     {activeAccount.balance > 0 ? (
+                     {activeAccount.balance > 0.01 ? (
                         <button 
                            onClick={() => setShowPaymentModal(true)}
                            className="px-12 py-5 bg-emerald-600 text-white rounded-[2rem] font-black uppercase text-xs tracking-widest shadow-xl hover:bg-emerald-700 transition-all flex items-center gap-3 active:scale-95"
@@ -545,10 +766,13 @@ const Billing: React.FC<{ patients: Patient[], notes: ClinicalNote[] }> = ({ pat
                         </button>
                      ) : (
                         <button 
-                           onClick={closeAccount}
+                           onClick={() => {
+                               if (mode === 'direct') finishDirectSale();
+                               else closeAccount();
+                           }}
                            className="px-10 py-5 bg-slate-200 text-slate-500 rounded-[2rem] font-black uppercase text-xs tracking-widest hover:bg-slate-300 transition-all flex items-center gap-3"
                         >
-                           <CheckCircle2 size={18} /> Cerrar Caja
+                           <CheckCircle2 size={18} /> {mode === 'direct' ? 'Nueva Venta' : 'Cerrar Caja'}
                         </button>
                      )}
                   </div>
@@ -558,7 +782,7 @@ const Billing: React.FC<{ patients: Patient[], notes: ClinicalNote[] }> = ({ pat
                   <div className="w-24 h-24 bg-white rounded-[2rem] flex items-center justify-center shadow-sm mb-6">
                      <ShoppingCart size={40} className="text-slate-200" />
                   </div>
-                  <p className="text-xs font-black uppercase tracking-widest">Seleccione un paciente para iniciar cobro</p>
+                  <p className="text-xs font-black uppercase tracking-widest">Seleccione un paciente o inicie venta mostrador</p>
                </div>
             )}
          </div>

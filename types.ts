@@ -90,6 +90,7 @@ export interface ChargeItem {
   type: 'Farmacia' | 'Honorarios' | 'Hospitalizacion' | 'Estudios' | 'Otro';
   status: 'Pendiente' | 'Pagado' | 'Cancelado';
   sourceId?: string; // ID de la nota, receta o venta de farmacia que generó el cargo
+  linkedInventoryId?: string; // ID del producto en inventario para reversión
 }
 
 export interface PatientAccount {

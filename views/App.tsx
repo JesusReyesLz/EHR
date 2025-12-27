@@ -46,10 +46,16 @@ import { INITIAL_PATIENTS } from './constants';
 function Layout({ children, currentModule, onModuleChange, doctorInfo }: any) {
   const location = useLocation();
   const navigate = useNavigate();
+  
+  // Detectar si estamos en un perfil de paciente para mantener el contexto
+  const patientMatch = location.pathname.match(/\/patient\/([^/]+)/);
+  const currentPatientId = patientMatch ? patientMatch[1] : null;
+
   const menuItems = [
     { icon: <Users className="w-5 h-5" />, label: 'Monitor Activo', path: '/' },
     { icon: <MonitorIcon className="w-5 h-5" />, label: 'Centro de Mando', path: '/monitor' },
-    { icon: <ShoppingBag className="w-5 h-5" />, label: 'Caja', path: '/billing' },
+    // Pasamos el state con patientId si existe, para que Caja abra con el paciente seleccionado
+    { icon: <ShoppingBag className="w-5 h-5" />, label: 'Caja', path: '/billing', state: currentPatientId ? { patientId: currentPatientId } : undefined },
     { icon: <History className="w-5 h-5" />, label: 'Archivo Histórico', path: '/history-registry' },
     { icon: <Calendar className="w-5 h-5" />, label: 'Agenda Operativa', path: '/agenda' },
     { icon: <Package className="w-5 h-5" />, label: 'Farmacia / Stock', path: '/inventory' },
@@ -90,6 +96,7 @@ function Layout({ children, currentModule, onModuleChange, doctorInfo }: any) {
               <Link 
                 key={item.label} 
                 to={item.path} 
+                state={(item as any).state}
                 title={item.label}
                 className={`flex items-center justify-center lg:justify-start px-0 lg:px-4 py-3 rounded-2xl transition-all group ${location.pathname === item.path ? 'bg-slate-900 text-white shadow-xl' : 'text-slate-600 hover:bg-slate-50'}`}
               >

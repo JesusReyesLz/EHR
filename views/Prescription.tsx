@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { 
@@ -8,10 +7,12 @@ import {
   MapPin, Phone, User, Landmark,
   FileCheck,
   CheckCircle2,
-  ArrowRight
+  ArrowRight,
+  Stethoscope,
+  X
 } from 'lucide-react';
-import { Patient, MedicationPrescription, MedicationStock, Vitals, DoctorInfo, ClinicalNote } from '../types';
-import { VADEMECUM_DB, INITIAL_STOCK } from '../constants';
+import { Patient, MedicationPrescription, MedicationStock, Vitals, DoctorInfo, ClinicalNote, PriceItem, PriceType } from '../types';
+import { VADEMECUM_DB, INITIAL_STOCK, INITIAL_PRICES } from '../constants';
 
 const Prescription: React.FC<{ patients: Patient[], doctorInfo: DoctorInfo, onSaveNote: (n: ClinicalNote) => void }> = ({ patients, doctorInfo, onSaveNote }) => {
   const { id } = useParams();
@@ -23,9 +24,16 @@ const Prescription: React.FC<{ patients: Patient[], doctorInfo: DoctorInfo, onSa
   const [isSaved, setIsSaved] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   
+  // Estado para el tipo de búsqueda (Fármaco o Procedimiento)
+  const [searchType, setSearchType] = useState<'med' | 'proc'>('med');
+
   // Modificado: Ahora las sugerencias incluyen el dato de stock total
   const [suggestions, setSuggestions] = useState<(MedicationStock & { totalStock: number })[]>([]);
+  const [procSuggestions, setProcSuggestions] = useState<PriceItem[]>([]);
   
+  // Lista de Procedimientos seleccionados (sencilla, solo para cobro/info)
+  const [selectedProcedures, setSelectedProcedures] = useState<PriceItem[]>([]);
+
   // Cargar inventario real desde LocalStorage O usar INITIAL_STOCK por defecto
   const inventory: MedicationStock[] = useMemo(() => {
     const saved = localStorage.getItem('med_inventory_v6');
@@ -39,6 +47,11 @@ const Prescription: React.FC<{ patients: Patient[], doctorInfo: DoctorInfo, onSa
         }));
     }
     return data;
+  }, []);
+
+  const prices: PriceItem[] = useMemo(() => {
+    const saved = localStorage.getItem('med_price_catalog_v1');
+    return saved ? JSON.parse(saved) : INITIAL_PRICES;
   }, []);
   
   const dataFromNote = location.state as { diagnosis?: string, meds?: MedicationPrescription[], generalPlan?: string, cieCode?: string } | null;
@@ -58,11 +71,17 @@ const Prescription: React.FC<{ patients: Patient[], doctorInfo: DoctorInfo, onSa
     if (patient) setVitals(patient.currentVitals || null);
   }, [patient]);
 
-  const handleSearchMed = (val: string) => {
+  const handleSearch = (val: string) => {
     setSearchTerm(val);
-    if (val.length > 1) {
-      const term = val.toLowerCase();
+    if (val.length <= 1) {
+       setSuggestions([]);
+       setProcSuggestions([]);
+       return;
+    }
 
+    const term = val.toLowerCase();
+
+    if (searchType === 'med') {
       // 1. Buscar en INVENTARIO REAL (Suma de lotes)
       const stockMatches = inventory.filter(i => 
         i.name.toLowerCase().includes(term) || 
@@ -84,12 +103,16 @@ const Prescription: React.FC<{ patients: Patient[], doctorInfo: DoctorInfo, onSa
 
       setSuggestions([...stockMatches, ...catalogMatches]);
     } else {
-      setSuggestions([]);
+      // Buscar en Catálogo de Servicios
+      const serviceMatches = prices.filter(p => 
+         p.type === PriceType.SERVICE && 
+         (p.name.toLowerCase().includes(term) || p.code.toLowerCase().includes(term))
+      );
+      setProcSuggestions(serviceMatches);
     }
   };
 
   const selectMedFromDB = (med: MedicationStock & { totalStock: number }) => {
-    // Ya NO bloquea si stock es 0, solo es informativo en la UI de búsqueda
     const newMed: MedicationPrescription = {
       id: `MED-${Date.now()}`,
       name: med.name,
@@ -104,6 +127,12 @@ const Prescription: React.FC<{ patients: Patient[], doctorInfo: DoctorInfo, onSa
     setMedications([...medications, newMed]);
     setSearchTerm('');
     setSuggestions([]);
+  };
+
+  const selectProcedure = (proc: PriceItem) => {
+     setSelectedProcedures([...selectedProcedures, proc]);
+     setSearchTerm('');
+     setProcSuggestions([]);
   };
 
   const addManualTreatment = () => {
@@ -125,8 +154,8 @@ const Prescription: React.FC<{ patients: Patient[], doctorInfo: DoctorInfo, onSa
   };
 
   const handleSaveToExpedient = () => {
-    if (medications.length === 0) {
-      alert("Debe agregar al menos un medicamento para guardar la receta.");
+    if (medications.length === 0 && selectedProcedures.length === 0) {
+      alert("Debe agregar al menos un medicamento o procedimiento para guardar.");
       return;
     }
 
@@ -140,6 +169,7 @@ const Prescription: React.FC<{ patients: Patient[], doctorInfo: DoctorInfo, onSa
         diagnosis: prescriptionData.diagnostico,
         cieCode: prescriptionData.cieCode,
         meds: medications,
+        procedures: selectedProcedures, // Guardamos procedimientos
         instructions: prescriptionData.indicaciones,
         folio: prescriptionData.folio,
         vitals: vitals
@@ -180,17 +210,23 @@ const Prescription: React.FC<{ patients: Patient[], doctorInfo: DoctorInfo, onSa
         <div className="flex gap-3 items-center">
            {!isPreview && !isSaved && (
              <div className="flex items-center gap-3">
+                <div className="flex bg-slate-100 p-1 rounded-xl gap-1">
+                   <button onClick={() => setSearchType('med')} className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase transition-all ${searchType === 'med' ? 'bg-white shadow text-blue-600' : 'text-slate-400'}`}>Fármacos</button>
+                   <button onClick={() => setSearchType('proc')} className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase transition-all ${searchType === 'proc' ? 'bg-white shadow text-indigo-600' : 'text-slate-400'}`}>Procedimientos</button>
+                </div>
                 <div className="relative">
                    <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
                    <input 
                      className="pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-[10px] font-black uppercase outline-none focus:bg-white w-64 shadow-sm transition-all focus:ring-2 focus:ring-blue-100" 
-                     placeholder="Buscar fármaco en stock..." 
+                     placeholder={searchType === 'med' ? "Buscar fármaco..." : "Buscar servicio/procedimiento..."}
                      value={searchTerm} 
-                     onChange={e => handleSearchMed(e.target.value)} 
+                     onChange={e => handleSearch(e.target.value)} 
                    />
-                   {suggestions.length > 0 && (
+                   
+                   {/* Resultados de búsqueda */}
+                   {(suggestions.length > 0 || procSuggestions.length > 0) && (
                      <div className="absolute top-full left-0 w-96 mt-2 bg-white border border-slate-200 rounded-2xl shadow-2xl z-[100] overflow-hidden animate-in zoom-in-95 max-h-80 overflow-y-auto custom-scrollbar">
-                        {suggestions.map(s => (
+                        {searchType === 'med' ? suggestions.map(s => (
                           <button key={s.id} onClick={() => selectMedFromDB(s)} className="w-full text-left p-4 hover:bg-slate-50 border-b border-slate-50 last:border-0 transition-colors flex justify-between items-center group">
                             <div>
                                <p className="text-[10px] font-black uppercase text-slate-900">{s.name}</p>
@@ -200,11 +236,19 @@ const Prescription: React.FC<{ patients: Patient[], doctorInfo: DoctorInfo, onSa
                                {s.totalStock > 0 ? `Stock: ${s.totalStock}` : 'Agotado (Ext.)'}
                             </div>
                           </button>
+                        )) : procSuggestions.map(p => (
+                          <button key={p.id} onClick={() => selectProcedure(p)} className="w-full text-left p-4 hover:bg-indigo-50 border-b border-slate-50 last:border-0 transition-colors flex justify-between items-center group">
+                            <div>
+                               <p className="text-[10px] font-black uppercase text-indigo-900">{p.name}</p>
+                               <p className="text-[8px] text-slate-400 font-bold uppercase">{p.category}</p>
+                            </div>
+                            <div className="text-[9px] font-black text-indigo-600">${p.price}</div>
+                          </button>
                         ))}
                      </div>
                    )}
                 </div>
-                <button onClick={addManualTreatment} className="px-5 py-2.5 bg-slate-100 text-slate-600 border border-slate-200 rounded-xl font-black text-[9px] uppercase hover:bg-white transition-all">+ Manual</button>
+                {searchType === 'med' && <button onClick={addManualTreatment} className="px-5 py-2.5 bg-slate-100 text-slate-600 border border-slate-200 rounded-xl font-black text-[9px] uppercase hover:bg-white transition-all">+ Manual</button>}
              </div>
            )}
            
@@ -271,10 +315,27 @@ const Prescription: React.FC<{ patients: Patient[], doctorInfo: DoctorInfo, onSa
                     </div>
                   </div>
                 ))}
-                {medications.length === 0 && (
+                
+                {/* LISTA DE PROCEDIMIENTOS SELECCIONADOS (SUTIL) */}
+                {selectedProcedures.length > 0 && (
+                   <div className="space-y-2 pt-4">
+                      <p className="text-[9px] font-black text-indigo-600 uppercase tracking-widest ml-2 flex items-center gap-1"><Stethoscope size={10}/> Procedimientos / Servicios Adicionales</p>
+                      {selectedProcedures.map((proc, i) => (
+                         <div key={i} className="flex justify-between items-center p-3 bg-indigo-50 border border-indigo-100 rounded-xl">
+                            <span className="text-[10px] font-bold text-indigo-900 uppercase">{proc.name}</span>
+                            <div className="flex items-center gap-4">
+                               <span className="text-[10px] font-black text-indigo-700">${proc.price}</span>
+                               <button onClick={() => setSelectedProcedures(selectedProcedures.filter((_, idx) => idx !== i))} className="text-indigo-400 hover:text-rose-500"><X size={14}/></button>
+                            </div>
+                         </div>
+                      ))}
+                   </div>
+                )}
+
+                {medications.length === 0 && selectedProcedures.length === 0 && (
                     <div className="py-20 text-center opacity-30">
                         <Pill size={48} className="mx-auto mb-4 text-slate-400" />
-                        <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Utilice el buscador superior para agregar fármacos</p>
+                        <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Utilice el buscador superior para agregar fármacos o procedimientos</p>
                     </div>
                 )}
               </div>
@@ -302,21 +363,21 @@ const Prescription: React.FC<{ patients: Patient[], doctorInfo: DoctorInfo, onSa
       ) : (
         <div className="bg-white shadow-2xl rounded-[3.5rem] overflow-hidden flex flex-col print:shadow-none print:rounded-none">
            {/* El componente de impresión PrescriptionDoc se reutiliza aquí */}
-           <PrescriptionDoc patient={patient} vitals={vitals} meds={medications} data={prescriptionData} doctor={doctorInfo} label="ORIGINAL - EXPEDIENTE" />
+           <PrescriptionDoc patient={patient} vitals={vitals} meds={medications} procedures={selectedProcedures} data={prescriptionData} doctor={doctorInfo} label="ORIGINAL - EXPEDIENTE" />
            <div className="h-12 bg-slate-50 flex items-center justify-center no-print border-y border-slate-100 relative">
               <div className="w-full border-t-2 border-dashed border-slate-300 mx-10"></div>
               <span className="absolute px-8 py-1.5 bg-white border border-slate-200 rounded-full text-[9px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-3">
                 <Landmark size={12} /> Copia Paciente / Farmacia
               </span>
            </div>
-           <PrescriptionDoc patient={patient} vitals={vitals} meds={medications} data={prescriptionData} doctor={doctorInfo} label="COPIA - PACIENTE" />
+           <PrescriptionDoc patient={patient} vitals={vitals} meds={medications} procedures={selectedProcedures} data={prescriptionData} doctor={doctorInfo} label="COPIA - PACIENTE" />
         </div>
       )}
     </div>
   );
 };
 
-const PrescriptionDoc = ({ patient, vitals, meds, data, doctor, label }: any) => (
+const PrescriptionDoc = ({ patient, vitals, meds, procedures, data, doctor, label }: any) => (
   <div className="relative p-12 bg-white flex flex-col border-b border-slate-100 last:border-b-0 print:p-10 print:h-[50vh]">
      <div className="flex justify-between border-b-4 border-slate-900 pb-6 mb-8">
         <div className="flex gap-6">
@@ -374,7 +435,7 @@ const PrescriptionDoc = ({ patient, vitals, meds, data, doctor, label }: any) =>
               </p>
            </div>
 
-           <div className="space-y-5 min-h-[200px]">
+           <div className="space-y-5 min-h-[150px]">
               <div className="flex items-center gap-3 mb-4">
                  <span className="text-[18px] font-black text-slate-900 italic">Rp.</span>
                  <div className="h-[2px] flex-1 bg-slate-900/5"></div>
@@ -394,6 +455,18 @@ const PrescriptionDoc = ({ patient, vitals, meds, data, doctor, label }: any) =>
                  ))}
               </div>
            </div>
+           
+           {/* Sección de Procedimientos en Impresión */}
+           {procedures && procedures.length > 0 && (
+              <div className="space-y-3 pt-2">
+                 <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 pb-1">Procedimientos Realizados / Solicitados</p>
+                 <div className="space-y-1">
+                    {procedures.map((p: any, i: number) => (
+                       <p key={i} className="text-[10px] font-bold text-slate-700 uppercase">• {p.name}</p>
+                    ))}
+                 </div>
+              </div>
+           )}
 
            <div className="pt-4 border-t-2 border-slate-100">
               <h4 className="text-[8px] font-black text-slate-900 uppercase tracking-widest flex items-center gap-2 mb-2">
