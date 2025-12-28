@@ -7,8 +7,9 @@ export enum ModuleType {
   ADMIN = 'Gestión y Normatividad',
   INVENTORY = 'Inventario Farmacéutico',
   MONITOR = 'Monitor Hospitalario',
-  BILLING = 'Caja y Facturación', // NUEVO
-  PRICING = 'Catálogo de Precios' // NUEVO
+  BILLING = 'Caja y Facturación', 
+  PRICING = 'Catálogo de Precios',
+  FINANCE = 'Finanzas y Compras' // NUEVO
 }
 
 export enum PatientStatus {
@@ -61,6 +62,41 @@ export enum SupplyType {
   OTHER = 'Diverso'
 }
 
+// --- TIPOS FINANCIEROS Y DE COMPRAS ---
+
+export interface Expense {
+  id: string;
+  date: string;
+  category: 'Compra Medicamento' | 'Servicios' | 'Nómina' | 'Mantenimiento' | 'Otro';
+  concept: string;
+  amount: number;
+  supplier?: string;
+  paymentMethod: 'Efectivo Caja' | 'Transferencia Bancaria' | 'Tarjeta Corporativa';
+  status: 'Pagado' | 'Pendiente';
+  ticketReference?: string;
+}
+
+export interface PurchaseOrderItem {
+  inventoryId: string;
+  name: string;
+  quantity: number;
+  unitCost: number;
+  total: number;
+}
+
+export interface PurchaseOrder {
+  id: string;
+  date: string;
+  supplier: string;
+  items: PurchaseOrderItem[];
+  subtotal: number;
+  tax: number;
+  total: number;
+  status: 'Borrador' | 'Enviada' | 'Recibida' | 'Cancelada' | 'Pagada';
+  expectedDelivery?: string;
+  notes?: string;
+}
+
 // --- NUEVOS TIPOS PARA FACTURACIÓN Y PRECIOS ---
 
 export enum PriceType {
@@ -77,7 +113,12 @@ export interface PriceItem {
   category: string; // Consulta, Farmacia, Lab, etc.
   price: number;
   taxPercent: number; // IVA
-  linkedInventoryId?: string; // Para vincular con el stock físico
+  linkedInventoryId?: string; // Para venta directa de producto (1 a 1)
+  consumables?: { // Para servicios que consumen stock (ej. Sutura consume hilo + gasas)
+      inventoryId: string;
+      quantity: number;
+      nameReference?: string; // Solo visual
+  }[];
 }
 
 export interface ChargeItem {
@@ -86,22 +127,91 @@ export interface ChargeItem {
   concept: string;
   quantity: number;
   unitPrice: number;
+  discount?: number; // Monto descuento
+  tax: number;
   total: number;
   type: 'Farmacia' | 'Honorarios' | 'Hospitalizacion' | 'Estudios' | 'Otro';
-  status: 'Pendiente' | 'Pagado' | 'Cancelado';
+  status: 'Pendiente' | 'Pagado' | 'Cancelado' | 'Reembolsado';
   sourceId?: string; // ID de la nota, receta o venta de farmacia que generó el cargo
-  linkedInventoryId?: string; // ID del producto en inventario para reversión
+  linkedInventoryId?: string; // ID del producto en inventario para reversión directa
+  consumables?: { // Copia de los consumibles del PriceItem al momento de la venta
+      inventoryId: string;
+      quantity: number;
+  }[];
+}
+
+export interface PaymentDetail {
+  method: 'Efectivo' | 'Tarjeta Crédito' | 'Tarjeta Débito' | 'Transferencia' | 'Seguro' | 'Cheque';
+  amount: number;
+  reference?: string; // Voucher o Folio
+}
+
+export interface Transaction {
+  id: string; // Folio de Ticket
+  date: string;
+  patientId: string;
+  patientName: string;
+  items: ChargeItem[];
+  subtotal: number;
+  taxes: number;
+  discountTotal: number;
+  total: number;
+  payments: PaymentDetail[];
+  change: number; // Cambio entregado
+  status: 'Completada' | 'Cancelada' | 'Reembolsada Parcial';
+  cashier: string;
+  shiftId: string; // Vinculo al corte de caja
+  notes?: string; // Observaciones internas (ej. motivo de descuento)
+  // NUEVOS CAMPOS PARA HISTORIAL UNIFICADO
+  category?: 'VENTA' | 'MOVIMIENTO' | 'TURNO'; 
+  movementType?: 'INGRESO' | 'RETIRO' | 'APERTURA' | 'CIERRE';
+}
+
+export interface CashMovement {
+  id: string;
+  type: 'INGRESO' | 'RETIRO'; // Vales
+  amount: number;
+  reason: string;
+  date: string;
+  user: string;
+}
+
+export interface CashShift {
+  id: string;
+  status: 'Abierto' | 'Cerrado';
+  openedAt: string;
+  closedAt?: string;
+  openedBy: string;
+  closedBy?: string;
+  initialCash: number;
+  finalCashCount?: number; // Lo que contó el cajero
+  amountLeftForNextShift?: number; // NUEVO: Monto dejado en caja para el siguiente turno
+  movements?: CashMovement[]; // Vales y retiros
+  systemTotals: {
+    cash: number;
+    card: number;
+    transfer: number;
+    other: number;
+    total: number;
+    // Campos extendidos para reporte detallado
+    cashSales?: number;
+    cashIn?: number;
+    cashOut?: number;
+    netCash?: number;
+    totalSales?: number;
+  };
+  discrepancy?: number; // Sobrante o Faltante
 }
 
 export interface PatientAccount {
   patientId: string;
-  charges: ChargeItem[];
-  payments: Payment[];
+  charges: ChargeItem[]; // Cargos PENDIENTES por pagar
+  // payments: Payment[]; // DEPRECATED: Usar Transaction para historial
   balance: number;
   status: 'Abierta' | 'Cerrada';
 }
 
-export interface Payment {
+export interface Payment { // Legacy support
   id: string;
   date: string;
   amount: number;

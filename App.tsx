@@ -1,10 +1,10 @@
 
 import React, { useState, useEffect } from 'react';
-import { HashRouter as Router, Routes, Route, Navigate, Link, useLocation } from 'react-router-dom';
+import { HashRouter as Router, Routes, Route, Navigate, Link, useLocation, useNavigate } from 'react-router-dom';
 import { 
   Users, Calendar, Settings, ShieldCheck, LogOut, ClipboardList,
   FileSpreadsheet, Package, Monitor as MonitorIcon, History, FileText,
-  Activity, FlaskConical, HeartPulse, Bed
+  Activity, FlaskConical, HeartPulse, Bed, ShoppingBag, Tag, PieChart
 } from 'lucide-react';
 import Dashboard from './views/Dashboard';
 import PatientProfile from './views/PatientProfile';
@@ -38,66 +38,104 @@ import StomatologyExpedient from './views/StomatologyExpedient';
 import EpidemiologyStudy from './views/EpidemiologyStudy';
 import TelemedicineConsent from './views/TelemedicineConsent';
 import HospitalMonitor from './views/HospitalMonitor';
+import Billing from './views/Billing';
+import PriceCatalog from './views/PriceCatalog';
+import Finance from './views/Finance';
 import { ModuleType, Patient, ClinicalNote, PatientStatus, PriorityLevel, DoctorInfo, AgendaStatus } from './types';
 import { INITIAL_PATIENTS } from './constants';
 
 function Layout({ children, currentModule, onModuleChange, doctorInfo }: any) {
   const location = useLocation();
+  const navigate = useNavigate();
+  
+  // Detectar si estamos en un perfil de paciente para mantener el contexto
+  const patientMatch = location.pathname.match(/\/patient\/([^/]+)/);
+  const currentPatientId = patientMatch ? patientMatch[1] : null;
+
   const menuItems = [
-    { icon: <Users className="w-5 h-5" />, label: 'Monitor Activo', path: '/' },
-    { icon: <MonitorIcon className="w-5 h-5" />, label: 'Centro de Mando', path: '/monitor' },
-    { icon: <History className="w-5 h-5" />, label: 'Archivo Histórico', path: '/history-registry' },
-    { icon: <Calendar className="w-5 h-5" />, label: 'Agenda Operativa', path: '/agenda' },
-    { icon: <Package className="w-5 h-5" />, label: 'Farmacia / Stock', path: '/inventory' },
-    { icon: <FileSpreadsheet className="w-5 h-5" />, label: 'Hoja Diaria (SUIVE)', path: '/daily-report' },
-    { icon: <ClipboardList className="w-5 h-5" />, label: 'Bitácoras', path: '/logs' },
-    { icon: <Settings className="w-5 h-5" />, label: 'Configuración', path: '/settings' },
+    { icon: <Users className="w-4 h-4" />, label: 'Monitor Activo', path: '/' },
+    { icon: <MonitorIcon className="w-4 h-4" />, label: 'Centro de Mando', path: '/monitor' },
+    // Accesos directos a Finanzas y Caja
+    { icon: <ShoppingBag className="w-4 h-4" />, label: 'Caja / Tickets', path: '/billing', state: currentPatientId ? { patientId: currentPatientId } : undefined },
+    { icon: <PieChart className="w-4 h-4" />, label: 'Finanzas', path: '/finance' },
+    // Fin Módulos Financieros
+    { icon: <History className="w-4 h-4" />, label: 'Archivo Histórico', path: '/history-registry' },
+    { icon: <Calendar className="w-4 h-4" />, label: 'Agenda Operativa', path: '/agenda' },
+    { icon: <Package className="w-4 h-4" />, label: 'Farmacia / Stock', path: '/inventory' },
+    { icon: <Tag className="w-4 h-4" />, label: 'Catálogo Precios', path: '/prices' },
+    { icon: <FileSpreadsheet className="w-4 h-4" />, label: 'Hoja Diaria (SUIVE)', path: '/daily-report' },
+    { icon: <ClipboardList className="w-4 h-4" />, label: 'Bitácoras', path: '/logs' },
+    { icon: <Settings className="w-4 h-4" />, label: 'Configuración', path: '/settings' },
   ];
 
-  const modules = [ModuleType.OUTPATIENT, ModuleType.EMERGENCY, ModuleType.HOSPITALIZATION, ModuleType.AUXILIARY];
+  // AGREGADOS BILLING Y FINANCE AL TOP BAR PARA ACCESO RÁPIDO
+  const modules = [
+    ModuleType.OUTPATIENT, 
+    ModuleType.EMERGENCY, 
+    ModuleType.HOSPITALIZATION, 
+    ModuleType.AUXILIARY,
+    ModuleType.BILLING,
+    ModuleType.FINANCE
+  ];
 
   return (
     <div className="min-h-screen flex flex-col bg-slate-50 text-slate-900">
       <nav className="bg-white border-b border-slate-200 sticky top-0 z-[60] shadow-sm no-print">
-        <div className="max-w-full px-6 flex justify-between h-16 items-center">
-          <div className="flex items-center gap-8">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center shadow-lg"><ShieldCheck className="text-white w-6 h-6" /></div>
-              <span className="text-xl font-black tracking-tighter uppercase hidden md:block">MedExpediente <span className="text-blue-600">MX</span></span>
+        <div className="max-w-full px-2 lg:px-6 flex justify-between h-16 items-center gap-2">
+          {/* Left Section: Logo */}
+          <div className="flex items-center gap-4 flex-1 min-w-0"> 
+            <div className="flex items-center gap-3 shrink-0">
+              <div className="w-8 h-8 lg:w-10 lg:h-10 bg-blue-600 rounded-xl flex items-center justify-center shadow-lg"><ShieldCheck className="text-white w-5 h-5 lg:w-6 lg:h-6" /></div>
+              <span className="text-xl font-black tracking-tighter uppercase block">MedExpediente <span className="text-blue-600">MX</span></span>
             </div>
-            <div className="hidden lg:flex items-center bg-slate-100 rounded-xl p-1 gap-1">
+            <div className="hidden xl:flex items-center bg-slate-100 rounded-xl p-1 gap-1 overflow-x-auto no-scrollbar">
               {modules.map((mod) => (
                 <button
                   key={mod}
-                  onClick={() => onModuleChange(mod)}
-                  className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${currentModule === mod ? 'bg-white text-blue-700 shadow-sm border border-slate-200' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/50'}`}
+                  onClick={() => {
+                      if (location.pathname !== '/') navigate('/');
+                      onModuleChange(mod);
+                  }}
+                  className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${currentModule === mod ? 'bg-white text-blue-700 shadow-sm border border-slate-200' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/50'}`}
                 >
-                  {mod}
+                  {mod === ModuleType.BILLING ? 'Caja / Tickets' : mod === ModuleType.FINANCE ? 'Finanzas' : mod}
                 </button>
               ))}
             </div>
           </div>
-          <div className="flex items-center gap-6">
-            <div className="text-right hidden sm:block">
+          
+          {/* Right Section: User Info & Logout */}
+          <div className="flex items-center gap-3 shrink-0">
+            <div className="text-right hidden md:block">
               <p className="text-xs font-black uppercase tracking-tighter">Dr. {doctorInfo?.name}</p>
               <p className="text-[9px] font-bold text-blue-600 uppercase">Cédula: {doctorInfo?.cedula}</p>
             </div>
-            <button className="p-2.5 text-slate-500 hover:text-red-600 bg-slate-50 rounded-xl border border-slate-100"><LogOut className="w-5 h-5" /></button>
+            <button className="p-2 lg:p-2.5 text-slate-500 hover:text-red-600 bg-slate-50 rounded-xl border border-slate-100"><LogOut className="w-5 h-5" /></button>
           </div>
         </div>
       </nav>
+      
       <div className="flex flex-1 overflow-hidden">
-        <aside className="w-20 lg:w-72 bg-white border-r border-slate-200 fixed left-0 top-16 h-full z-50 no-print">
-          <div className="py-8 px-4 space-y-2">
+        {/* Sidebar Navigation */}
+        <aside className="w-16 lg:w-60 bg-white border-r border-slate-200 fixed left-0 top-16 h-full z-50 no-print flex flex-col transition-all duration-300">
+          <div className="flex-1 py-2 lg:py-4 px-2 lg:px-3 space-y-1 overflow-y-auto custom-scrollbar">
             {menuItems.map((item) => (
-              <Link key={item.label} to={item.path} className={`flex items-center px-4 py-3.5 rounded-2xl transition-all ${location.pathname === item.path ? 'bg-slate-900 text-white shadow-xl' : 'text-slate-600 hover:bg-slate-50'}`}>
-                <div className={location.pathname === item.path ? 'text-blue-400' : 'text-slate-500'}>{item.icon}</div>
-                <span className="ml-4 font-black text-xs uppercase tracking-widest hidden lg:block">{item.label}</span>
+              <Link 
+                key={item.label} 
+                to={item.path} 
+                state={(item as any).state}
+                title={item.label}
+                className={`flex items-center justify-center lg:justify-start px-0 lg:px-3 py-2.5 rounded-xl transition-all group ${location.pathname === item.path ? 'bg-slate-900 text-white shadow-md' : 'text-slate-600 hover:bg-slate-50'}`}
+              >
+                <div className={`shrink-0 ${location.pathname === item.path ? 'text-blue-400' : 'text-slate-500'}`}>{item.icon}</div>
+                <span className="ml-3 font-black text-[10px] uppercase tracking-widest hidden lg:block whitespace-nowrap overflow-hidden text-ellipsis">{item.label}</span>
               </Link>
             ))}
           </div>
         </aside>
-        <main className="flex-1 ml-20 lg:ml-72 p-8 overflow-y-auto">{children}</main>
+        
+        {/* Main Content Area */}
+        <main className="flex-1 ml-16 lg:ml-60 p-4 lg:p-8 overflow-y-auto transition-all duration-300 w-full">{children}</main>
       </div>
     </div>
   );
@@ -124,7 +162,6 @@ const App: React.FC = () => {
     setPatients(prev => prev.map(p => p.id === id ? { ...p, priority } : p));
   };
 
-  // Función inteligente para guardar (nuevo) o actualizar (existente) paciente
   const handleSavePatient = (p: Patient) => {
     setPatients(prev => {
       const index = prev.findIndex(item => item.id === p.id);
@@ -143,7 +180,10 @@ const App: React.FC = () => {
     <Router>
       <Layout currentModule={currentModule} onModuleChange={setCurrentModule} doctorInfo={doctorInfo}>
         <Routes>
-          <Route path="/" element={<Dashboard module={currentModule} patients={patients} onUpdateStatus={updatePatientStatus} onUpdatePriority={updatePatientPriority} onModuleChange={setCurrentModule} onUpdatePatient={updatePatient} doctorInfo={doctorInfo} />} />
+          <Route path="/" element={<Dashboard module={currentModule} patients={patients} notes={notes} onUpdateStatus={updatePatientStatus} onUpdatePriority={updatePatientPriority} onModuleChange={setCurrentModule} onUpdatePatient={updatePatient} doctorInfo={doctorInfo} />} />
+          <Route path="/billing" element={<Billing patients={patients} notes={notes} />} />
+          <Route path="/prices" element={<PriceCatalog />} />
+          <Route path="/finance" element={<Finance />} />
           <Route path="/patient/:id" element={<PatientProfile patients={patients} notes={notes} onUpdatePatient={updatePatient} onSaveNote={addNote} doctorInfo={doctorInfo} />} />
           <Route path="/patient/:id/nursing-sheet" element={<NursingSheet patients={patients} onSaveNote={addNote} onUpdatePatient={updatePatient} />} />
           <Route path="/patient/:id/auxiliary-report" element={<AuxiliaryReport patients={patients} onSaveNote={addNote} onUpdatePatient={updatePatient} />} />

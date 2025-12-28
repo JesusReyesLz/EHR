@@ -8,11 +8,14 @@ import {
   ChevronDown, MapPinned, Users, Info, X, Check, Timer, ArrowRight,
   ShoppingBag
 } from 'lucide-react';
-import { ModuleType, Patient, PatientStatus, PriorityLevel, AgendaStatus } from '../types';
+import { ModuleType, Patient, PatientStatus, PriorityLevel, AgendaStatus, ClinicalNote } from '../types';
+import Billing from './Billing';
+import Finance from './Finance';
 
 interface DashboardProps {
   module: ModuleType;
   patients: Patient[];
+  notes: ClinicalNote[];
   onUpdateStatus: (id: string, status: PatientStatus) => void;
   onUpdatePriority: (id: string, priority: PriorityLevel) => void;
   onModuleChange: (mod: ModuleType) => void;
@@ -80,13 +83,24 @@ const TriageDropdown: React.FC<{
 };
 
 const Dashboard: React.FC<DashboardProps> = ({ 
-  module, patients, onUpdateStatus, onUpdatePriority, onModuleChange, onUpdatePatient, doctorInfo 
+  module, patients, notes, onUpdateStatus, onUpdatePriority, onModuleChange, onUpdatePatient, doctorInfo 
 }) => {
   const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState('');
-  const isAuxiliary = module === ModuleType.AUXILIARY;
   
-  const modules = [ModuleType.OUTPATIENT, ModuleType.EMERGENCY, ModuleType.HOSPITALIZATION, ModuleType.AUXILIARY];
+  // AHORA EL DASHBOARD MANEJA TODOS LOS MÓDULOS PRINCIPALES
+  const isAuxiliary = module === ModuleType.AUXILIARY;
+  const isBilling = module === ModuleType.BILLING;
+  const isFinance = module === ModuleType.FINANCE;
+  
+  const modules = [
+    ModuleType.OUTPATIENT, 
+    ModuleType.EMERGENCY, 
+    ModuleType.HOSPITALIZATION, 
+    ModuleType.AUXILIARY, 
+    ModuleType.BILLING,
+    ModuleType.FINANCE
+  ];
 
   const filteredPatients = patients.filter(p => {
     const search = cleanStr(searchTerm);
@@ -113,6 +127,46 @@ const Dashboard: React.FC<DashboardProps> = ({
     }
   };
 
+  const ModuleSelector = () => (
+    <div className="flex flex-wrap items-center gap-1.5 bg-slate-100 p-1.5 rounded-2xl w-full lg:w-fit overflow-x-auto no-scrollbar mb-4">
+      {modules.map(mod => (
+        <button
+          key={mod}
+          onClick={() => onModuleChange(mod)}
+          className={`px-4 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest whitespace-nowrap transition-all flex-shrink-0 ${
+            module === mod 
+              ? 'bg-white text-blue-700 shadow-sm' 
+              : 'text-slate-500 hover:text-slate-900 hover:bg-slate-200/50'
+          }`}
+        >
+          {mod === ModuleType.BILLING ? 'Caja / Tickets' : mod === ModuleType.FINANCE ? 'Finanzas' : mod}
+        </button>
+      ))}
+    </div>
+  );
+
+  if (isFinance) {
+    return (
+      <div className="max-w-full space-y-6 animate-in fade-in duration-500">
+        <ModuleSelector />
+        <div className="-mt-4">
+           <Finance />
+        </div>
+      </div>
+    );
+  }
+
+  if (isBilling) {
+    return (
+      <div className="max-w-full space-y-6 animate-in fade-in duration-500">
+        <ModuleSelector />
+        <div className="-mt-4">
+           <Billing patients={patients} notes={notes} />
+        </div>
+      </div>
+    );
+  }
+
   if (isAuxiliary) {
     const waiting = filteredPatients.filter(p => p.status === PatientStatus.WAITING_FOR_SAMPLES);
     const taking = filteredPatients.filter(p => p.status === PatientStatus.TAKING_SAMPLES);
@@ -120,29 +174,7 @@ const Dashboard: React.FC<DashboardProps> = ({
 
     return (
       <div className="max-w-full space-y-6 animate-in fade-in duration-500">
-        
-        {/* Module Selector - Integrated within Dashboard */}
-        <div className="flex flex-wrap items-center gap-1.5 bg-slate-100 p-1.5 rounded-2xl w-full lg:w-fit overflow-x-auto no-scrollbar mb-4">
-          {modules.map(mod => (
-            <button
-              key={mod}
-              onClick={() => onModuleChange(mod)}
-              className={`px-4 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest whitespace-nowrap transition-all flex-shrink-0 ${
-                module === mod 
-                  ? 'bg-white text-blue-700 shadow-sm' 
-                  : 'text-slate-500 hover:text-slate-900 hover:bg-slate-200/50'
-              }`}
-            >
-              {mod}
-            </button>
-          ))}
-          <button
-            onClick={() => navigate('/billing')}
-            className="px-4 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest whitespace-nowrap transition-all flex-shrink-0 text-slate-500 hover:text-slate-900 hover:bg-slate-200/50 flex items-center gap-2"
-          >
-            <ShoppingBag size={14} className="mb-0.5" /> Caja / Tickets
-          </button>
-        </div>
+        <ModuleSelector />
 
         <div className="flex justify-between items-end">
           <div className="space-y-2">
@@ -232,28 +264,7 @@ const Dashboard: React.FC<DashboardProps> = ({
   return (
     <div className="max-w-full space-y-6 animate-in fade-in duration-500">
       
-      {/* Module Selector - Integrated within Dashboard */}
-      <div className="flex flex-wrap items-center gap-1.5 bg-slate-100 p-1.5 rounded-2xl w-full lg:w-fit overflow-x-auto no-scrollbar mb-4">
-        {modules.map(mod => (
-          <button
-            key={mod}
-            onClick={() => onModuleChange(mod)}
-            className={`px-4 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest whitespace-nowrap transition-all flex-shrink-0 ${
-              module === mod 
-                ? 'bg-white text-blue-700 shadow-sm' 
-                : 'text-slate-500 hover:text-slate-900 hover:bg-slate-200/50'
-            }`}
-          >
-            {mod}
-          </button>
-        ))}
-        <button
-            onClick={() => navigate('/billing')}
-            className="px-4 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest whitespace-nowrap transition-all flex-shrink-0 text-slate-500 hover:text-slate-900 hover:bg-slate-200/50 flex items-center gap-2"
-        >
-            <ShoppingBag size={14} className="mb-0.5" /> Caja / Tickets
-        </button>
-      </div>
+      <ModuleSelector />
 
       <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-8">
         <div className="space-y-2">
