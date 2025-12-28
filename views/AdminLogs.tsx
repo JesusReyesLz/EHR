@@ -32,23 +32,35 @@ import {
   Check,
   ChevronRight,
   Eye,
-  FileBadge
+  FileBadge,
+  Palette,
+  Image as ImageIcon,
+  CreditCard,
+  LayoutTemplate,
+  FileImage
 } from 'lucide-react';
 import { BITACORAS, PROTOCOLOS, FORMATOS_VIGENTES } from '../constants';
 
 const AdminLogs: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'bitacoras' | 'protocolos'>('bitacoras');
   const [activeModal, setActiveModal] = useState<string | null>(null);
-  const [showUploadModal, setShowUploadModal] = useState<'protocol' | 'format' | null>(null);
+  
+  // Estado de modales de carga
+  const [showUploadModal, setShowUploadModal] = useState<'protocol' | 'marketing' | null>(null);
+  const [uploadForm, setUploadForm] = useState({ name: '', type: 'Hoja Membretada' });
   
   const [dynamicProtocols, setDynamicProtocols] = useState<string[]>(() => {
     const saved = localStorage.getItem('med_custom_protocols_v1');
     return saved ? JSON.parse(saved) : PROTOCOLOS;
   });
 
-  const [dynamicFormats, setDynamicFormats] = useState<any[]>(() => {
-    const saved = localStorage.getItem('med_custom_formats_v1');
-    return saved ? JSON.parse(saved) : FORMATOS_VIGENTES;
+  const [marketingDocs, setMarketingDocs] = useState<{id: string, name: string, type: string, date: string}[]>(() => {
+    const saved = localStorage.getItem('med_marketing_docs_v1');
+    return saved ? JSON.parse(saved) : [
+      { id: 'm1', name: 'Hoja Membretada Oficial 2024', type: 'Hoja Membretada', date: '2024-01-15' },
+      { id: 'm2', name: 'Tarjeta de Citas (Frente/Vuelta)', type: 'Tarjeta', date: '2024-02-10' },
+      { id: 'm3', name: 'Tríptico Diabetes e Hipertensión', type: 'Tríptico', date: '2024-03-05' }
+    ];
   });
 
   const [logEntries, setLogEntries] = useState<Record<string, any[]>>(() => {
@@ -75,8 +87,8 @@ const AdminLogs: React.FC = () => {
   useEffect(() => {
     localStorage.setItem('med_admin_logs_v1', JSON.stringify(logEntries));
     localStorage.setItem('med_custom_protocols_v1', JSON.stringify(dynamicProtocols));
-    localStorage.setItem('med_custom_formats_v1', JSON.stringify(dynamicFormats));
-  }, [logEntries, dynamicProtocols, dynamicFormats]);
+    localStorage.setItem('med_marketing_docs_v1', JSON.stringify(marketingDocs));
+  }, [logEntries, dynamicProtocols, marketingDocs]);
 
   const getIcon = (iconName: string) => {
     switch(iconName) {
@@ -88,6 +100,16 @@ const AdminLogs: React.FC = () => {
       case 'Flame': return <Flame className="w-7 h-7" />;
       default: return <FileText className="w-7 h-7" />;
     }
+  };
+
+  const getMarketingIcon = (type: string) => {
+      switch(type) {
+          case 'Hoja Membretada': return <FileImage size={24} className="text-indigo-500"/>;
+          case 'Tarjeta': return <CreditCard size={24} className="text-blue-500"/>;
+          case 'Tríptico': return <LayoutTemplate size={24} className="text-rose-500"/>;
+          case 'Infografía': return <ImageIcon size={24} className="text-emerald-500"/>;
+          default: return <FileText size={24} className="text-slate-500"/>;
+      }
   };
 
   const handleAddEntry = (bitacoraId: string, entry: any) => {
@@ -107,6 +129,28 @@ const AdminLogs: React.FC = () => {
       ...prev,
       [bitacoraId]: [newEntry, ...(prev[bitacoraId] || [])]
     }));
+  };
+
+  const handleUpload = () => {
+      if(!uploadForm.name) return;
+      if (showUploadModal === 'protocol') {
+          setDynamicProtocols([...dynamicProtocols, uploadForm.name.toUpperCase()]);
+      } else if (showUploadModal === 'marketing') {
+          setMarketingDocs([...marketingDocs, {
+              id: Date.now().toString(),
+              name: uploadForm.name,
+              type: uploadForm.type,
+              date: new Date().toISOString().split('T')[0]
+          }]);
+      }
+      setShowUploadModal(null);
+      setUploadForm({ name: '', type: 'Hoja Membretada' });
+  };
+
+  const handleDeleteDoc = (id: string) => {
+      if(window.confirm("¿Eliminar este documento?")) {
+          setMarketingDocs(marketingDocs.filter(d => d.id !== id));
+      }
   };
 
   return (
@@ -147,24 +191,115 @@ const AdminLogs: React.FC = () => {
         </div>
       ) : (
         <div className="space-y-12">
+          {/* SECCIÓN 1: MANUALES NORMATIVOS */}
           <div className="space-y-6">
              <div className="flex items-center justify-between border-b-4 border-blue-600 pb-4">
                 <div className="flex items-center gap-3">
                   <BookOpen className="w-6 h-6 text-blue-600" />
-                  <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">Manuales y Protocolos</h3>
+                  <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">Manuales y Protocolos (COFEPRIS)</h3>
                 </div>
                 <button onClick={() => setShowUploadModal('protocol')} className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-slate-900 transition-all shadow-lg"><Upload size={14} /> Subir Manual</button>
              </div>
              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {dynamicProtocols.map(p => (
-                  <div key={p} className="bg-white p-6 rounded-3xl border border-slate-200 flex items-center justify-between hover:shadow-md transition-all group">
+                {dynamicProtocols.map((p, idx) => (
+                  <div key={idx} className="bg-white p-6 rounded-3xl border border-slate-200 flex items-center justify-between hover:shadow-md transition-all group">
                      <div className="flex items-center"><div className="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center mr-5 group-hover:bg-blue-50 transition-colors"><FileText className="w-6 h-6 text-slate-400 group-hover:text-blue-600" /></div><div><p className="text-xs font-black text-slate-800 uppercase tracking-tight">{p}</p><p className="text-[9px] text-slate-400 font-bold uppercase mt-1 tracking-widest">PDF • Oficial</p></div></div>
                      <div className="flex gap-2"><button className="p-4 bg-slate-50 text-slate-400 hover:bg-blue-600 hover:text-white rounded-2xl transition-all shadow-sm"><Download size={18} /></button></div>
                   </div>
                 ))}
              </div>
           </div>
+
+          {/* SECCIÓN 2: IDENTIDAD Y MARKETING */}
+          <div className="space-y-6">
+             <div className="flex items-center justify-between border-b-4 border-indigo-500 pb-4">
+                <div className="flex items-center gap-3">
+                  <Palette className="w-6 h-6 text-indigo-500" />
+                  <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">Identidad Corporativa y Formatos</h3>
+                </div>
+                <button onClick={() => setShowUploadModal('marketing')} className="flex items-center gap-2 px-5 py-2.5 bg-indigo-500 text-white rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-slate-900 transition-all shadow-lg"><Upload size={14} /> Subir Formato</button>
+             </div>
+             
+             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {marketingDocs.map(doc => (
+                    <div key={doc.id} className="bg-white p-6 rounded-3xl border border-slate-200 hover:border-indigo-300 hover:shadow-lg transition-all group flex flex-col justify-between h-48">
+                        <div className="flex justify-between items-start">
+                            <div className="p-3 bg-indigo-50 rounded-2xl">
+                                {getMarketingIcon(doc.type)}
+                            </div>
+                            <span className="px-3 py-1 bg-slate-100 text-slate-500 rounded-lg text-[8px] font-black uppercase">{doc.type}</span>
+                        </div>
+                        <div>
+                            <h4 className="text-sm font-black text-slate-900 uppercase leading-snug">{doc.name}</h4>
+                            <p className="text-[9px] text-slate-400 font-bold mt-1 uppercase">Subido: {doc.date}</p>
+                        </div>
+                        <div className="flex gap-2 pt-4 border-t border-slate-50">
+                            <button className="flex-1 py-2 bg-slate-900 text-white rounded-xl text-[9px] font-black uppercase hover:bg-indigo-600 transition-all flex items-center justify-center gap-2"><Download size={12}/> Descargar</button>
+                            <button onClick={() => handleDeleteDoc(doc.id)} className="p-2 bg-rose-50 text-rose-500 rounded-xl hover:bg-rose-600 hover:text-white transition-all"><Trash2 size={14}/></button>
+                        </div>
+                    </div>
+                ))}
+                {marketingDocs.length === 0 && (
+                    <div className="col-span-full py-12 text-center border-2 border-dashed border-slate-200 rounded-3xl">
+                        <p className="text-slate-400 font-black uppercase text-xs">No hay formatos cargados</p>
+                    </div>
+                )}
+             </div>
+          </div>
         </div>
+      )}
+
+      {/* MODAL DE CARGA GENÉRICO */}
+      {showUploadModal && (
+          <div className="fixed inset-0 z-[300] bg-slate-900/90 backdrop-blur flex items-center justify-center p-4 animate-in fade-in">
+              <div className="bg-white w-full max-w-md rounded-[2.5rem] p-10 shadow-2xl space-y-6">
+                  <div className="flex justify-between items-center">
+                      <h3 className="text-xl font-black text-slate-900 uppercase">
+                          {showUploadModal === 'protocol' ? 'Nuevo Protocolo' : 'Nuevo Formato Gráfico'}
+                      </h3>
+                      <button onClick={() => setShowUploadModal(null)}><X className="text-slate-400" /></button>
+                  </div>
+                  
+                  <div className="space-y-4">
+                      <div className="space-y-2">
+                          <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-2">Nombre del Archivo</label>
+                          <input 
+                            className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-bold uppercase outline-none focus:border-blue-500" 
+                            placeholder="Ej: Tríptico Octubre, Manual RPBI..."
+                            value={uploadForm.name}
+                            onChange={e => setUploadForm({...uploadForm, name: e.target.value})}
+                            autoFocus
+                          />
+                      </div>
+                      
+                      {showUploadModal === 'marketing' && (
+                          <div className="space-y-2">
+                              <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-2">Tipo de Material</label>
+                              <select 
+                                className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-bold uppercase outline-none"
+                                value={uploadForm.type}
+                                onChange={e => setUploadForm({...uploadForm, type: e.target.value})}
+                              >
+                                  <option>Hoja Membretada</option>
+                                  <option>Tarjeta</option>
+                                  <option>Tríptico</option>
+                                  <option>Infografía</option>
+                                  <option>Documento Interno</option>
+                              </select>
+                          </div>
+                      )}
+
+                      <div className="h-32 border-2 border-dashed border-slate-200 rounded-2xl flex flex-col items-center justify-center text-slate-400 bg-slate-50">
+                          <Upload size={24} className="mb-2"/>
+                          <p className="text-[9px] font-black uppercase">Arrastre archivo aquí (Simulado)</p>
+                      </div>
+                  </div>
+
+                  <button onClick={handleUpload} className="w-full py-4 bg-slate-900 text-white rounded-2xl font-black uppercase text-xs tracking-widest shadow-xl hover:bg-blue-600 transition-all">
+                      Confirmar Carga
+                  </button>
+              </div>
+          </div>
       )}
 
       {/* MODALES DE BITÁCORAS */}

@@ -10,6 +10,7 @@ const AuxiliaryReport: React.FC<{ patients: Patient[], onSaveNote: (n: ClinicalN
   const patient = patients.find(p => p.id === id);
 
   const [reportType, setReportType] = useState<'Laboratorio' | 'Imagenología'>('Laboratorio');
+  const [validatorName, setValidatorName] = useState('Q.F.B. BEATRIZ MENDOZA');
   
   // Extraer estudios dinámicamente de la orden (p.reason)
   const requestedStudies = useMemo(() => {
@@ -47,12 +48,13 @@ const AuxiliaryReport: React.FC<{ patients: Patient[], onSaveNote: (n: ClinicalN
       patientId: patient.id,
       type: `Reporte Final de ${reportType}`,
       date: new Date().toLocaleString('es-MX'),
-      author: 'Q.F.B. Beatriz Mendoza',
+      author: validatorName, // Usamos el nombre editable
       content: { 
         reportType, 
         labResults: reportType === 'Laboratorio' ? labResults : undefined, 
         findings,
-        requestedStudies 
+        requestedStudies,
+        validator: validatorName // Guardamos también en contenido
       },
       isSigned: true,
       hash: `CERT-AUX-${Math.random().toString(36).substr(2, 8).toUpperCase()}`
@@ -181,8 +183,13 @@ const AuxiliaryReport: React.FC<{ patients: Patient[], onSaveNote: (n: ClinicalN
                  </p>
                  <div className="bg-white/5 p-6 rounded-2xl space-y-2">
                     <p className="text-[8px] font-black text-slate-500 uppercase">Validador Responsable</p>
-                    <p className="text-[10px] font-bold text-white uppercase">Q.F.B. BEATRIZ MENDOZA</p>
-                    <p className="text-[9px] text-indigo-400 font-black uppercase">NOM-007-SSA3-2011</p>
+                    <input 
+                        className="w-full bg-transparent border-b border-white/20 text-[10px] font-bold text-white uppercase outline-none focus:border-indigo-400 transition-all py-1 placeholder-slate-600" 
+                        value={validatorName} 
+                        onChange={(e) => setValidatorName(e.target.value)}
+                        placeholder="Nombre del Responsable"
+                    />
+                    <p className="text-[9px] text-indigo-400 font-black uppercase mt-1">NOM-007-SSA3-2011</p>
                  </div>
               </div>
 

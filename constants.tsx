@@ -113,31 +113,227 @@ export const INITIAL_STOCK: MedicationStock[] = [
     presentation: 'Tabletas',
     concentration: '500mg',
     batches: [
-      {
-        id: 'BATCH-001',
-        batchNumber: '23K098',
-        expiryDate: '2025-10-25',
-        currentStock: 45
-      }
+      { id: 'BATCH-001', batchNumber: '23K098', expiryDate: '2025-10-25', currentStock: 45 }
     ],
     minStock: 10,
-    idealStock: 100, // Stock Ideal
+    idealStock: 100,
     unit: 'Cajas',
     supplier: 'Genérico Pharma',
     registroCofepris: '123M2015 SSA',
     category: MedicationCategory.GENERAL,
-    supplyType: SupplyType.MEDICATION
+    supplyType: SupplyType.MEDICATION,
+    lastCost: 85
+  },
+  {
+    id: 'INS-001',
+    name: 'SUTURA NYLON 3-0 C/AGUJA',
+    genericName: 'SUTURA MONOFILAMENTO',
+    presentation: 'Sobre',
+    concentration: '3-0 REVERSO CORTANTE',
+    batches: [
+      { id: 'B-INS-001', batchNumber: 'NY-2023', expiryDate: '2026-05-01', currentStock: 50 }
+    ],
+    minStock: 10,
+    idealStock: 50,
+    unit: 'Pieza',
+    supplier: 'Ethicon',
+    registroCofepris: 'N/A',
+    category: MedicationCategory.GENERAL,
+    supplyType: SupplyType.HEALING_MATERIAL,
+    lastCost: 150
+  },
+  {
+    id: 'INS-002',
+    name: 'GASA ESTÉRIL 10x10',
+    genericName: 'GASA SECA',
+    presentation: 'Paquete',
+    concentration: '10x10 cm',
+    batches: [
+      { id: 'B-INS-002', batchNumber: 'GS-100', expiryDate: '2027-01-01', currentStock: 200 }
+    ],
+    minStock: 20,
+    idealStock: 200,
+    unit: 'Paquete',
+    supplier: 'Dalton',
+    registroCofepris: 'N/A',
+    category: MedicationCategory.GENERAL,
+    supplyType: SupplyType.HEALING_MATERIAL,
+    lastCost: 12
+  },
+  {
+    id: 'INS-003',
+    name: 'SOLUCIÓN SALINA 0.9%',
+    genericName: 'CLORURO DE SODIO',
+    presentation: 'Botella',
+    concentration: '0.9% 500ml',
+    batches: [
+      { id: 'B-INS-003', batchNumber: 'SS-500', expiryDate: '2025-12-01', currentStock: 30 }
+    ],
+    minStock: 5,
+    idealStock: 30,
+    unit: 'Botella',
+    supplier: 'Pisa',
+    registroCofepris: 'N/A',
+    category: MedicationCategory.GENERAL,
+    supplyType: SupplyType.SOLUTION,
+    lastCost: 28
+  },
+  {
+    id: 'INS-004',
+    name: 'LIDOCAÍNA SIMPLE 2%',
+    genericName: 'LIDOCAÍNA',
+    presentation: 'Frasco Ámpula',
+    concentration: '2% 50ml',
+    batches: [
+      { id: 'B-INS-004', batchNumber: 'LIDO-02', expiryDate: '2025-08-01', currentStock: 10 }
+    ],
+    minStock: 2,
+    idealStock: 10,
+    unit: 'Frasco',
+    supplier: 'Pisa',
+    registroCofepris: 'N/A',
+    category: MedicationCategory.GENERAL,
+    supplyType: SupplyType.MEDICATION,
+    lastCost: 65
+  },
+  {
+    id: 'INS-005',
+    name: 'JERINGA 10ML',
+    genericName: 'JERINGA PLÁSTICO',
+    presentation: 'Pieza',
+    concentration: '10ml',
+    batches: [
+      { id: 'B-INS-005', batchNumber: 'JER-10', expiryDate: 'N/A', currentStock: 100 }
+    ],
+    minStock: 20,
+    idealStock: 100,
+    unit: 'Pieza',
+    supplier: 'BD',
+    registroCofepris: 'N/A',
+    category: MedicationCategory.GENERAL,
+    supplyType: SupplyType.HEALING_MATERIAL,
+    lastCost: 3.5
+  },
+  {
+    id: 'INS-006',
+    name: 'GUANTES ESTÉRILES MED',
+    genericName: 'GUANTES LÁTEX',
+    presentation: 'Par',
+    concentration: 'Mediano',
+    batches: [
+      { id: 'B-INS-006', batchNumber: 'GL-M', expiryDate: '2026-01-01', currentStock: 150 }
+    ],
+    minStock: 20,
+    idealStock: 150,
+    unit: 'Par',
+    supplier: 'Ambiderm',
+    registroCofepris: 'N/A',
+    category: MedicationCategory.GENERAL,
+    supplyType: SupplyType.HEALING_MATERIAL,
+    lastCost: 8
   }
 ];
 
-// Datos iniciales para el Catálogo de Precios
+// Datos iniciales para el Catálogo de Precios - Incluyendo Estudios y Procedimientos
 export const INITIAL_PRICES: PriceItem[] = [
   { id: 'P-001', code: 'CON-GEN', name: 'Consulta Médica General', type: PriceType.SERVICE, category: 'Honorarios', price: 500, taxPercent: 16 },
   { id: 'P-002', code: 'CON-ESP', name: 'Consulta Especialidad', type: PriceType.SERVICE, category: 'Honorarios', price: 900, taxPercent: 16 },
   { id: 'P-003', code: 'URG-BAS', name: 'Atención Urgencias Básica', type: PriceType.SERVICE, category: 'Urgencias', price: 800, taxPercent: 16 },
   { id: 'P-004', code: 'TEMPRA', name: 'Tempra (Paracetamol) 500mg', type: PriceType.PRODUCT, category: 'Farmacia', price: 120, taxPercent: 0, linkedInventoryId: 'S-001' },
-  { id: 'P-005', code: 'CURACION', name: 'Kit de Curación Básica', type: PriceType.PRODUCT, category: 'Material', price: 250, taxPercent: 16 },
-  { id: 'P-006', code: 'LAB-BH', name: 'Biometría Hemática', type: PriceType.SERVICE, category: 'Laboratorio', price: 350, taxPercent: 16 },
+  // Procedimientos con Insumos Vinculados
+  { 
+    id: 'PROC-001', 
+    code: 'PROC-SUT', 
+    name: 'Sutura de Herida (Menor a 5cm)', 
+    type: PriceType.SERVICE, 
+    category: 'Procedimientos', 
+    price: 850, 
+    taxPercent: 16,
+    linkedSupplies: [
+      { inventoryId: 'INS-001', quantity: 1, name: 'SUTURA NYLON' },
+      { inventoryId: 'INS-002', quantity: 3, name: 'GASAS' },
+      { inventoryId: 'INS-004', quantity: 1, name: 'LIDOCAÍNA' },
+      { inventoryId: 'INS-005', quantity: 1, name: 'JERINGA' },
+      { inventoryId: 'INS-006', quantity: 1, name: 'GUANTES' }
+    ]
+  },
+  { 
+    id: 'PROC-002', 
+    code: 'PROC-CUR', 
+    name: 'Curación de Herida', 
+    type: PriceType.SERVICE, 
+    category: 'Procedimientos', 
+    price: 450, 
+    taxPercent: 16,
+    linkedSupplies: [
+      { inventoryId: 'INS-002', quantity: 4, name: 'GASAS' },
+      { inventoryId: 'INS-003', quantity: 1, name: 'SOLUCIÓN SALINA (Uso parcial)' }, // Se descuenta 1 unidad de inventario aunque se use poco
+      { inventoryId: 'INS-006', quantity: 1, name: 'GUANTES' }
+    ]
+  },
+  { 
+    id: 'PROC-003', 
+    code: 'PROC-OTIC', 
+    name: 'Lavado Ótico (Unilateral)', 
+    type: PriceType.SERVICE, 
+    category: 'Procedimientos', 
+    price: 600, 
+    taxPercent: 16,
+    linkedSupplies: [
+      { inventoryId: 'INS-003', quantity: 1, name: 'SOLUCIÓN SALINA' },
+      { inventoryId: 'INS-005', quantity: 1, name: 'JERINGA 20ML (Equivalente)' }
+    ]
+  },
+  { 
+    id: 'PROC-004', 
+    code: 'PROC-UÑA', 
+    name: 'Retiro de Uña (Onicectomía)', 
+    type: PriceType.SERVICE, 
+    category: 'Procedimientos', 
+    price: 1200, 
+    taxPercent: 16,
+    linkedSupplies: [
+      { inventoryId: 'INS-004', quantity: 1, name: 'LIDOCAÍNA' },
+      { inventoryId: 'INS-005', quantity: 1, name: 'JERINGA' },
+      { inventoryId: 'INS-002', quantity: 5, name: 'GASAS' },
+      { inventoryId: 'INS-006', quantity: 2, name: 'GUANTES' }
+    ]
+  },
+  {
+    id: 'PROC-005',
+    code: 'PROC-PARTO',
+    name: 'Atención de Parto Eutócico',
+    type: PriceType.SERVICE,
+    category: 'Procedimientos',
+    price: 15000,
+    taxPercent: 0,
+    linkedSupplies: [
+       { inventoryId: 'INS-006', quantity: 6, name: 'GUANTES ESTÉRILES' },
+       { inventoryId: 'INS-001', quantity: 2, name: 'SUTURA (EPISIOTOMÍA)' },
+       { inventoryId: 'INS-002', quantity: 20, name: 'PAQUETE GASAS' },
+       { inventoryId: 'INS-003', quantity: 2, name: 'SOLUCIÓN HARTMANN/SALINA' }
+    ]
+  },
+  // Estudios de Laboratorio
+  ...LAB_STUDIES.map((s, i) => ({
+    id: `LAB-P-${i}`,
+    code: `LAB-${i+1}`,
+    name: s,
+    type: PriceType.SERVICE,
+    category: 'Estudios / Auxiliares',
+    price: 350 + (i * 50),
+    taxPercent: 16
+  })),
+  // Estudios de Imagen
+  ...IMAGING_STUDIES.map((s, i) => ({
+    id: `IMG-P-${i}`,
+    code: `IMG-${i+1}`,
+    name: s,
+    type: PriceType.SERVICE,
+    category: 'Estudios / Auxiliares',
+    price: 600 + (i * 200),
+    taxPercent: 16
+  }))
 ];
 
 export const NOTE_CATEGORIES = [

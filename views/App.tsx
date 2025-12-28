@@ -162,6 +162,10 @@ const App: React.FC = () => {
     setPatients(prev => prev.map(p => p.id === id ? { ...p, priority } : p));
   };
 
+  const deletePatient = (id: string) => {
+    setPatients(prev => prev.filter(p => p.id !== id));
+  };
+
   const handleSavePatient = (p: Patient) => {
     setPatients(prev => {
       const index = prev.findIndex(item => item.id === p.id);
@@ -180,7 +184,7 @@ const App: React.FC = () => {
     <Router>
       <Layout currentModule={currentModule} onModuleChange={setCurrentModule} doctorInfo={doctorInfo}>
         <Routes>
-          <Route path="/" element={<Dashboard module={currentModule} patients={patients} notes={notes} onUpdateStatus={updatePatientStatus} onUpdatePriority={updatePatientPriority} onModuleChange={setCurrentModule} onUpdatePatient={updatePatient} doctorInfo={doctorInfo} />} />
+          <Route path="/" element={<Dashboard module={currentModule} patients={patients} notes={notes} onUpdateStatus={updatePatientStatus} onUpdatePriority={updatePatientPriority} onModuleChange={setCurrentModule} onUpdatePatient={updatePatient} onDeletePatient={deletePatient} doctorInfo={doctorInfo} />} />
           <Route path="/billing" element={<Billing patients={patients} notes={notes} onUpdatePatient={updatePatient} />} />
           <Route path="/prices" element={<PriceCatalog />} />
           <Route path="/finance" element={<Finance />} />
@@ -189,13 +193,13 @@ const App: React.FC = () => {
           <Route path="/patient/:id/auxiliary-report" element={<AuxiliaryReport patients={patients} onSaveNote={addNote} onUpdatePatient={updatePatient} />} />
           <Route path="/patient/:id/auxiliary-order" element={<AuxiliaryOrder patients={patients} onSaveNote={addNote} />} />
           <Route path="/auxiliary-intake" element={<AuxiliaryIntake patients={patients} onSaveNote={addNote} onUpdatePatient={updatePatient} onAddPatient={handleSavePatient} />} />
-          <Route path="/patient/:id/note/evolution" element={<EvolutionNote patients={patients} notes={notes} onSaveNote={addNote} />} />
+          <Route path="/patient/:id/note/evolution" element={<EvolutionNote patients={patients} notes={notes} onSaveNote={addNote} onUpdatePatient={updatePatient} />} />
           <Route path="/patient/:id/note/emergency" element={<EmergencyNote patients={patients} notes={notes} onSaveNote={addNote} />} />
           <Route path="/patient/:id/note/surgical" element={<SurgicalNote patients={patients} notes={notes} onSaveNote={addNote} />} />
           <Route path="/patient/:id/note/interconsulta" element={<InterconsultaNote patients={patients} notes={notes} onSaveNote={addNote} />} />
           <Route path="/patient/:id/note/esavi" element={<ESAVINote patients={patients} notes={notes} onSaveNote={addNote} />} />
           <Route path="/patient/:id/history" element={<MedicalHistory patients={patients} notes={notes} onUpdatePatient={updatePatient} onSaveNote={addNote} />} />
-          <Route path="/patient/:id/prescription" element={<Prescription patients={patients} doctorInfo={doctorInfo} onSaveNote={addNote} />} />
+          <Route path="/patient/:id/prescription" element={<Prescription patients={patients} doctorInfo={doctorInfo} onSaveNote={addNote} onUpdatePatient={updatePatient} />} />
           <Route path="/patient/:id/consent" element={<InformedConsent patients={patients} onSaveNote={addNote} />} />
           <Route path="/patient/:id/telemedicine-consent" element={<TelemedicineConsent patients={patients} onSaveNote={addNote} />} />
           <Route path="/patient/:id/voluntary-discharge" element={<VoluntaryDischarge patients={patients} onSaveNote={addNote} />} />

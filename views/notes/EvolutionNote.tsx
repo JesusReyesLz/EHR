@@ -6,12 +6,13 @@ import {
   Lock, Pill, HeartPulse, Droplet, Thermometer, Wind,
   ClipboardList, Calendar, MessageSquare, AlertCircle, Info, 
   Search, Trash2, PlusCircle, Quote, FlaskConical, Zap, Repeat, ShieldAlert,
-  Clock, Clipboard, X, Heart, AlertTriangle, CheckCircle2, Maximize2, Scale, Ruler
+  Clock, Clipboard, Scissors, X, Heart, AlertTriangle, CheckCircle2, Maximize2, Scale, Ruler
 } from 'lucide-react';
-import { Patient, ClinicalNote, Vitals, MedicationPrescription, MedicationStock, PriceItem, PriceType } from '../../types';
+import { Patient, ClinicalNote, Vitals, MedicationPrescription, MedicationStock, PriceItem, PriceType, ChargeItem } from '../../types';
 import { VADEMECUM_DB, INITIAL_STOCK, INITIAL_PRICES } from '../../constants';
 
-const EvolutionNote: React.FC<{ patients: Patient[], notes: ClinicalNote[], onSaveNote: (n: ClinicalNote) => void }> = ({ patients, notes, onSaveNote }) => {
+// Added onUpdatePatient prop
+const EvolutionNote: React.FC<{ patients: Patient[], notes: ClinicalNote[], onSaveNote: (n: ClinicalNote) => void, onUpdatePatient: (p: Patient) => void }> = ({ patients, notes, onSaveNote, onUpdatePatient }) => {
   const { id, noteId } = useParams();
   const navigate = useNavigate();
   const patient = patients.find(p => p.id === id);
@@ -145,6 +146,8 @@ const EvolutionNote: React.FC<{ patients: Patient[], notes: ClinicalNote[], onSa
     setMedications(medications.map(m => m.id === mid ? { ...m, [field]: value } : m));
   };
 
+  const generateId = (prefix: string) => `${prefix}-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+
   const handleSave = (finalize: boolean = false, goToPrescription: boolean = false) => {
     if (!form.mainProblem || !form.analysisReasoning) {
       alert("Diagnóstico Principal y Análisis Clínico son obligatorios.");
@@ -169,6 +172,56 @@ const EvolutionNote: React.FC<{ patients: Patient[], notes: ClinicalNote[], onSa
     };
     
     onSaveNote(newNote);
+
+    // INTEGRACIÓN CON CAJA (SOLO SI SE FINALIZA LA NOTA)
+    if (finalize && patient && onUpdatePatient) {
+        const pendingCharges: ChargeItem[] = [];
+        
+        // 1. Cargos de Medicamentos
+        medications.forEach(med => {
+            const priceItem = prices.find(p => p.name === med.name || p.name.includes(med.name));
+            const unitPrice = priceItem ? priceItem.price : 0;
+            const tax = priceItem ? (unitPrice * priceItem.taxPercent / 100) : 0;
+            
+            pendingCharges.push({
+                id: generateId('CHG'),
+                date: new Date().toISOString(),
+                concept: med.name,
+                quantity: 1, 
+                unitPrice: unitPrice,
+                tax: tax,
+                total: unitPrice + tax,
+                type: 'Farmacia',
+                status: 'Pendiente',
+                linkedInventoryId: priceItem?.linkedInventoryId
+            });
+        });
+
+        // 2. Cargos de Procedimientos
+        selectedProcedures.forEach(proc => {
+            const tax = proc.price * proc.taxPercent / 100;
+            pendingCharges.push({
+                id: generateId('CHG'),
+                date: new Date().toISOString(),
+                concept: proc.name,
+                quantity: 1,
+                unitPrice: proc.price,
+                tax: tax,
+                total: proc.price + tax,
+                type: 'Honorarios',
+                status: 'Pendiente',
+                linkedSupplies: proc.linkedSupplies
+            });
+        });
+
+        if (pendingCharges.length > 0) {
+            onUpdatePatient({
+                ...patient,
+                paymentStatus: 'Pendiente',
+                pendingCharges: [...(patient.pendingCharges || []), ...pendingCharges]
+            });
+        }
+    }
 
     if (goToPrescription) {
       navigate(`/patient/${id}/prescription`, { 

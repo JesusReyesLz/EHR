@@ -7,8 +7,8 @@ import {
   CreditCard, UserCheck, Timer, AlertCircle, Fingerprint, Heart,
   Calendar, FileText, ArrowRight, Database, History, UserPlus
 } from 'lucide-react';
-import { Patient, ClinicalNote, ModuleType, PatientStatus, PriorityLevel } from '../types';
-import { LAB_CATALOG, IMAGING_CATALOG } from '../constants';
+import { Patient, ClinicalNote, ModuleType, PatientStatus, PriorityLevel, ChargeItem, PriceType } from '../types';
+import { LAB_CATALOG, IMAGING_CATALOG, INITIAL_PRICES } from '../constants';
 
 interface AuxiliaryIntakeProps {
   patients: Patient[];
@@ -83,6 +83,8 @@ const AuxiliaryIntake: React.FC<AuxiliaryIntakeProps> = ({ patients, onSaveNote,
     setSearchTerm('');
   };
 
+  const generateId = (prefix: string) => `${prefix}-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+
   const handleSave = () => {
     if (!patientForm.name) return;
     if (selectedCount === 0) {
@@ -90,18 +92,47 @@ const AuxiliaryIntake: React.FC<AuxiliaryIntakeProps> = ({ patients, onSaveNote,
       return;
     }
 
-    let pToSave: Patient;
     const studySummary = [...opForm.labStudies, ...opForm.imagingStudies].join(', ');
+    
+    // Generar cargos pendientes
+    const pendingCharges: ChargeItem[] = [];
+    const allSelectedStudies = [...opForm.labStudies, ...opForm.imagingStudies];
+    
+    allSelectedStudies.forEach(studyName => {
+        // Intentar encontrar precio en el catálogo maestro
+        const priceItem = INITIAL_PRICES.find(p => p.name === studyName);
+        const price = priceItem ? priceItem.price : 0;
+        const tax = priceItem ? (price * priceItem.taxPercent / 100) : 0;
+
+        pendingCharges.push({
+            id: generateId('CHG'),
+            date: new Date().toISOString(),
+            concept: studyName,
+            quantity: 1,
+            unitPrice: price,
+            tax: tax,
+            total: price + tax,
+            type: 'Estudios',
+            status: 'Pendiente'
+        });
+    });
+
+    let pToSave: Patient;
 
     if (selectedPatient) {
       // ACTUALIZACIÓN DE PACIENTE EXISTENTE (REINGRESO A AUXILIARES)
+      // Combinar cargos pendientes nuevos con existentes si hubiera
+      const existingPending = selectedPatient.pendingCharges || [];
+      
       pToSave = {
         ...selectedPatient, // Mantenemos ID e historial
         ...patientForm as Patient, // Sobrescribimos datos editados si hubo
         status: PatientStatus.WAITING_FOR_SAMPLES,
         assignedModule: ModuleType.AUXILIARY,
         reason: studySummary,
-        lastVisit: new Date().toISOString().split('T')[0]
+        lastVisit: new Date().toISOString().split('T')[0],
+        paymentStatus: 'Pendiente',
+        pendingCharges: [...existingPending, ...pendingCharges]
       };
       onUpdatePatient(pToSave);
     } else {
@@ -116,7 +147,9 @@ const AuxiliaryIntake: React.FC<AuxiliaryIntakeProps> = ({ patients, onSaveNote,
         reason: studySummary,
         allergies: [],
         chronicDiseases: [],
-        lastVisit: new Date().toISOString().split('T')[0]
+        lastVisit: new Date().toISOString().split('T')[0],
+        paymentStatus: 'Pendiente',
+        pendingCharges: pendingCharges
       };
       onAddPatient(pToSave);
     }

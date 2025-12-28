@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { 
@@ -11,10 +12,10 @@ import {
   Stethoscope,
   X
 } from 'lucide-react';
-import { Patient, MedicationPrescription, MedicationStock, Vitals, DoctorInfo, ClinicalNote, PriceItem, PriceType } from '../types';
+import { Patient, MedicationPrescription, MedicationStock, Vitals, DoctorInfo, ClinicalNote, PriceItem, PriceType, ChargeItem } from '../types';
 import { VADEMECUM_DB, INITIAL_STOCK, INITIAL_PRICES } from '../constants';
 
-const Prescription: React.FC<{ patients: Patient[], doctorInfo: DoctorInfo, onSaveNote: (n: ClinicalNote) => void }> = ({ patients, doctorInfo, onSaveNote }) => {
+const Prescription: React.FC<{ patients: Patient[], doctorInfo: DoctorInfo, onSaveNote: (n: ClinicalNote) => void, onUpdatePatient: (p: Patient) => void }> = ({ patients, doctorInfo, onSaveNote, onUpdatePatient }) => {
   const { id } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
@@ -153,6 +154,8 @@ const Prescription: React.FC<{ patients: Patient[], doctorInfo: DoctorInfo, onSa
     setMedications(medications.map(m => m.id === mid ? { ...m, [field]: value } : m));
   };
 
+  const generateId = (prefix: string) => `${prefix}-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+
   const handleSaveToExpedient = () => {
     if (medications.length === 0 && selectedProcedures.length === 0) {
       alert("Debe agregar al menos un medicamento o procedimiento para guardar.");
@@ -179,12 +182,66 @@ const Prescription: React.FC<{ patients: Patient[], doctorInfo: DoctorInfo, onSa
     };
 
     onSaveNote(newNote);
+
+    // GENERAR CARGOS PENDIENTES AUTOMÁTICOS
+    if (patient && onUpdatePatient) {
+        const pendingCharges: ChargeItem[] = [];
+        
+        // Procesar medicamentos (Buscar precio en catalogo si existe, o dejar en $0.00 si es manual)
+        medications.forEach(med => {
+            const priceItem = prices.find(p => p.name === med.name || p.name.includes(med.name));
+            // Si existe en catálogo, usar precio y tax. Si no, precio 0 (manual)
+            const unitPrice = priceItem ? priceItem.price : 0;
+            const tax = priceItem ? (unitPrice * priceItem.taxPercent / 100) : 0;
+            
+            pendingCharges.push({
+                id: generateId('CHG'),
+                date: new Date().toISOString(),
+                concept: med.name, // Usar nombre de receta
+                quantity: 1, // Por defecto 1
+                unitPrice: unitPrice,
+                tax: tax,
+                total: unitPrice + tax,
+                type: 'Farmacia',
+                status: 'Pendiente',
+                linkedInventoryId: priceItem?.linkedInventoryId
+            });
+        });
+
+        // Procesar Procedimientos
+        selectedProcedures.forEach(proc => {
+            const tax = proc.price * proc.taxPercent / 100;
+            pendingCharges.push({
+                id: generateId('CHG'),
+                date: new Date().toISOString(),
+                concept: proc.name,
+                quantity: 1,
+                unitPrice: proc.price,
+                tax: tax,
+                total: proc.price + tax,
+                type: 'Honorarios',
+                status: 'Pendiente',
+                linkedSupplies: proc.linkedSupplies
+            });
+        });
+
+        // Actualizar paciente con cargos pendientes si hay
+        if (pendingCharges.length > 0) {
+            // Utilizamos onUpdatePatient pasado desde App.tsx para asegurar la actualización del estado global
+            onUpdatePatient({
+                ...patient,
+                paymentStatus: 'Pendiente', // Bloquear auxiliares si es necesario
+                pendingCharges: [...(patient.pendingCharges || []), ...pendingCharges]
+            });
+        }
+    }
+
     setIsSaved(true);
     setIsPreview(true);
     
     const toast = document.createElement('div');
     toast.className = 'fixed bottom-10 left-1/2 -translate-x-1/2 bg-emerald-600 text-white px-10 py-5 rounded-3xl font-black text-xs uppercase tracking-widest shadow-2xl z-[300] animate-in slide-in-from-bottom-4';
-    toast.innerHTML = 'Receta registrada en el Historial del Paciente';
+    toast.innerHTML = 'Receta registrada y cargos generados en caja';
     document.body.appendChild(toast);
     setTimeout(() => toast.remove(), 4000);
   };
@@ -257,7 +314,7 @@ const Prescription: React.FC<{ patients: Patient[], doctorInfo: DoctorInfo, onSa
                 onClick={handleSaveToExpedient}
                 className="px-8 py-3 bg-emerald-600 text-white rounded-2xl font-black text-[10px] uppercase shadow-lg hover:bg-slate-900 transition-all flex items-center gap-3"
               >
-                <FileCheck size={18} /> Guardar en Expediente
+                <FileCheck size={18} /> Guardar y Generar Cargos
               </button>
            ) : (
               <button 

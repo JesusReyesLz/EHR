@@ -9,7 +9,7 @@ export enum ModuleType {
   MONITOR = 'Monitor Hospitalario',
   BILLING = 'Caja y Facturación', 
   PRICING = 'Catálogo de Precios',
-  FINANCE = 'Finanzas y Compras' // NUEVO
+  FINANCE = 'Finanzas y Compras'
 }
 
 export enum PatientStatus {
@@ -62,8 +62,6 @@ export enum SupplyType {
   OTHER = 'Diverso'
 }
 
-// --- TIPOS FINANCIEROS Y DE COMPRAS ---
-
 export interface Expense {
   id: string;
   date: string;
@@ -73,31 +71,47 @@ export interface Expense {
   supplier?: string;
   paymentMethod: 'Efectivo Caja' | 'Transferencia Bancaria' | 'Tarjeta Corporativa';
   status: 'Pagado' | 'Pendiente';
-  ticketReference?: string;
+}
+
+export interface Supplier {
+  id: string;
+  name: string;
+  contact?: string;
+  phone?: string;
+  email?: string;
+  category?: string;
 }
 
 export interface PurchaseOrderItem {
-  inventoryId: string;
+  inventoryId?: string; // Opcional para items no registrados
   name: string;
   quantity: number;
   unitCost: number;
+  taxPercent?: number;
   total: number;
 }
 
 export interface PurchaseOrder {
   id: string;
   date: string;
-  supplier: string;
+  time: string; // Hora de emisión
+  supplierId?: string;
+  supplierName: string;
   items: PurchaseOrderItem[];
   subtotal: number;
   tax: number;
   total: number;
   status: 'Borrador' | 'Enviada' | 'Recibida' | 'Cancelada' | 'Pagada';
-  expectedDelivery?: string;
-  notes?: string;
 }
 
-// --- NUEVOS TIPOS PARA FACTURACIÓN Y PRECIOS ---
+// Interfaz interna de finanzas para márgenes
+export interface FinancialSupply {
+  inventoryId: string;
+  name: string;
+  lastPurchaseCost: number;
+  currentSalePrice: number;
+  targetMargin?: number;
+}
 
 export enum PriceType {
   SERVICE = 'Servicio / Honorario',
@@ -105,20 +119,22 @@ export enum PriceType {
   PACKAGE = 'Paquete'
 }
 
+export interface LinkedSupply {
+  inventoryId: string;
+  quantity: number;
+  name?: string; // Optional for display
+}
+
 export interface PriceItem {
   id: string;
-  code: string; // SKU o Código Interno
+  code: string;
   name: string;
   type: PriceType;
-  category: string; // Consulta, Farmacia, Lab, etc.
+  category: string;
   price: number;
-  taxPercent: number; // IVA
-  linkedInventoryId?: string; // Para venta directa de producto (1 a 1)
-  consumables?: { // Para servicios que consumen stock (ej. Sutura consume hilo + gasas)
-      inventoryId: string;
-      quantity: number;
-      nameReference?: string; // Solo visual
-  }[];
+  taxPercent: number;
+  linkedInventoryId?: string; // Para productos 1:1
+  linkedSupplies?: LinkedSupply[]; // Para procedimientos con insumos (1:N)
 }
 
 export interface ChargeItem {
@@ -127,27 +143,23 @@ export interface ChargeItem {
   concept: string;
   quantity: number;
   unitPrice: number;
-  discount?: number; // Monto descuento
+  originalCost?: number; // Costo unitario al momento de la venta
   tax: number;
   total: number;
-  type: 'Farmacia' | 'Honorarios' | 'Hospitalizacion' | 'Estudios' | 'Otro';
-  status: 'Pendiente' | 'Pagado' | 'Cancelado' | 'Reembolsado';
-  sourceId?: string; // ID de la nota, receta o venta de farmacia que generó el cargo
-  linkedInventoryId?: string; // ID del producto en inventario para reversión directa
-  consumables?: { // Copia de los consumibles del PriceItem al momento de la venta
-      inventoryId: string;
-      quantity: number;
-  }[];
+  type: 'Farmacia' | 'Honorarios' | 'Hospitalizacion' | 'Estudios' | 'Otro' | 'Material';
+  status: 'Pendiente' | 'Pagado' | 'Cancelada' | 'Reembolsado';
+  linkedInventoryId?: string;
+  linkedSupplies?: LinkedSupply[];
 }
 
 export interface PaymentDetail {
   method: 'Efectivo' | 'Tarjeta Crédito' | 'Tarjeta Débito' | 'Transferencia' | 'Seguro' | 'Cheque';
   amount: number;
-  reference?: string; // Voucher o Folio
+  reference?: string;
 }
 
 export interface Transaction {
-  id: string; // Folio de Ticket
+  id: string;
   date: string;
   patientId: string;
   patientName: string;
@@ -157,23 +169,12 @@ export interface Transaction {
   discountTotal: number;
   total: number;
   payments: PaymentDetail[];
-  change: number; // Cambio entregado
+  change: number;
   status: 'Completada' | 'Cancelada' | 'Reembolsada Parcial';
   cashier: string;
-  shiftId: string; // Vinculo al corte de caja
-  notes?: string; // Observaciones internas (ej. motivo de descuento)
-  // NUEVOS CAMPOS PARA HISTORIAL UNIFICADO
-  category?: 'VENTA' | 'MOVIMIENTO' | 'TURNO'; 
-  movementType?: 'INGRESO' | 'RETIRO' | 'APERTURA' | 'CIERRE';
-}
-
-export interface CashMovement {
-  id: string;
-  type: 'INGRESO' | 'RETIRO'; // Vales
-  amount: number;
-  reason: string;
-  date: string;
-  user: string;
+  shiftId: string;
+  notes?: string;
+  category?: 'VENTA' | 'MOVIMIENTO' | 'TURNO';
 }
 
 export interface CashShift {
@@ -184,47 +185,64 @@ export interface CashShift {
   openedBy: string;
   closedBy?: string;
   initialCash: number;
-  finalCashCount?: number; // Lo que contó el cajero
-  amountLeftForNextShift?: number; // NUEVO: Monto dejado en caja para el siguiente turno
-  movements?: CashMovement[]; // Vales y retiros
+  finalCashCount?: number;
+  amountLeftForNextShift?: number;
+  isVerified?: boolean; 
+  verifiedBy?: string;
   systemTotals: {
     cash: number;
-    card: number;
-    transfer: number;
+    debitCard: number; 
+    creditCard: number; 
+    transfer: number; 
     other: number;
     total: number;
-    // Campos extendidos para reporte detallado
-    cashSales?: number;
-    cashIn?: number;
-    cashOut?: number;
-    netCash?: number;
-    totalSales?: number;
+    totalCost?: number; // Costo total de lo vendido en el turno
+    grossProfit?: number; // Ganancia bruta (Total - Costo)
+    netCashExpected: number; 
+    totalSalesCount: number;
   };
-  discrepancy?: number; // Sobrante o Faltante
+  discrepancy?: number;
 }
 
-export interface PatientAccount {
-  patientId: string;
-  charges: ChargeItem[]; // Cargos PENDIENTES por pagar
-  // payments: Payment[]; // DEPRECATED: Usar Transaction para historial
-  balance: number;
-  status: 'Abierta' | 'Cerrada';
-}
-
-export interface Payment { // Legacy support
+export interface MedicationBatch {
   id: string;
-  date: string;
-  amount: number;
-  method: 'Efectivo' | 'Tarjeta' | 'Transferencia' | 'Seguro';
-  reference?: string;
+  batchNumber: string;
+  expiryDate: string;
+  currentStock: number;
 }
 
-// --- FIN NUEVOS TIPOS ---
+export interface MedicationStock {
+  id: string;
+  name: string;
+  genericName: string;
+  presentation: string;
+  concentration: string;
+  batches: MedicationBatch[]; 
+  minStock: number;
+  idealStock?: number;
+  unit: string;
+  supplier: string;
+  registroCofepris: string;
+  category: MedicationCategory;
+  supplyType: SupplyType; 
+  lastCost?: number; // Costo de última compra
+}
+
+export interface StockMovement {
+  id: string;
+  medicationId: string;
+  medicationName: string;
+  batch: string;
+  type: 'IN' | 'OUT' | 'UPDATE';
+  quantity: number;
+  date: string;
+  reason: string;
+  responsible: string;
+}
 
 export interface DoctorInfo {
   name: string;
   cedula: string;
-  specialtyCedula?: string;
   institution: string;
   specialty: string;
   email: string;
@@ -244,36 +262,6 @@ export interface Vitals {
   weight: number;
   height: number;
   bmi: number;
-  waist?: number;
-  hip?: number;
-  date: string;
-}
-
-export interface DiuresisEntry {
-  id: string;
-  date: string;
-  time: string;
-  amount: number;
-  characteristics: string;
-  color: string;
-}
-
-export interface LiquidEntry {
-  id: string;
-  type: 'Ingreso' | 'Egreso';
-  concept: string; // Solución, Dieta, Diuresis, Sangrado, etc.
-  amount: number;
-  time: string;
-  date: string;
-}
-
-export interface MedicationLog {
-  id: string;
-  medName: string;
-  dosage: string;
-  time: string;
-  status: 'Aplicado' | 'No Aplicado' | 'Pendiente';
-  nurse: string;
   date: string;
 }
 
@@ -286,16 +274,26 @@ export interface MedicationPrescription {
   frequency: string;
   duration: string;
   route: string;
-  instructions: string;
+  instructions?: string;
 }
 
-export interface Attachment {
+export interface MedicationLog {
   id: string;
-  type: 'Laboratory' | 'Imaging' | 'Photo' | 'ExternalPDF';
-  title: string;
+  medName: string;
+  dosage: string;
+  time: string;
+  status: 'Aplicado' | 'No Aplicado';
+  nurse: string;
   date: string;
-  url: string; 
-  notes?: string;
+}
+
+export interface LiquidEntry {
+  id: string;
+  type: 'Ingreso' | 'Egreso';
+  concept: string;
+  amount: number;
+  time: string;
+  date: string;
 }
 
 export interface Patient {
@@ -315,10 +313,6 @@ export interface Patient {
   assignedModule: ModuleType;
   currentVitals?: Vitals;
   vitalsHistory?: Vitals[];
-  diuresisHistory?: DiuresisEntry[];
-  liquidHistory?: LiquidEntry[];
-  medicationLogs?: MedicationLog[];
-  attachments?: Attachment[];
   history?: any;
   bedNumber?: string;
   transitTargetBed?: string;
@@ -334,6 +328,12 @@ export interface Patient {
   occupation?: string;
   address?: string;
   civilStatus?: string;
+  medicationLogs?: MedicationLog[];
+  liquidHistory?: LiquidEntry[];
+  
+  // New Fields for Billing Integration
+  pendingCharges?: ChargeItem[];
+  paymentStatus?: 'Pendiente' | 'Pagado' | 'N/A';
 }
 
 export interface ClinicalNote {
@@ -349,49 +349,9 @@ export interface ClinicalNote {
   hash?: string;
 }
 
-export interface ConsultationRecord {
-  id: string;
-  date: string;
-  patientName: string;
-  curp: string;
-  sex: string;
-  age: number;
-  diagnosis: string;
-  treatment: string;
-  module: ModuleType;
-}
-
-export interface MedicationBatch {
-  id: string;
-  batchNumber: string;
-  expiryDate: string;
-  currentStock: number;
-}
-
-export interface MedicationStock {
-  id: string;
-  name: string;
-  genericName: string;
-  presentation: string;
-  concentration: string;
-  batches: MedicationBatch[]; 
-  minStock: number;
-  idealStock?: number; // NUEVO: Para análisis de reposición
-  unit: string;
-  supplier: string;
-  registroCofepris: string;
-  category: MedicationCategory;
-  supplyType: SupplyType; 
-}
-
-export interface StockMovement {
-  id: string;
-  medicationId: string;
-  medicationName: string;
-  batch: string;
-  type: 'IN' | 'OUT' | 'UPDATE';
-  quantity: number;
-  date: string;
-  reason: string;
-  responsible: string;
+export interface PatientAccount {
+  patientId: string;
+  charges: ChargeItem[]; 
+  balance: number;
+  status: 'Abierta' | 'Cerrada';
 }
