@@ -7,7 +7,7 @@ import {
   CreditCard, UserCheck, Timer, AlertCircle, Fingerprint, Heart,
   Calendar, FileText, ArrowRight, Database, History, UserPlus
 } from 'lucide-react';
-import { Patient, ClinicalNote, ModuleType, PatientStatus, PriorityLevel, ChargeItem, PriceType } from '../types';
+import { Patient, ClinicalNote, ModuleType, PatientStatus, PriorityLevel, ChargeItem, PriceType, PriceItem } from '../types';
 import { LAB_CATALOG, IMAGING_CATALOG, INITIAL_PRICES } from '../constants';
 
 interface AuxiliaryIntakeProps {
@@ -23,6 +23,34 @@ const AuxiliaryIntake: React.FC<AuxiliaryIntakeProps> = ({ patients, onSaveNote,
   const [isNewPatient, setIsNewPatient] = useState(false);
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
   const [activeTab, setActiveTab] = useState<'lab' | 'imaging'>('lab');
+
+  // Load prices from localStorage to get dynamically created studies
+  const prices: PriceItem[] = useMemo(() => {
+    const saved = localStorage.getItem('med_price_catalog_v1');
+    return saved ? JSON.parse(saved) : INITIAL_PRICES;
+  }, []);
+
+  // Merge static catalogs with dynamic price items marked as 'Estudios / Auxiliares'
+  const mergedLabCatalog = useMemo(() => {
+      const dynamicLabs = prices.filter(p => p.category === 'Estudios / Auxiliares' && !p.code.startsWith('IMG')).map(p => ({
+          name: p.name,
+          preparation: 'Consultar indicaciones',
+          indications: 'Estudio de Laboratorio'
+      }));
+      // Filter out duplicates based on name
+      const combined = [...LAB_CATALOG, ...dynamicLabs];
+      return Array.from(new Map(combined.map(item => [item.name, item])).values());
+  }, [prices]);
+
+  const mergedImagingCatalog = useMemo(() => {
+      const dynamicImg = prices.filter(p => p.category === 'Estudios / Auxiliares' && (p.code.startsWith('IMG') || p.name.includes('Rayos') || p.name.includes('Tomografía') || p.name.includes('Ultrasonido'))).map(p => ({
+          name: p.name,
+          preparation: 'Consultar indicaciones',
+          indications: 'Estudio de Gabinete'
+      }));
+      const combined = [...IMAGING_CATALOG, ...dynamicImg];
+      return Array.from(new Map(combined.map(item => [item.name, item])).values());
+  }, [prices]);
 
   const [patientForm, setPatientForm] = useState<Partial<Patient>>({
     name: '',
@@ -99,8 +127,8 @@ const AuxiliaryIntake: React.FC<AuxiliaryIntakeProps> = ({ patients, onSaveNote,
     const allSelectedStudies = [...opForm.labStudies, ...opForm.imagingStudies];
     
     allSelectedStudies.forEach(studyName => {
-        // Intentar encontrar precio en el catálogo maestro
-        const priceItem = INITIAL_PRICES.find(p => p.name === studyName);
+        // Intentar encontrar precio en el catálogo maestro (prices state loaded from storage)
+        const priceItem = prices.find(p => p.name === studyName);
         const price = priceItem ? priceItem.price : 0;
         const tax = priceItem ? (price * priceItem.taxPercent / 100) : 0;
 
@@ -267,7 +295,7 @@ const AuxiliaryIntake: React.FC<AuxiliaryIntakeProps> = ({ patients, onSaveNote,
                  </div>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 max-h-[400px] overflow-y-auto no-scrollbar">
-                 {(activeTab === 'lab' ? LAB_CATALOG : IMAGING_CATALOG).map(study => {
+                 {(activeTab === 'lab' ? mergedLabCatalog : mergedImagingCatalog).map(study => {
                     const isSelected = (activeTab === 'lab' ? opForm.labStudies : opForm.imagingStudies).includes(study.name);
                     return (
                       <button key={study.name} onClick={() => toggleStudy(study.name, activeTab)} className={`text-left p-6 rounded-[1.8rem] border-2 transition-all flex items-center justify-between group ${isSelected ? 'bg-indigo-50 border-indigo-600 shadow-sm' : 'bg-slate-50 border-transparent hover:border-indigo-200'}`}>

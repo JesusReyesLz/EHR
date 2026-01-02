@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Search, Plus, Tag, DollarSign, 
@@ -5,7 +6,8 @@ import {
   Link as LinkIcon, Syringe, CalendarOff, Calendar,
   FlaskConical, Beaker, Pill, Droplets, Info,
   Save, Activity, CheckCircle2, ArrowRight, Layers,
-  Laptop, Armchair, Box, Monitor, Scissors, Stethoscope
+  Laptop, Armchair, Box, Monitor, Scissors, Stethoscope,
+  Microscope, ImageIcon
 } from 'lucide-react';
 import { PriceItem, PriceType, MedicationStock, MedicationCategory, SupplyType, MedicationBatch, LinkedSupply } from '../types';
 import { INITIAL_PRICES, INITIAL_STOCK } from '../constants';
@@ -63,7 +65,7 @@ const PriceCatalog: React.FC = () => {
   const NewCatalogItemModal = () => {
       const [form, setForm] = useState<Partial<PriceItem>>(() => {
           if (catalogItemToEdit) return { ...catalogItemToEdit };
-          return { name: '', code: '', price: 0, taxPercent: 16, category: 'General', type: PriceType.SERVICE, linkedSupplies: [] };
+          return { name: '', code: '', price: 0, cost: 0, taxPercent: 16, category: 'General', type: PriceType.SERVICE, linkedSupplies: [] };
       });
       
       // Inventory Creation State
@@ -76,6 +78,22 @@ const PriceCatalog: React.FC = () => {
       // Procedure Linking State
       const [supplySearch, setSupplySearch] = useState('');
       const [linkedSuppliesList, setLinkedSuppliesList] = useState<LinkedSupply[]>(form.linkedSupplies || []);
+
+      // Estado auxiliar para definir subtipo de estudio (Lab vs Imagen)
+      const [auxType, setAuxType] = useState<'LAB' | 'IMG'>(
+          form.code?.startsWith('IMG') ? 'IMG' : 'LAB'
+      );
+
+      // Efecto para actualizar el código SKU automáticamente cuando cambia el subtipo de auxiliar
+      useEffect(() => {
+          if (form.category === 'Estudios / Auxiliares' && !catalogItemToEdit) {
+              const prefix = auxType === 'LAB' ? 'LAB-' : 'IMG-';
+              // Solo actualizamos si no tiene ya un código personalizado o si es el default
+              if (!form.code || form.code.startsWith('LAB-') || form.code.startsWith('IMG-')) {
+                  setForm(f => ({ ...f, code: `${prefix}${Date.now().toString().slice(-6)}` }));
+              }
+          }
+      }, [auxType, form.category, catalogItemToEdit]);
 
       const inventoryMatches = useMemo(() => {
           if (supplySearch.length < 2) return [];
@@ -149,7 +167,8 @@ const PriceCatalog: React.FC = () => {
               category: form.category || 'General',
               type: form.type || PriceType.SERVICE,
               linkedInventoryId: linkedInvId,
-              linkedSupplies: linkedSuppliesList
+              linkedSupplies: linkedSuppliesList,
+              cost: Number(form.cost) || 0 // Save the operational cost
           };
 
           if (catalogItemToEdit) {
@@ -182,7 +201,7 @@ const PriceCatalog: React.FC = () => {
                         <div className="space-y-6">
                             <div className="space-y-1.5">
                                 <label className="text-[10px] font-black uppercase text-slate-400 ml-2">Nombre Comercial del Concepto</label>
-                                <input className="w-full p-5 bg-slate-50 border border-slate-200 rounded-3xl font-black uppercase outline-none focus:border-indigo-500 shadow-inner text-lg" value={form.name} onChange={e => setForm({...form, name: e.target.value})} placeholder="EJ: CONSULTA, PARACETAMOL, TIJERAS" />
+                                <input className="w-full p-5 bg-slate-50 border border-slate-200 rounded-3xl font-black uppercase outline-none focus:border-indigo-500 shadow-inner text-lg" value={form.name} onChange={e => setForm({...form, name: e.target.value})} placeholder="EJ: CONSULTA, BIOMETRÍA, RADIOGRAFÍA" />
                             </div>
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="space-y-1.5">
@@ -214,11 +233,43 @@ const PriceCatalog: React.FC = () => {
                                     </select>
                                 </div>
                             </div>
+
+                            {/* SELECTOR ESPECÍFICO PARA TIPO DE ESTUDIO (LAB vs IMAGEN) */}
+                            {form.category === 'Estudios / Auxiliares' && (
+                                <div className="p-4 bg-blue-50 border border-blue-100 rounded-2xl animate-in slide-in-from-top-2">
+                                    <label className="text-[9px] font-black uppercase text-blue-600 block mb-2">Clasificación del Estudio</label>
+                                    <div className="flex gap-2">
+                                        <button 
+                                            onClick={() => setAuxType('LAB')}
+                                            className={`flex-1 py-3 px-2 rounded-xl text-[9px] font-black uppercase flex items-center justify-center gap-2 transition-all ${auxType === 'LAB' ? 'bg-blue-600 text-white shadow-md' : 'bg-white text-slate-400 border border-blue-100'}`}
+                                        >
+                                            <Microscope size={14}/> Laboratorio
+                                        </button>
+                                        <button 
+                                            onClick={() => setAuxType('IMG')}
+                                            className={`flex-1 py-3 px-2 rounded-xl text-[9px] font-black uppercase flex items-center justify-center gap-2 transition-all ${auxType === 'IMG' ? 'bg-indigo-600 text-white shadow-md' : 'bg-white text-slate-400 border-blue-100'}`}
+                                        >
+                                            <ImageIcon size={14}/> Imagenología
+                                        </button>
+                                    </div>
+                                    <p className="text-[8px] text-blue-400 mt-2 font-bold text-center">
+                                        Se asignará prefijo {auxType === 'LAB' ? 'LAB-' : 'IMG-'} para correcta clasificación en módulo de Auxiliares.
+                                    </p>
+                                </div>
+                            )}
                             
-                            {/* SKU Field for both */}
-                            <div className="space-y-1.5">
-                                <label className="text-[9px] font-black uppercase text-slate-400 ml-2">SKU / Código Interno</label>
-                                <input className="w-full p-4 bg-white border border-indigo-100 rounded-2xl text-xs font-mono font-black text-center uppercase" value={form.code} onChange={e => setForm({...form, code: e.target.value})} placeholder="AUTO" />
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-1.5">
+                                    <label className="text-[9px] font-black uppercase text-slate-400 ml-2">SKU / Código Interno</label>
+                                    <input className="w-full p-4 bg-white border border-indigo-100 rounded-2xl text-xs font-mono font-black text-center uppercase" value={form.code} onChange={e => setForm({...form, code: e.target.value})} placeholder="AUTO" />
+                                </div>
+                                {/* NEW: Operational Cost Field for Services */}
+                                {form.type === PriceType.SERVICE && (
+                                    <div className="space-y-1.5">
+                                        <label className="text-[9px] font-black uppercase text-slate-400 ml-2">Costo Base Operativo</label>
+                                        <input type="number" className="w-full p-4 bg-amber-50 border border-amber-200 rounded-2xl text-xs font-black text-center text-amber-800 outline-none" value={form.cost} onChange={e => setForm({...form, cost: parseFloat(e.target.value)})} placeholder="0.00" />
+                                    </div>
+                                )}
                             </div>
                         </div>
                     </div>

@@ -24,7 +24,9 @@ import {
   MoreVertical,
   MapPin,
   AlertTriangle,
-  Stethoscope
+  Stethoscope,
+  Video,
+  Monitor
 } from 'lucide-react';
 import { Patient, PatientStatus, ModuleType, AgendaStatus, PriorityLevel } from '../types';
 
@@ -50,7 +52,13 @@ const Agenda: React.FC<AgendaProps> = ({ onUpdateStatus, patients }) => {
 
   const today = getLocalDateString();
   const [selectedDate, setSelectedDate] = useState(today);
+  
+  // Tabs de Estado
   const [activeTab, setActiveTab] = useState<'pending' | 'arrived' | 'noshow' | 'modified'>('pending');
+  
+  // Filtro de Modalidad (Físico vs Digital)
+  const [modalityFilter, setModalityFilter] = useState<'all' | 'physical' | 'digital'>('all');
+
   const [searchTerm, setSearchTerm] = useState('');
   
   // Estado para el Modal de Arribo
@@ -86,11 +94,12 @@ const Agenda: React.FC<AgendaProps> = ({ onUpdateStatus, patients }) => {
     PatientStatus.READY_RESULTS,
     PatientStatus.TAKING_SAMPLES,
     PatientStatus.PROCESSING_RESULTS,
-    PatientStatus.WAITING_FOR_SAMPLES
+    PatientStatus.WAITING_FOR_SAMPLES,
+    PatientStatus.ONLINE_WAITING,
+    PatientStatus.ONLINE_IN_CALL
   ].includes(p.status);
 
   // Filtrado por fecha seleccionada y orden por hora
-  // NOTA: Aquí quitamos el filtro !startsWith('OLD-') para permitir ver las citas movidas en el día original (tab Modificados)
   const dayAppointments = useMemo(() => {
     return patients
       .filter(p => p.scheduledDate === selectedDate)
@@ -111,28 +120,37 @@ const Agenda: React.FC<AgendaProps> = ({ onUpdateStatus, patients }) => {
   const filteredAppointments = useMemo(() => {
     const search = cleanStr(searchTerm);
     return dayAppointments.filter(p => {
+      // 1. Filtro de Texto
       const matchesSearch = cleanStr(p.name).includes(search) || cleanStr(p.curp).includes(search);
+      
+      // 2. Filtro de Estado (Tabs)
       const arrived = isActuallyArrived(p);
       const modified = p.agendaStatus === AgendaStatus.CANCELLED || p.agendaStatus === AgendaStatus.RESCHEDULED;
       const noShow = p.agendaStatus === AgendaStatus.NO_SHOW;
 
-      if (activeTab === 'pending') {
-        return matchesSearch && !arrived && !modified && !noShow;
-      }
-      if (activeTab === 'arrived') {
-        return matchesSearch && arrived && !modified;
-      }
-      if (activeTab === 'noshow') {
-        return matchesSearch && noShow;
-      }
-      if (activeTab === 'modified') {
-        return matchesSearch && modified;
-      }
-      return matchesSearch;
+      let matchesTab = false;
+      if (activeTab === 'pending') matchesTab = !arrived && !modified && !noShow;
+      else if (activeTab === 'arrived') matchesTab = arrived && !modified;
+      else if (activeTab === 'noshow') matchesTab = noShow;
+      else if (activeTab === 'modified') matchesTab = modified;
+
+      // 3. Filtro de Modalidad (Físico vs Digital)
+      let matchesModality = true;
+      if (modalityFilter === 'physical') matchesModality = p.assignedModule !== ModuleType.TELEMEDICINE;
+      if (modalityFilter === 'digital') matchesModality = p.assignedModule === ModuleType.TELEMEDICINE;
+
+      return matchesSearch && matchesTab && matchesModality;
     });
-  }, [dayAppointments, activeTab, searchTerm]);
+  }, [dayAppointments, activeTab, searchTerm, modalityFilter]);
 
   const handleOpenArrivalModal = (p: Patient) => {
+    // Si es telemedicina, el arribo es automático o vía dashboard, pero permitimos marcarlo aquí también
+    if (p.assignedModule === ModuleType.TELEMEDICINE) {
+        if(window.confirm("¿Marcar paciente como conectado en Sala Virtual?")) {
+            onUpdateStatus(p.id, PatientStatus.ONLINE_WAITING, AgendaStatus.ARRIVED_ON_TIME);
+        }
+        return;
+    }
     setSelectedAppointment(p);
     setArrivalModalOpen(true);
   };
@@ -167,7 +185,7 @@ const Agenda: React.FC<AgendaProps> = ({ onUpdateStatus, patients }) => {
            <div className="bg-white w-full max-w-lg rounded-[3rem] shadow-2xl p-10 flex flex-col gap-8 animate-in zoom-in-95">
               <div className="flex justify-between items-start">
                  <div className="space-y-2">
-                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Registrar Asistencia</p>
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Registrar Asistencia Presencial</p>
                     <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">{selectedAppointment.name}</h3>
                     <p className="text-xs font-bold text-blue-600 uppercase flex items-center gap-2"><Clock size={14}/> Cita Programada: {selectedAppointment.appointmentTime} hrs</p>
                  </div>
@@ -179,7 +197,7 @@ const Agenda: React.FC<AgendaProps> = ({ onUpdateStatus, patients }) => {
                     <div className="w-10 h-10 rounded-xl bg-emerald-200 text-emerald-700 flex items-center justify-center group-hover:bg-white group-hover:text-emerald-600"><CheckCircle size={20}/></div>
                     <div className="text-left">
                        <p className="text-sm font-black uppercase">Llegó a Tiempo</p>
-                       <p className="text-[10px] font-bold opacity-70 uppercase">Enviar a Monitor Activo</p>
+                       <p className="text-[10px] font-bold opacity-70 uppercase">Enviar a Sala de Espera Física</p>
                     </div>
                  </button>
 
@@ -210,11 +228,33 @@ const Agenda: React.FC<AgendaProps> = ({ onUpdateStatus, patients }) => {
             <span>Gestión Operativa de Unidades</span>
           </div>
           <h1 className="text-6xl font-black text-slate-900 tracking-tighter uppercase leading-none">
-            Agenda <span className="text-blue-600">Clínica</span>
+            Agenda <span className="text-blue-600">Híbrida</span>
           </h1>
         </div>
 
         <div className="flex flex-wrap gap-4 items-center">
+          {/* SELECTOR DE MODALIDAD (FÍSICO VS DIGITAL) */}
+          <div className="bg-slate-100 p-1.5 rounded-2xl flex items-center gap-1 shadow-inner">
+              <button 
+                onClick={() => setModalityFilter('all')}
+                className={`px-4 py-2.5 rounded-xl text-[10px] font-black uppercase transition-all ${modalityFilter === 'all' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+              >
+                  Todos
+              </button>
+              <button 
+                onClick={() => setModalityFilter('physical')}
+                className={`px-4 py-2.5 rounded-xl text-[10px] font-black uppercase transition-all flex items-center gap-2 ${modalityFilter === 'physical' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+              >
+                  <MapPin size={12}/> Consultorio
+              </button>
+              <button 
+                onClick={() => setModalityFilter('digital')}
+                className={`px-4 py-2.5 rounded-xl text-[10px] font-black uppercase transition-all flex items-center gap-2 ${modalityFilter === 'digital' ? 'bg-white text-violet-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+              >
+                  <Video size={12}/> Telemedicina
+              </button>
+          </div>
+
           <button onClick={() => navigate('/new-patient')} className="flex items-center px-12 py-5 bg-slate-900 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-2xl hover:bg-blue-600 transition-all group">
             <Plus className="w-5 h-5 mr-3 group-hover:rotate-90 transition-transform" /> Agendar Paciente
           </button>
@@ -321,7 +361,7 @@ const Agenda: React.FC<AgendaProps> = ({ onUpdateStatus, patients }) => {
                      </div>
                   </div>
                   <div className="flex flex-wrap bg-slate-50 border border-slate-100 p-1.5 rounded-2xl shadow-inner gap-1">
-                     <button onClick={() => setActiveTab('pending')} className={`px-5 py-2.5 rounded-xl text-[10px] font-black uppercase transition-all ${activeTab === 'pending' ? 'bg-white text-blue-600 shadow-md' : 'text-slate-400'}`}>Pendientes ({dayAppointments.filter(p => (p.agendaStatus === AgendaStatus.PENDING || !p.agendaStatus) && !isActuallyArrived(p)).length})</button>
+                     <button onClick={() => setActiveTab('pending')} className={`px-5 py-2.5 rounded-xl text-[10px] font-black uppercase transition-all ${activeTab === 'pending' ? 'bg-white text-blue-600 shadow-md' : 'text-slate-400'}`}>Pendientes</button>
                      <button onClick={() => setActiveTab('arrived')} className={`px-5 py-2.5 rounded-xl text-[10px] font-black uppercase transition-all ${activeTab === 'arrived' ? 'bg-white text-emerald-600 shadow-md' : 'text-slate-400'}`}>Arribados</button>
                      <button onClick={() => setActiveTab('noshow')} className={`px-5 py-2.5 rounded-xl text-[10px] font-black uppercase transition-all ${activeTab === 'noshow' ? 'bg-white text-rose-600 shadow-md' : 'text-slate-400'}`}>Faltas</button>
                      <button onClick={() => setActiveTab('modified')} className={`px-5 py-2.5 rounded-xl text-[10px] font-black uppercase transition-all ${activeTab === 'modified' ? 'bg-white text-amber-600 shadow-md' : 'text-slate-400'}`}>Modificados</button>
@@ -335,6 +375,7 @@ const Agenda: React.FC<AgendaProps> = ({ onUpdateStatus, patients }) => {
                 const isMod = appt.agendaStatus === AgendaStatus.CANCELLED || appt.agendaStatus === AgendaStatus.RESCHEDULED;
                 const hasConflict = timeConflicts.includes(appt.appointmentTime || '');
                 const priorityId = appt.priority.split(' ')[0];
+                const isTele = appt.assignedModule === ModuleType.TELEMEDICINE;
 
                 return (
                   <div key={appt.id} className="relative flex flex-col md:flex-row items-center hover:bg-slate-50/50 transition-all group p-10 gap-10">
@@ -352,12 +393,16 @@ const Agenda: React.FC<AgendaProps> = ({ onUpdateStatus, patients }) => {
                     <div className="flex-1 min-w-0 space-y-3">
                        <div className="flex items-center gap-4">
                           <p className={`font-black text-xl uppercase tracking-tighter truncate ${arrived || isMod ? 'text-slate-300 line-through' : 'text-slate-900'}`}>{appt.name}</p>
-                          <span className={`px-4 py-1.5 rounded-xl text-[9px] font-black uppercase border shadow-sm ${appt.assignedModule === ModuleType.AUXILIARY ? 'bg-indigo-50 text-indigo-700' : 'bg-blue-50 text-blue-700'}`}>
-                             {appt.assignedModule}
+                          
+                          {/* INDICADOR DE MODALIDAD */}
+                          <span className={`px-4 py-1.5 rounded-xl text-[9px] font-black uppercase border shadow-sm flex items-center gap-2 ${isTele ? 'bg-violet-50 text-violet-700 border-violet-100' : 'bg-blue-50 text-blue-700 border-blue-100'}`}>
+                             {isTele ? <Video size={12}/> : <MapPin size={12}/>}
+                             {isTele ? 'Teleconsulta' : appt.assignedModule}
                           </span>
+
                           {arrived && (
                             <div className="flex items-center gap-2 px-3 py-1.5 bg-emerald-50 text-emerald-700 rounded-lg text-[8px] font-black uppercase border border-emerald-100">
-                               <MapPin size={10} className="text-emerald-500" /> {appt.bedNumber ? `En Consultorio ${appt.bedNumber}` : 'En Sala de Espera'}
+                               <CheckCircle size={10} className="text-emerald-500" /> {appt.bedNumber ? `En ${appt.bedNumber}` : isTele ? 'En Sala Virtual' : 'En Sala de Espera'}
                             </div>
                           )}
                        </div>
@@ -378,11 +423,6 @@ const Agenda: React.FC<AgendaProps> = ({ onUpdateStatus, patients }) => {
                                 {appt.agendaStatus === AgendaStatus.RESCHEDULED ? 'Cita Reagendada' : appt.agendaStatus === AgendaStatus.CANCELLED ? 'Cita Cancelada' : appt.agendaStatus}
                              </div>
                           )}
-                          {isMod && appt.agendaStatus === AgendaStatus.RESCHEDULED && (
-                            <div className="px-4 py-1.5 bg-slate-100 text-slate-500 rounded-lg text-[8px] font-black uppercase flex items-center gap-2">
-                               <CalendarIcon size={12} /> Fecha anterior: {appt.lastVisit}
-                            </div>
-                          )}
                        </div>
                     </div>
 
@@ -394,13 +434,20 @@ const Agenda: React.FC<AgendaProps> = ({ onUpdateStatus, patients }) => {
                             
                             <button 
                               onClick={() => handleOpenArrivalModal(appt)}
-                              className="flex items-center px-8 py-5 bg-slate-900 text-white rounded-2xl text-[10px] font-black uppercase shadow-xl hover:bg-blue-600 transition-all gap-3"
+                              className={`flex items-center px-8 py-5 text-white rounded-2xl text-[10px] font-black uppercase shadow-xl transition-all gap-3 ${isTele ? 'bg-violet-600 hover:bg-violet-700' : 'bg-slate-900 hover:bg-blue-600'}`}
                             >
-                              Registrar Arribo <MapPin size={14} className="animate-pulse" />
+                              {isTele ? 'Conectar' : 'Registrar Arribo'} {isTele ? <Monitor size={14} /> : <MapPin size={14} className="animate-pulse" />}
                             </button>
                          </div>
                        )}
-                       {arrived && <button onClick={() => navigate(`/patient/${appt.id}`)} className="px-8 py-4 bg-white border border-slate-200 text-slate-400 rounded-2xl text-[10px] font-black uppercase hover:text-blue-600 transition-all flex items-center gap-2"><Stethoscope size={14} /> Ver Expediente</button>}
+                       {arrived && (
+                           <button 
+                             onClick={() => isTele ? navigate(`/telemedicine/${appt.id}`) : navigate(`/patient/${appt.id}`)} 
+                             className="px-8 py-4 bg-white border border-slate-200 text-slate-400 rounded-2xl text-[10px] font-black uppercase hover:text-blue-600 transition-all flex items-center gap-2"
+                           >
+                               {isTele ? <Video size={14}/> : <Stethoscope size={14}/>} {isTele ? 'Ir a Sala' : 'Ver Expediente'}
+                           </button>
+                       )}
                        
                        {appt.agendaStatus === AgendaStatus.NO_SHOW && activeTab === 'noshow' && (
                          <div className="flex gap-2">

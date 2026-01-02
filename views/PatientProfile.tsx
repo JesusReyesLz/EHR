@@ -6,7 +6,8 @@ import {
   Thermometer, Heart, Wind, Droplet, Edit3, Trash2, Save, HeartPulse, 
   TrendingUp, ChevronRight, FilePlus2, Flame, Droplets, X, QrCode, BadgeCheck, Scale, Ruler,
   Calendar, CheckSquare, Maximize2, Clock, Info, LogOut, CheckCircle2, Lock, RotateCcw, FileBadge, AlertOctagon,
-  FileSpreadsheet, Globe, Accessibility, Stethoscope, List, Baby, Syringe, Pill, Edit
+  FileSpreadsheet, Globe, Accessibility, Stethoscope, List, Baby, Syringe, Pill, Edit,
+  Video, Wifi
 } from 'lucide-react';
 import { Patient, ClinicalNote, Vitals, DoctorInfo, PatientStatus, ModuleType } from '../types';
 import { NOTE_CATEGORIES } from '../constants';
@@ -447,6 +448,18 @@ const PatientProfile: React.FC<{ patients: Patient[], notes: ClinicalNote[], onU
                     <p className="text-[7px] font-black text-rose-500 uppercase tracking-widest flex items-center gap-1"><Flame size={8} /> ALERGIAS</p>
                     <p className="text-[9px] font-black text-rose-600 uppercase">{patient.allergies.length > 0 ? patient.allergies[0] : 'NEGADAS'}</p>
                  </div>
+                 {/* Estado de Telemedicina */}
+                 {!patient.hasTelemedicineConsent ? (
+                     <button onClick={() => navigate(`/patient/${patient.id}/telemedicine-consent`)} className="bg-indigo-50 px-3 py-0.5 rounded-lg border border-indigo-100 hover:bg-indigo-600 hover:text-white group transition-colors">
+                        <p className="text-[7px] font-black text-indigo-500 uppercase tracking-widest flex items-center gap-1 group-hover:text-white"><Wifi size={8} /> Telemedicina</p>
+                        <p className="text-[9px] font-black text-indigo-700 uppercase group-hover:text-white">Firmar Consentimiento</p>
+                     </button>
+                 ) : (
+                     <div className="bg-emerald-50 px-3 py-0.5 rounded-lg border border-emerald-100">
+                        <p className="text-[7px] font-black text-emerald-500 uppercase tracking-widest flex items-center gap-1"><Wifi size={8} /> Telemedicina</p>
+                        <p className="text-[9px] font-black text-emerald-700 uppercase">Habilitada</p>
+                     </div>
+                 )}
               </div>
            </div>
         </div>
@@ -487,9 +500,14 @@ const PatientProfile: React.FC<{ patients: Patient[], notes: ClinicalNote[], onU
                  {patientNotes.map(note => (
                     <button key={note.id} onClick={() => setSelectedNote(note)} className="w-full text-left p-6 hover:bg-blue-50/20 transition-all group flex items-start justify-between">
                        <div className="flex gap-4 items-center">
-                          <div className="w-10 h-10 bg-slate-50 border border-slate-100 rounded-xl flex items-center justify-center group-hover:bg-blue-600 group-hover:text-white transition-all"><FileText size={18} /></div>
+                          <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all ${note.origin === 'Telemedicine' ? 'bg-violet-50 text-violet-600' : 'bg-slate-50 text-slate-400'}`}>
+                              {note.origin === 'Telemedicine' ? <Video size={18} /> : <FileText size={18} />}
+                          </div>
                           <div>
-                             <p className="text-xs font-black text-slate-900 uppercase group-hover:text-blue-700 tracking-tight">{note.type}</p>
+                             <p className="text-xs font-black text-slate-900 uppercase group-hover:text-blue-700 tracking-tight flex items-center gap-2">
+                                 {note.type}
+                                 {note.origin === 'Telemedicine' && <span className="bg-violet-100 text-violet-700 px-2 py-0.5 rounded text-[7px] font-black uppercase border border-violet-200">Telemedicina</span>}
+                             </p>
                              <p className="text-[9px] font-bold text-slate-400 uppercase mt-1">{note.date} • {note.author.split(' ')[0]}</p>
                           </div>
                        </div>
@@ -818,8 +836,16 @@ const PatientProfile: React.FC<{ patients: Patient[], notes: ClinicalNote[], onU
            <div className="bg-white w-full max-w-5xl max-h-[95vh] rounded-[3.5rem] shadow-2xl overflow-hidden flex flex-col border-4 border-white/20">
               <div className="p-8 bg-slate-50 border-b border-slate-200 flex justify-between items-center no-print">
                  <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 rounded-2xl flex items-center justify-center text-white bg-blue-600 shadow-lg"><FileText size={24} /></div>
-                    <div><p className="text-xs font-black text-slate-900 uppercase tracking-widest">{selectedNote.type}</p><p className="text-[10px] text-slate-400 font-bold uppercase">Sello Digital NOM-024</p></div>
+                    <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-white shadow-lg ${selectedNote.origin === 'Telemedicine' ? 'bg-violet-600' : 'bg-blue-600'}`}>
+                        {selectedNote.origin === 'Telemedicine' ? <Video size={24} /> : <FileText size={24} />}
+                    </div>
+                    <div>
+                        <p className="text-xs font-black text-slate-900 uppercase tracking-widest">
+                            {selectedNote.type} 
+                            {selectedNote.origin === 'Telemedicine' && <span className="ml-2 text-violet-600">(TELEMEDICINA)</span>}
+                        </p>
+                        <p className="text-[10px] text-slate-400 font-bold uppercase">Sello Digital NOM-024</p>
+                    </div>
                  </div>
                  <div className="flex gap-4">
                     <button onClick={() => window.print()} className="px-8 py-3 bg-slate-900 text-white rounded-2xl font-black text-[10px] uppercase shadow-sm flex items-center gap-3 hover:bg-blue-600 transition-all"><Printer size={18} /> Imprimir Certificado</button>

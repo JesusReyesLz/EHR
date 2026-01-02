@@ -11,6 +11,8 @@ import {
 import { ModuleType, Patient, PatientStatus, PriorityLevel, AgendaStatus, ClinicalNote } from '../types';
 import Billing from './Billing';
 import Finance from './Finance';
+import StaffManagement from './StaffManagement';
+import TelemedicineDashboard from './TelemedicineDashboard';
 
 interface DashboardProps {
   module: ModuleType;
@@ -97,6 +99,8 @@ const Dashboard: React.FC<DashboardProps> = ({
   const isAuxiliary = module === ModuleType.AUXILIARY;
   const isBilling = module === ModuleType.BILLING;
   const isFinance = module === ModuleType.FINANCE;
+  const isStaff = module === ModuleType.STAFF;
+  const isTelemedicine = module === ModuleType.TELEMEDICINE;
   
   const modules = [
     ModuleType.OUTPATIENT, 
@@ -104,7 +108,9 @@ const Dashboard: React.FC<DashboardProps> = ({
     ModuleType.HOSPITALIZATION, 
     ModuleType.AUXILIARY, 
     ModuleType.BILLING,
-    ModuleType.FINANCE
+    ModuleType.FINANCE,
+    ModuleType.STAFF,
+    ModuleType.TELEMEDICINE
   ];
 
   const filteredPatients = patients.filter(p => {
@@ -185,11 +191,33 @@ const Dashboard: React.FC<DashboardProps> = ({
               : 'text-slate-500 hover:text-slate-900 hover:bg-slate-200/50'
           }`}
         >
-          {mod === ModuleType.BILLING ? 'Caja / Tickets' : mod === ModuleType.FINANCE ? 'Finanzas' : mod}
+          {mod === ModuleType.BILLING ? 'Caja / Tickets' : mod === ModuleType.FINANCE ? 'Finanzas' : mod === ModuleType.STAFF ? 'RRHH / Personal' : mod === ModuleType.TELEMEDICINE ? 'Telemedicina' : mod}
         </button>
       ))}
     </div>
   );
+
+  if (isTelemedicine) {
+    return (
+      <div className="max-w-full space-y-6 animate-in fade-in duration-500">
+        <ModuleSelector />
+        <div className="-mt-4">
+           <TelemedicineDashboard patients={patients} onUpdateStatus={onUpdateStatus} />
+        </div>
+      </div>
+    );
+  }
+
+  if (isStaff) {
+    return (
+      <div className="max-w-full space-y-6 animate-in fade-in duration-500">
+        <ModuleSelector />
+        <div className="-mt-4">
+           <StaffManagement />
+        </div>
+      </div>
+    );
+  }
 
   if (isFinance) {
     return (

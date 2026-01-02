@@ -11,9 +11,10 @@ import { Patient, ClinicalNote } from '../types';
 interface TelemedicineConsentProps {
   patients: Patient[];
   onSaveNote: (note: ClinicalNote) => void;
+  onUpdatePatient?: (patient: Patient) => void; // Added prop
 }
 
-const TelemedicineConsent: React.FC<TelemedicineConsentProps> = ({ patients, onSaveNote }) => {
+const TelemedicineConsent: React.FC<TelemedicineConsentProps> = ({ patients, onSaveNote, onUpdatePatient }) => {
   const { id } = useParams();
   const navigate = useNavigate();
   const patient = patients.find(p => p.id === id);
@@ -45,9 +46,16 @@ const TelemedicineConsent: React.FC<TelemedicineConsentProps> = ({ patients, onS
       author: 'Dr. Alejandro Méndez',
       content: { ...acceptedTerms, location: 'Teleconsulta remota' },
       isSigned: true,
-      hash: `CERT-TELE-${Math.random().toString(36).substr(2, 9).toUpperCase()}`
+      hash: `CERT-TELE-${Math.random().toString(36).substr(2, 9).toUpperCase()}`,
+      origin: 'Physical' // Usually signed during onboarding or initial setup, though could be remote
     };
     onSaveNote(newNote);
+
+    // Update patient status to reflect consent
+    if (onUpdatePatient) {
+        onUpdatePatient({ ...patient, hasTelemedicineConsent: true });
+    }
+
     navigate(`/patient/${id}`);
   };
 
@@ -192,7 +200,7 @@ const TelemedicineConsent: React.FC<TelemedicineConsentProps> = ({ patients, onS
                 onClick={handleSave}
                 className="px-10 py-4 bg-blue-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl hover:bg-emerald-600 transition-all flex items-center gap-3"
               >
-                 <Save size={18} /> Validar y Continuar a Llamada
+                 <Save size={18} /> Validar y Activar Vinculación
               </button>
            </div>
         </div>

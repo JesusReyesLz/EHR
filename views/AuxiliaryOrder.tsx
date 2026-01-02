@@ -6,8 +6,8 @@ import {
   Save, User, AlertTriangle, CheckCircle2, FlaskConical,
   X, Search, Info, Plus, Trash2, ClipboardList, Zap, ArrowLeft, Eye, FileText
 } from 'lucide-react';
-import { Patient, ClinicalNote } from '../types';
-import { LAB_CATALOG, IMAGING_CATALOG } from '../constants';
+import { Patient, ClinicalNote, PriceItem } from '../types';
+import { LAB_CATALOG, IMAGING_CATALOG, INITIAL_PRICES } from '../constants';
 
 const AuxiliaryOrder: React.FC<{ patients: Patient[], onSaveNote: (n: ClinicalNote) => void }> = ({ patients, onSaveNote }) => {
   const { id } = useParams();
@@ -26,6 +26,33 @@ const AuxiliaryOrder: React.FC<{ patients: Patient[], onSaveNote: (n: ClinicalNo
     date: new Date().toLocaleDateString('es-MX')
   });
 
+  // Load dynamic prices from storage
+  const prices: PriceItem[] = useMemo(() => {
+    const saved = localStorage.getItem('med_price_catalog_v1');
+    return saved ? JSON.parse(saved) : INITIAL_PRICES;
+  }, []);
+
+  // Merge static and dynamic catalogs
+  const mergedLabCatalog = useMemo(() => {
+      const dynamicLabs = prices.filter(p => p.category === 'Estudios / Auxiliares' && !p.code.startsWith('IMG')).map(p => ({
+          name: p.name,
+          preparation: 'Consultar indicaciones',
+          indications: 'Estudio de Laboratorio'
+      }));
+      const combined = [...LAB_CATALOG, ...dynamicLabs];
+      return Array.from(new Map(combined.map(item => [item.name, item])).values());
+  }, [prices]);
+
+  const mergedImagingCatalog = useMemo(() => {
+      const dynamicImg = prices.filter(p => p.category === 'Estudios / Auxiliares' && (p.code.startsWith('IMG') || p.name.includes('Rayos') || p.name.includes('Tomografía') || p.name.includes('Ultrasonido'))).map(p => ({
+          name: p.name,
+          preparation: 'Consultar indicaciones',
+          indications: 'Estudio de Gabinete'
+      }));
+      const combined = [...IMAGING_CATALOG, ...dynamicImg];
+      return Array.from(new Map(combined.map(item => [item.name, item])).values());
+  }, [prices]);
+
   if (!patient) return <div className="p-20 text-center uppercase font-black text-slate-300">Paciente no encontrado</div>;
 
   const toggleStudy = (studyName: string, type: 'lab' | 'imaging') => {
@@ -40,10 +67,10 @@ const AuxiliaryOrder: React.FC<{ patients: Patient[], onSaveNote: (n: ClinicalNo
 
   const selectedMetadata = useMemo(() => {
     return [
-      ...LAB_CATALOG.filter(s => form.labStudies.includes(s.name)),
-      ...IMAGING_CATALOG.filter(s => form.imagingStudies.includes(s.name))
+      ...mergedLabCatalog.filter(s => form.labStudies.includes(s.name)),
+      ...mergedImagingCatalog.filter(s => form.imagingStudies.includes(s.name))
     ];
-  }, [form.labStudies, form.imagingStudies]);
+  }, [form.labStudies, form.imagingStudies, mergedLabCatalog, mergedImagingCatalog]);
 
   const handleSave = () => {
     if (form.labStudies.length === 0 && form.imagingStudies.length === 0) {
@@ -65,7 +92,7 @@ const AuxiliaryOrder: React.FC<{ patients: Patient[], onSaveNote: (n: ClinicalNo
     navigate(`/patient/${id}`);
   };
 
-  const filteredCatalog = (activeTab === 'lab' ? LAB_CATALOG : IMAGING_CATALOG).filter(s => 
+  const filteredCatalog = (activeTab === 'lab' ? mergedLabCatalog : mergedImagingCatalog).filter(s => 
     s.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
 

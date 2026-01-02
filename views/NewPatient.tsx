@@ -32,7 +32,8 @@ import {
   X,
   AlertOctagon,
   FilePenLine,
-  CalendarCheck
+  CalendarCheck,
+  Video
 } from 'lucide-react';
 import { Patient, PatientStatus, ModuleType, PriorityLevel, AgendaStatus } from '../types';
 import { LAB_CATALOG, IMAGING_CATALOG } from '../constants';
@@ -297,8 +298,15 @@ const NewPatient: React.FC<NewPatientProps> = ({ onAdd, patients }) => {
     let lastVisitDate = getLocalDateString();
 
     if (isImmediate) {
-       finalStatus = form.assignedModule === ModuleType.AUXILIARY ? PatientStatus.WAITING_FOR_SAMPLES : PatientStatus.WAITING;
+       if (form.assignedModule === ModuleType.TELEMEDICINE) {
+           finalStatus = PatientStatus.ONLINE_WAITING;
+       } else {
+           finalStatus = form.assignedModule === ModuleType.AUXILIARY ? PatientStatus.WAITING_FOR_SAMPLES : PatientStatus.WAITING;
+       }
        finalAgendaStatus = AgendaStatus.ARRIVED_ON_TIME;
+    } else {
+        // Cita Programada
+        finalStatus = PatientStatus.SCHEDULED;
     }
 
     // Construcción final del objeto con datos de agenda actualizados
@@ -318,7 +326,10 @@ const NewPatient: React.FC<NewPatientProps> = ({ onAdd, patients }) => {
     onAdd(patientData); 
     
     if (isEditing) navigate('/agenda');
-    else if (isImmediate) navigate('/'); 
+    else if (isImmediate) {
+        if(form.assignedModule === ModuleType.TELEMEDICINE) navigate('/telemedicine');
+        else navigate('/'); 
+    }
     else navigate('/agenda');
   };
 
@@ -634,12 +645,13 @@ const NewPatient: React.FC<NewPatientProps> = ({ onAdd, patients }) => {
 
                 <div className="pt-8 border-t border-slate-50 space-y-6">
                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Selección de Módulo / Destino</label>
-                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
                      {[
                        { id: ModuleType.OUTPATIENT, icon: <Stethoscope size={20}/>, label: 'Consulta' },
                        { id: ModuleType.EMERGENCY, icon: <Activity size={20}/>, label: 'Urgencias' },
                        { id: ModuleType.HOSPITALIZATION, icon: <Bed size={20}/>, label: 'Hospitalización' },
-                       { id: ModuleType.AUXILIARY, icon: <FlaskConical size={20}/>, label: 'Laboratorio' }
+                       { id: ModuleType.AUXILIARY, icon: <FlaskConical size={20}/>, label: 'Laboratorio' },
+                       { id: ModuleType.TELEMEDICINE, icon: <Video size={20}/>, label: 'Telemedicina' }
                      ].map(mod => (
                        <button 
                          key={mod.id}

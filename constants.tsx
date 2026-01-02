@@ -1,5 +1,5 @@
 
-import { Patient, PatientStatus, ModuleType, MedicationStock, MedicationCategory, PriorityLevel, AgendaStatus, SupplyType, PriceItem, PriceType } from './types';
+import { Patient, PatientStatus, ModuleType, MedicationStock, MedicationCategory, PriorityLevel, AgendaStatus, SupplyType, PriceItem, PriceType, StaffMember, DoctorInfo } from './types';
 
 // Helper local para asegurar consistencia en fechas de demo
 const getLocalToday = () => {
@@ -8,6 +8,69 @@ const getLocalToday = () => {
 };
 
 const todayStr = getLocalToday();
+
+export const MOCK_DOCTORS: DoctorInfo[] = [
+  {
+    name: 'JESUS REYES LOZANO',
+    cedula: '12840177',
+    institution: 'UNAM',
+    specialty: 'Cirugía General',
+    email: 'dr.reyes@med.mx',
+    address: 'Consultorio 101',
+    phone: '55 1234 5678',
+    hospital: 'San Francisco',
+    isPremium: true,
+    rating: 4.9,
+    reviewCount: 120,
+    price: 800,
+    availableFrom: '09:00 AM'
+  },
+  {
+    name: 'MARIA GONZALEZ',
+    cedula: '87654321',
+    institution: 'TEC MONTERREY',
+    specialty: 'Pediatría',
+    email: 'dra.maria@med.mx',
+    address: 'Consultorio 205',
+    phone: '55 8765 4321',
+    hospital: 'San Francisco',
+    isPremium: true,
+    rating: 5.0,
+    reviewCount: 85,
+    price: 900,
+    availableFrom: '10:00 AM'
+  },
+  {
+    name: 'ROBERTO CRUZ',
+    cedula: '45678912',
+    institution: 'IPN',
+    specialty: 'Medicina Interna',
+    email: 'dr.cruz@med.mx',
+    address: 'Consultorio 304',
+    phone: '55 1122 3344',
+    hospital: 'San Francisco',
+    isPremium: false,
+    rating: 4.5,
+    reviewCount: 42,
+    price: 700,
+    availableFrom: '11:30 AM'
+  },
+  {
+    name: 'ANA TORRES',
+    cedula: '11223344',
+    institution: 'UAG',
+    specialty: 'Ginecología',
+    email: 'dra.ana@med.mx',
+    address: 'Consultorio 102',
+    phone: '55 4433 2211',
+    hospital: 'San Francisco',
+    isPremium: true,
+    rating: 4.8,
+    reviewCount: 210,
+    price: 1000,
+    availableFrom: 'En Línea'
+  }
+];
 
 export const INITIAL_PATIENTS: Patient[] = [
   {
@@ -52,6 +115,20 @@ export const INITIAL_PATIENTS: Patient[] = [
     email: 'maria.rodriguez@email.com',
     waitingStartTime: new Date().toLocaleString()
   }
+];
+
+// All Modules List for SuperAdmin
+const ALL_MODULES = Object.values(ModuleType);
+
+export const INITIAL_STAFF: StaffMember[] = [
+  { id: 'S-001', name: 'Dr. Jesus Reyes Lozano', role: 'Médico Especialista', specialty: 'Cirugía General', status: 'Activo', cedula: '12840177', assignedArea: ['Quirófano'], salaryDaily: 1200, paymentPeriod: 'Quincenal', allowedModules: ALL_MODULES },
+  { id: 'S-002', name: 'Dra. Ana Torres', role: 'Médico General', status: 'Activo', cedula: '87654321', assignedArea: ['Urgencias', 'Consulta Externa'], salaryDaily: 800, paymentPeriod: 'Quincenal', allowedModules: [ModuleType.OUTPATIENT, ModuleType.EMERGENCY, ModuleType.HOSPITALIZATION] },
+  { id: 'S-003', name: 'Enf. Lucía Rodríguez', role: 'Enfermería', status: 'Activo', assignedArea: ['Hospitalización', 'Urgencias'], salaryDaily: 500, paymentPeriod: 'Quincenal', allowedModules: [ModuleType.HOSPITALIZATION, ModuleType.EMERGENCY, ModuleType.MONITOR] },
+  { id: 'S-004', name: 'Q.F.B. Beatriz Mendoza', role: 'Químico / Laboratorio', status: 'Activo', assignedArea: ['Laboratorio'], salaryDaily: 600, paymentPeriod: 'Quincenal', allowedModules: [ModuleType.AUXILIARY] },
+  { id: 'S-005', name: 'Tec. Carlos Ruiz', role: 'Radiólogo / Imagen', status: 'Activo', assignedArea: ['Imagenología'], salaryDaily: 550, paymentPeriod: 'Quincenal', allowedModules: [ModuleType.AUXILIARY] },
+  { id: 'S-006', name: 'Pedro Díaz', role: 'Camillero', status: 'Activo', assignedArea: ['General'], salaryDaily: 350, paymentPeriod: 'Semanal', allowedModules: [ModuleType.MONITOR] },
+  { id: 'S-007', name: 'Martha Solís', role: 'Limpieza / Intendencia', status: 'Activo', assignedArea: ['Planta Baja'], salaryDaily: 300, paymentPeriod: 'Semanal', allowedModules: [ModuleType.MONITOR] },
+  { id: 'S-008', name: 'Lic. Sofía Vergara', role: 'Caja / Admisión', status: 'Activo', assignedArea: ['Recepción', 'Caja'], salaryDaily: 400, paymentPeriod: 'Quincenal', allowedModules: [ModuleType.BILLING, ModuleType.FINANCE, ModuleType.OUTPATIENT] }
 ];
 
 export const DEFAULT_INFRASTRUCTURE = {

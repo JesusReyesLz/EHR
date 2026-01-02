@@ -9,7 +9,10 @@ export enum ModuleType {
   MONITOR = 'Monitor Hospitalario',
   BILLING = 'Caja y Facturación', 
   PRICING = 'Catálogo de Precios',
-  FINANCE = 'Finanzas y Compras'
+  FINANCE = 'Finanzas y Compras',
+  STAFF = 'Personal y Turnos',
+  TELEMEDICINE = 'Telemedicina',
+  HOME_SERVICES = 'Servicios a Domicilio' // Nuevo Módulo
 }
 
 export enum PatientStatus {
@@ -26,7 +29,10 @@ export enum PatientStatus {
   PROCESSING_RESULTS = 'En Procesamiento',
   READY_RESULTS = 'Resultados Listos',
   TRANSIT = 'En camino a sala',
-  SCHEDULED = 'Programado'
+  SCHEDULED = 'Programado',
+  ONLINE_WAITING = 'En Sala Virtual', // Esperando a su médico específico
+  ONLINE_QUEUE = 'En Bolsa General', // Espera rápida (Cualquier médico)
+  ONLINE_IN_CALL = 'En Videoconsulta'
 }
 
 export enum AgendaStatus {
@@ -61,6 +67,110 @@ export enum SupplyType {
   EQUIPMENT = 'Equipo Médico',
   OTHER = 'Diverso'
 }
+
+// --- STAFF MANAGEMENT TYPES ---
+export type StaffRole = 
+  | 'Médico Especialista' 
+  | 'Médico General' 
+  | 'Enfermería' 
+  | 'Químico / Laboratorio' 
+  | 'Radiólogo / Imagen' 
+  | 'Camillero' 
+  | 'Limpieza / Intendencia' 
+  | 'Caja / Admisión' 
+  | 'Administrativo / RRHH'
+  | 'Farmacia';
+
+export type ShiftType = 'Matutino' | 'Vespertino' | 'Nocturno A' | 'Nocturno B' | 'Guardia' | 'Jornada Acumulada' | 'Personalizado';
+
+export interface StaffMember {
+  id: string;
+  clinicId?: string; // ID de la Clínica (Tenant) para separar bases de datos
+  name: string;
+  role: StaffRole;
+  specialty?: string; 
+  cedula?: string;
+  email?: string;
+  phone?: string;
+  status: 'Activo' | 'Inactivo' | 'Vacaciones' | 'Incapacidad';
+  assignedArea?: string[]; 
+  
+  // Platform Integration Flags (Vínculos)
+  isTelemedicineEnabled?: boolean; // Puede dar consulta online
+  isHomeServiceEnabled?: boolean; // Puede ser asignado a rutas (Enfermería/Labs)
+  mobileAppAccess?: boolean; // Tiene acceso a la App ECE Móvil
+  
+  // Payroll Data
+  salaryDaily: number; 
+  paymentPeriod: 'Quincenal' | 'Mensual' | 'Semanal';
+  bankAccount?: string;
+  rfc?: string;
+  curp?: string;
+  joinDate?: string;
+
+  // Access Control
+  allowedModules: ModuleType[]; 
+  
+  // Financials for Staff
+  walletBalance?: number; // Saldo disponible para retiro (Comisiones)
+}
+
+export interface WorkShift {
+  id: string;
+  staffId: string;
+  staffName: string;
+  role: StaffRole;
+  area: string; 
+  date: string; // YYYY-MM-DD
+  shiftType: ShiftType;
+  
+  // Time Tracking
+  scheduledStartTime: string; // HH:MM
+  scheduledEndTime: string;   // HH:MM
+  checkIn?: string; 
+  checkOut?: string; 
+  
+  attendanceStatus: 'Pendiente' | 'Asistió' | 'Falta' | 'Retardo' | 'Justificado';
+  
+  // Computed for Payroll
+  workedHours?: number; // Horas reales trabajadas
+  overtimeHours?: number; // Total horas extra
+  notes?: string;
+}
+
+export interface PayrollRecord {
+  id: string;
+  periodStart: string;
+  periodEnd: string;
+  generationDate: string;
+  status: 'Borrador' | 'Pagado';
+  totalPaid: number;
+  configUsed: {
+    weeklyHours: number; // 48 or 40
+  };
+  details: PayrollDetail[];
+}
+
+export interface PayrollDetail {
+  staffId: string;
+  staffName: string;
+  daysWorked: number;
+  totalWorkedHours: number;
+  
+  // Salary Parts
+  grossSalary: number; // Sueldo Base por días
+  
+  // Overtime Breakdown (LFT Mexico)
+  overtimeDoubleHours: number; // Primeras 9 hrs extra
+  overtimeTripleHours: number; // Excedente de 9 hrs
+  overtimeAmount: number; // $ Total Extra
+  
+  bonuses: number; 
+  deductions: number; // ISR, IMSS
+  netSalary: number; // A pagar
+  notes?: string;
+}
+// -----------------------------
 
 export interface Expense {
   id: string;
@@ -135,6 +245,7 @@ export interface PriceItem {
   taxPercent: number;
   linkedInventoryId?: string; // Para productos 1:1
   linkedSupplies?: LinkedSupply[]; // Para procedimientos con insumos (1:N)
+  cost?: number; // Costo operativo manual para servicios
 }
 
 export interface ChargeItem {
@@ -241,6 +352,11 @@ export interface StockMovement {
 }
 
 export interface DoctorInfo {
+  // Clinic / Multi-Tenant Data
+  id?: string; // Added ID for matching
+  clinicId?: string; 
+  clinicName?: string;
+  // Personal Data
   name: string;
   cedula: string;
   institution: string;
@@ -251,6 +367,24 @@ export interface DoctorInfo {
   hospital: string;
   titleUrl?: string;
   cedulaUrl?: string;
+  // SaaS Features
+  isPremium?: boolean;
+  rating?: number;
+  reviewCount?: number;
+  price?: number;
+  availableFrom?: string;
+  avatarUrl?: string;
+  // Public Profile Fields
+  biography?: string;
+  services?: string[];
+  languages?: string[];
+  coverUrl?: string;
+  gallery?: string[];
+  allowReviews?: boolean; // Toggle para habilitar/deshabilitar comentarios
+  
+  // Real-time Status
+  isOnline?: boolean; // Available for Telemedicine
+  walletBalance?: number; // Saldo acumulado por consultas
 }
 
 export interface Vitals {
@@ -296,8 +430,40 @@ export interface LiquidEntry {
   date: string;
 }
 
+// --- NEW TYPES FOR TELEMEDICINE INTAKE ---
+export interface TeleIntakeForm {
+    mainSymptom: string;
+    onsetDuration: string; // e.g. "2 days ago"
+    painLevel: number; // 0-10
+    chronicConditions: string[]; // Selected from list
+    allergies: string;
+    currentMedication: string;
+    notes: string;
+    submittedAt: string;
+}
+
+export interface HomeServiceRequest {
+    id: string;
+    patientId: string;
+    patientName: string;
+    patientAddress: string;
+    patientPhone?: string;
+    requestedBy: string; // Doctor Name
+    requestedDate: string;
+    status: 'Pendiente' | 'Asignado' | 'En Camino' | 'En Proceso' | 'Recolectado' | 'Finalizado';
+    assignedUnit?: string; // e.g., "Unidad Móvil 01"
+    assignedStaff?: string; // e.g., "Enf. Juan Perez"
+    studies: string[]; // List of study names
+    notes?: string;
+    coordinates?: { lat: number, lng: number }; // Ubicación en mapa
+    acceptedAt?: string; // Timestamp de cuando el enfermero aceptó el trabajo
+    completedAt?: string; // Timestamp de finalización
+    commission?: number; // Monto ganado por el servicio
+}
+
 export interface Patient {
   id: string;
+  clinicId?: string; // Link to Clinic DB
   name: string;
   curp: string;
   age: number;
@@ -334,6 +500,12 @@ export interface Patient {
   // New Fields for Billing Integration
   pendingCharges?: ChargeItem[];
   paymentStatus?: 'Pendiente' | 'Pagado' | 'N/A';
+  
+  // Telemedicine Specifics
+  assignedDoctorId?: string; // ID del médico seleccionado en directorio
+  assignedDoctorName?: string;
+  hasTelemedicineConsent?: boolean; // Flag para consentimiento firmado
+  teleIntake?: TeleIntakeForm; // Datos del cuestionario previo
 }
 
 export interface ClinicalNote {
@@ -347,6 +519,7 @@ export interface ClinicalNote {
   };
   isSigned: boolean;
   hash?: string;
+  origin?: 'Physical' | 'Telemedicine'; // To distinguish note source
 }
 
 export interface PatientAccount {
