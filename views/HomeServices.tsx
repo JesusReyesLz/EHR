@@ -42,14 +42,14 @@ const HomeServices: React.FC<HomeServicesProps> = ({ requests, onUpdateRequest, 
     };
 
     // --- DISPATCH LOGIC ---
-    const filteredRequests = requests.filter(r => {
+    const filteredRequests = (requests || []).filter(r => {
         const matchesFilter = filter === 'Todos' || r.status === filter;
         const matchesSearch = r.patientName.toLowerCase().includes(searchTerm.toLowerCase()) || 
                               r.patientAddress.toLowerCase().includes(searchTerm.toLowerCase());
         return matchesFilter && matchesSearch;
     });
 
-    const availableStaff = staffList.filter(s => s.isHomeServiceEnabled && s.status === 'Activo');
+    const availableStaff = (staffList || []).filter(s => s.isHomeServiceEnabled && s.status === 'Activo');
 
     const confirmAssignment = () => {
         if (!selectedRequest || !assignForm.unit || !assignForm.staffId) return alert("Seleccione unidad y personal.");
@@ -64,20 +64,26 @@ const HomeServices: React.FC<HomeServicesProps> = ({ requests, onUpdateRequest, 
     };
 
     // --- FIELD (UBER MODE) LOGIC ---
-    // Solicitudes disponibles (Bolsa de trabajo)
-    const availableJobs = requests.filter(r => r.status === 'Pendiente');
+    // Solicitudes disponibles (Bolsa de trabajo) - Filtradas por estado 'Pendiente'
+    const availableJobs = useMemo(() => {
+         return (requests || []).filter(r => r.status === 'Pendiente');
+    }, [requests]);
     
     // Mis trabajos activos (Asignados a mi nombre o en proceso si yo lo tomé)
-    const myActiveJobs = requests.filter(r => 
-        (r.assignedStaff?.includes(currentUser.name) || r.assignedStaff === currentUser.name) && 
-        r.status !== 'Finalizado' && r.status !== 'Pendiente'
-    );
+    const myActiveJobs = useMemo(() => {
+        return (requests || []).filter(r => 
+            (r.assignedStaff?.includes(currentUser.name) || r.assignedStaff === currentUser.name) && 
+            r.status !== 'Finalizado' && r.status !== 'Pendiente'
+        );
+    }, [requests, currentUser.name]);
 
     // Wallet Logic
-    const myCompletedJobs = requests.filter(r => 
-        (r.assignedStaff?.includes(currentUser.name) || r.assignedStaff === currentUser.name) && 
-        r.status === 'Finalizado'
-    );
+    const myCompletedJobs = useMemo(() => {
+        return (requests || []).filter(r => 
+            (r.assignedStaff?.includes(currentUser.name) || r.assignedStaff === currentUser.name) && 
+            r.status === 'Finalizado'
+        );
+    }, [requests, currentUser.name]);
     
     const walletBalance = useMemo(() => {
         return myCompletedJobs.reduce((acc, job) => acc + (job.commission || 150), 0); // Mock commission if not set

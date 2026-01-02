@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
@@ -10,20 +9,24 @@ import {
   ChevronRight, ArrowRight, MapPin, ClipboardList, Thermometer,
   Eye, X, Power, Lock, LogIn, WifiOff, BellOff, LogOut, User,
   ArrowLeft, GraduationCap, MessageSquare, ImageIcon, Ambulance, FlaskConical, Plus, Coffee, Truck, Wallet, DollarSign, Download,
-  History
+  History, Navigation
 } from 'lucide-react';
-import { Patient, PatientStatus, AgendaStatus, PriorityLevel, ModuleType, DoctorInfo, TeleIntakeForm, HomeServiceRequest, ClinicalNote } from '../types';
+import { Patient, PatientStatus, AgendaStatus, PriorityLevel, ModuleType, DoctorInfo, TeleIntakeForm, HomeServiceRequest, ClinicalNote, StaffMember } from '../types';
 import { MOCK_DOCTORS, LAB_CATALOG } from '../constants';
+import HomeServices from './HomeServices'; // Import HomeServices
 
 interface TelemedicineDashboardProps {
   patients: Patient[];
   onUpdateStatus: (id: string, status: PatientStatus) => void;
   onAddPatient?: (patient: Patient) => void;
   onAddHomeRequest?: (req: HomeServiceRequest) => void;
-  doctorsList?: DoctorInfo[]; // New prop for availability
-  onDoctorStatusChange?: (cedula: string, isOnline: boolean) => void; // New prop for status toggle
-  currentUser?: DoctorInfo; // New prop for wallet
-  notes?: ClinicalNote[]; // New prop for history
+  onUpdateHomeRequest?: (req: HomeServiceRequest) => void; // Added for HomeServices integration
+  doctorsList?: DoctorInfo[]; 
+  onDoctorStatusChange?: (cedula: string, isOnline: boolean) => void; 
+  currentUser?: DoctorInfo; 
+  notes?: ClinicalNote[]; 
+  homeRequests?: HomeServiceRequest[];
+  staffList?: StaffMember[]; // Added for HomeServices integration
 }
 
 // ... (DoctorPublicProfile component remains the same) ...
@@ -252,8 +255,9 @@ const DoctorPublicProfile: React.FC<{
 const IntakeModal: React.FC<{
     isOpen: boolean;
     onClose: () => void;
-    onSubmit: (data: TeleIntakeForm) => void;
-}> = ({ isOpen, onClose, onSubmit }) => {
+    onSubmit: (data: TeleIntakeForm & { specialty?: string }) => void;
+    preSelectedDoctor?: DoctorInfo;
+}> = ({ isOpen, onClose, onSubmit, preSelectedDoctor }) => {
     // ... same implementation ...
     const [formData, setFormData] = useState<TeleIntakeForm>({
         mainSymptom: '',
@@ -265,12 +269,20 @@ const IntakeModal: React.FC<{
         notes: '',
         submittedAt: new Date().toISOString()
     });
+    
+    // Nueva selección de especialidad
+    const [selectedSpecialty, setSelectedSpecialty] = useState('Medicina General');
 
     const commonConditions = ['Diabetes', 'Hipertensión', 'Asma', 'Cardiopatía', 'Ninguna'];
+    const specialties = ['Medicina General', 'Pediatría', 'Ginecología', 'Medicina Interna', 'Nutrición', 'Psicología', 'Dermatología', 'Cardiología'];
 
     const handleSubmit = () => {
         if (!formData.mainSymptom || !formData.onsetDuration) return alert("Por favor complete los síntomas principales.");
-        onSubmit({...formData, submittedAt: new Date().toISOString()});
+        onSubmit({
+            ...formData, 
+            submittedAt: new Date().toISOString(),
+            specialty: preSelectedDoctor ? preSelectedDoctor.specialty : selectedSpecialty
+        });
     };
 
     const toggleCondition = (condition: string) => {
@@ -290,12 +302,30 @@ const IntakeModal: React.FC<{
                 <div className="p-8 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
                     <div>
                         <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">Historial Preliminar</h3>
-                        <p className="text-xs font-bold text-blue-600 uppercase tracking-widest mt-1">Para agilizar su atención médica</p>
+                        <p className="text-xs font-bold text-blue-600 uppercase tracking-widest mt-1">
+                            {preSelectedDoctor ? `Consulta con Dr. ${preSelectedDoctor.name}` : 'Solicitud de Atención Inmediata'}
+                        </p>
                     </div>
                     <button onClick={onClose} className="p-2 hover:bg-slate-200 rounded-full transition-colors"><X size={24}/></button>
                 </div>
                 
                 <div className="flex-1 overflow-y-auto p-8 space-y-6 custom-scrollbar">
+                    {/* SELECCIÓN DE ESPECIALIDAD (Solo si no hay doctor pre-seleccionado) */}
+                    {!preSelectedDoctor && (
+                        <div className="space-y-3">
+                            <label className="text-xs font-black text-slate-500 uppercase tracking-widest block ml-1 flex items-center gap-2">
+                                <Stethoscope size={14}/> Especialidad Requerida
+                            </label>
+                            <select 
+                                className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold outline-none focus:border-blue-500 transition-all"
+                                value={selectedSpecialty}
+                                onChange={e => setSelectedSpecialty(e.target.value)}
+                            >
+                                {specialties.map(s => <option key={s} value={s}>{s}</option>)}
+                            </select>
+                        </div>
+                    )}
+
                     <div className="space-y-3">
                         <label className="text-xs font-black text-slate-500 uppercase tracking-widest block ml-1">Síntoma Principal</label>
                         <textarea 
@@ -410,6 +440,7 @@ const HomeLabRequestModal: React.FC<{
             phone,
             coordinates: selectedCoords || { lat: 0.5, lng: 0.5 } // Default center if not selected
         });
+        setName(''); setAddress(''); setPhone(''); setSelectedStudies([]); setSelectedCoords(null);
     };
 
     if (!isOpen) return null;
@@ -519,7 +550,8 @@ const PatientView: React.FC<{
     setSearchTerm: (s: string) => void;
     doctorsList: DoctorInfo[];
     notes?: ClinicalNote[];
-}> = ({ onQuickRequest, onDoctorSelect, onViewProfile, onHomeLabRequest, searchTerm, setSearchTerm, doctorsList, notes }) => {
+    homeRequests?: HomeServiceRequest[]; // Receive real-time requests from props
+}> = ({ onQuickRequest, onDoctorSelect, onViewProfile, onHomeLabRequest, searchTerm, setSearchTerm, doctorsList, notes, homeRequests = [] }) => {
     const [patientTab, setPatientTab] = useState<'services' | 'history'>('services');
 
     const filteredDoctors = doctorsList.filter(d => 
@@ -527,11 +559,11 @@ const PatientView: React.FC<{
         d.specialty.toLowerCase().includes(searchTerm.toLowerCase())
     );
 
-    // Get Active Requests from LocalStorage (Simple Hack for Demo Consistency)
+    // Use passed homeRequests prop to display active requests for this patient (filtering by 'Portal Paciente' or matching logic)
+    // In a real app, we would filter by logged-in patient ID. Here we show all generated from this session.
     const activeRequests = React.useMemo(() => {
-        const reqs: HomeServiceRequest[] = JSON.parse(localStorage.getItem('med_home_req_v1') || '[]');
-        return reqs.filter(r => r.requestedBy === 'Portal Paciente' && r.status !== 'Finalizado');
-    }, []);
+        return (homeRequests || []).filter(r => r.status !== 'Finalizado' && r.requestedBy === 'Portal Paciente');
+    }, [homeRequests]);
 
     // Filter patient history (Mocked based on local storage)
     const myHistory = useMemo(() => {
@@ -583,6 +615,7 @@ const PatientView: React.FC<{
                                                 <Clock size={14}/> Esperando asignación...
                                             </p>
                                         )}
+                                        <p className="text-[9px] text-slate-400 mt-1 truncate max-w-[200px]">{req.studies.length} estudios solicitados</p>
                                     </div>
                                     <div className="w-12 h-12 bg-rose-50 text-rose-600 rounded-full flex items-center justify-center">
                                         <FlaskConical size={20}/>
@@ -768,22 +801,28 @@ const PatientView: React.FC<{
 
 const TelemedicineDashboard: React.FC<TelemedicineDashboardProps & { 
     onAddHomeRequest?: (req: HomeServiceRequest) => void,
+    onUpdateHomeRequest?: (req: HomeServiceRequest) => void,
     doctorsList: DoctorInfo[],
     onDoctorStatusChange?: (cedula: string, isOnline: boolean) => void,
     currentUser?: DoctorInfo,
-    notes?: ClinicalNote[]
+    notes?: ClinicalNote[],
+    homeRequests?: HomeServiceRequest[],
+    staffList?: StaffMember[]
 }> = ({ 
     patients, 
     onUpdateStatus, 
     onAddPatient, 
     onAddHomeRequest, 
+    onUpdateHomeRequest,
     doctorsList = MOCK_DOCTORS, 
     onDoctorStatusChange, 
     currentUser, 
-    notes = [] 
+    notes = [],
+    homeRequests = [],
+    staffList = []
 }) => {
   const navigate = useNavigate();
-  const [viewMode, setViewMode] = useState<'doctor' | 'patient'>('doctor'); // Switcher State
+  const [viewMode, setViewMode] = useState<'doctor' | 'patient' | 'staff'>('doctor'); // Switcher State
   const [searchTerm, setSearchTerm] = useState('');
   const [viewingDoctor, setViewingDoctor] = useState<DoctorInfo | null>(null);
   
@@ -846,9 +885,11 @@ const TelemedicineDashboard: React.FC<TelemedicineDashboardProps & {
       setShowIntakeModal(true);
   };
 
-  const handleIntakeSubmit = (intakeData: TeleIntakeForm) => {
+  const handleIntakeSubmit = (intakeData: TeleIntakeForm & { specialty?: string }) => {
       if (!onAddPatient) return;
       const isQuick = !selectedDoctorForRequest;
+      const reasonText = isQuick ? `ESPECIALIDAD: ${intakeData.specialty} - SÍNTOMA: ${intakeData.mainSymptom}` : `Teleconsulta con Dr. ${selectedDoctorForRequest?.name}`;
+
       const newPatient: Patient = {
           id: `TELE-${Date.now().toString().slice(-6)}`,
           name: 'PACIENTE DEMOSTRACIÓN', // En app real, vendría del perfil logueado
@@ -863,7 +904,7 @@ const TelemedicineDashboard: React.FC<TelemedicineDashboardProps & {
           scheduledDate: today,
           lastVisit: today,
           appointmentTime: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
-          reason: isQuick ? `SÍNTOMA: ${intakeData.mainSymptom}` : `Teleconsulta con Dr. ${selectedDoctorForRequest?.name}`,
+          reason: reasonText,
           chronicDiseases: intakeData.chronicConditions,
           agendaStatus: AgendaStatus.ARRIVED_ON_TIME,
           assignedDoctorId: selectedDoctorForRequest?.cedula,
@@ -873,7 +914,7 @@ const TelemedicineDashboard: React.FC<TelemedicineDashboardProps & {
       onAddPatient(newPatient);
       setShowIntakeModal(false);
       setSelectedDoctorForRequest(undefined);
-      alert(isQuick ? "Solicitud enviada. Un médico revisará su historial breve y lo atenderá pronto." : `Cita agendada con Dr. ${selectedDoctorForRequest?.name}.`);
+      alert(isQuick ? "Solicitud enviada a la bolsa general de especialistas." : `Cita agendada con Dr. ${selectedDoctorForRequest?.name}.`);
       setViewMode('doctor'); 
   };
 
@@ -893,7 +934,7 @@ const TelemedicineDashboard: React.FC<TelemedicineDashboardProps & {
       };
       onAddHomeRequest(newRequest);
       setShowHomeLabModal(false);
-      alert("Solicitud de laboratorio a domicilio enviada. Un coordinador logístico se pondrá en contacto pronto.");
+      alert("Solicitud de laboratorio a domicilio enviada. Verifique el estado en 'Mis Solicitudes'.");
   };
 
   const getOriginBadge = (p: Patient) => {
@@ -932,6 +973,34 @@ const TelemedicineDashboard: React.FC<TelemedicineDashboardProps & {
             onBack={() => setViewingDoctor(null)} 
             onSchedule={() => { setViewingDoctor(null); initiatePatientRequest('specific', viewingDoctor); }} 
         />
+      );
+  }
+
+  // --- RENDERIZADO PRINCIPAL SEGÚN MODO ---
+  if (viewMode === 'staff') {
+      return (
+        <div className="max-w-[98%] mx-auto space-y-6 animate-in fade-in pb-20">
+            {/* Header Reducido con botón para volver */}
+            <div className="flex justify-between items-center bg-white p-4 rounded-3xl shadow-sm border border-slate-200 no-print">
+                 <div className="flex items-center gap-4">
+                     <button onClick={() => setViewMode('doctor')} className="p-3 bg-slate-100 rounded-2xl hover:bg-slate-900 hover:text-white transition-all">
+                         <ArrowLeft size={20}/>
+                     </button>
+                     <div>
+                         <h2 className="text-xl font-black text-slate-900 uppercase tracking-tight">Consola de Personal Domiciliario</h2>
+                         <p className="text-xs font-bold text-amber-600 uppercase tracking-widest">Modo Operativo de Campo</p>
+                     </div>
+                 </div>
+            </div>
+            
+            {/* Componente HomeServices Integrado */}
+            <HomeServices 
+                requests={homeRequests || []} 
+                onUpdateRequest={onUpdateHomeRequest || (() => {})} 
+                staffList={staffList || []} 
+                currentUser={currentUser || MOCK_DOCTORS[0]} 
+            />
+        </div>
       );
   }
 
@@ -977,6 +1046,12 @@ const TelemedicineDashboard: React.FC<TelemedicineDashboardProps & {
                 >
                     <UserCheck size={14} /> Vista Paciente
                 </button>
+                <button 
+                    onClick={() => setViewMode('staff')}
+                    className={`flex items-center gap-2 px-6 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${viewMode === 'staff' ? 'bg-amber-600 text-white shadow-lg' : 'text-slate-500 hover:bg-slate-50'}`}
+                >
+                    <Ambulance size={14} /> Personal Domiciliario
+                </button>
             </div>
         </div>
       </div>
@@ -991,6 +1066,7 @@ const TelemedicineDashboard: React.FC<TelemedicineDashboardProps & {
             onHomeLabRequest={() => setShowHomeLabModal(true)} 
             doctorsList={doctorsList}
             notes={notes}
+            homeRequests={homeRequests}
           />
       ) : (
           /* VISTA MÉDICO ... (Sin cambios aquí) ... */
@@ -1247,7 +1323,7 @@ const TelemedicineDashboard: React.FC<TelemedicineDashboardProps & {
           )
       )}
 
-      <IntakeModal isOpen={showIntakeModal} onClose={() => setShowIntakeModal(false)} onSubmit={handleIntakeSubmit} />
+      <IntakeModal isOpen={showIntakeModal} onClose={() => setShowIntakeModal(false)} onSubmit={handleIntakeSubmit} preSelectedDoctor={selectedDoctorForRequest} />
       <HomeLabRequestModal isOpen={showHomeLabModal} onClose={() => setShowHomeLabModal(false)} onSubmit={handleHomeLabSubmit} />
       
       {/* MODAL PREVISUALIZACIÓN TRIAGE (PARA MÉDICO) */}

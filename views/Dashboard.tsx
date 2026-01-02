@@ -8,7 +8,7 @@ import {
   ChevronDown, MapPinned, Users, Info, X, Check, Timer, ArrowRight,
   ShoppingBag, Trash2, Lock, DollarSign, CheckCircle, UserMinus
 } from 'lucide-react';
-import { ModuleType, Patient, PatientStatus, PriorityLevel, AgendaStatus, ClinicalNote } from '../types';
+import { ModuleType, Patient, PatientStatus, PriorityLevel, AgendaStatus, ClinicalNote, DoctorInfo, HomeServiceRequest, StaffMember } from '../types';
 import Billing from './Billing';
 import Finance from './Finance';
 import StaffManagement from './StaffManagement';
@@ -23,7 +23,14 @@ interface DashboardProps {
   onModuleChange: (mod: ModuleType) => void;
   onUpdatePatient?: (p: Patient) => void;
   onDeletePatient?: (id: string) => void;
-  doctorInfo: any;
+  doctorInfo: DoctorInfo;
+  // Added Props
+  staffList?: StaffMember[];
+  onUpdateStaffList?: (staff: StaffMember[]) => void;
+  doctorsList?: DoctorInfo[];
+  homeRequests?: HomeServiceRequest[];
+  onAddHomeRequest?: (req: HomeServiceRequest) => void;
+  onAddPatient?: (p: Patient) => void;
 }
 
 // Función auxiliar para normalizar texto (quitar acentos y pasar a minúsculas)
@@ -85,9 +92,8 @@ const TriageDropdown: React.FC<{
   );
 };
 
-const Dashboard: React.FC<DashboardProps> = ({ 
-  module, patients, notes, onUpdateStatus, onUpdatePriority, onModuleChange, onUpdatePatient, onDeletePatient, doctorInfo 
-}) => {
+const Dashboard: React.FC<DashboardProps> = (props) => {
+  const { module, patients, notes, onUpdateStatus, onUpdatePriority, onModuleChange, onUpdatePatient, onDeletePatient, doctorInfo } = props;
   const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState('');
   
@@ -202,7 +208,15 @@ const Dashboard: React.FC<DashboardProps> = ({
       <div className="max-w-full space-y-6 animate-in fade-in duration-500">
         <ModuleSelector />
         <div className="-mt-4">
-           <TelemedicineDashboard patients={patients} onUpdateStatus={onUpdateStatus} />
+           <TelemedicineDashboard 
+             patients={patients} 
+             onUpdateStatus={onUpdateStatus}
+             doctorsList={props.doctorsList || []}
+             currentUser={props.doctorInfo}
+             homeRequests={props.homeRequests}
+             onAddHomeRequest={props.onAddHomeRequest}
+             onAddPatient={props.onAddPatient}
+           />
         </div>
       </div>
     );
@@ -213,7 +227,10 @@ const Dashboard: React.FC<DashboardProps> = ({
       <div className="max-w-full space-y-6 animate-in fade-in duration-500">
         <ModuleSelector />
         <div className="-mt-4">
-           <StaffManagement />
+           <StaffManagement 
+             staffList={props.staffList || []} 
+             onUpdateStaffList={props.onUpdateStaffList || (() => {})} 
+           />
         </div>
       </div>
     );

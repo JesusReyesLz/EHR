@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Briefcase, UserPlus, Calendar, Clock, CheckCircle2, XCircle, Search, 
@@ -11,31 +10,17 @@ import {
   Wifi, Ambulance, Smartphone, FileSpreadsheet, UserCheck, AlertTriangle
 } from 'lucide-react';
 import { StaffMember, StaffRole, WorkShift, ShiftType, PayrollRecord, PayrollDetail, Expense, ModuleType } from '../types';
-import { INITIAL_STAFF } from '../constants';
 
-const StaffManagement: React.FC = () => {
+interface StaffManagementProps {
+  staffList: StaffMember[];
+  onUpdateStaffList: (staff: StaffMember[]) => void;
+}
+
+const StaffManagement: React.FC<StaffManagementProps> = ({ staffList, onUpdateStaffList }) => {
   const [activeTab, setActiveTab] = useState<'directory' | 'roster' | 'attendance' | 'payroll'>('directory');
   
   // --- STATE ---
-  const [staffList, setStaffList] = useState<StaffMember[]>(() => {
-    const saved = localStorage.getItem('med_staff_v2');
-    let data = saved ? JSON.parse(saved) : INITIAL_STAFF;
-    if (data.length > 0) {
-        data = data.map((s: any) => {
-            let updated = { ...s };
-            if (!s.assignedArea) updated.assignedArea = [];
-            else if (typeof s.assignedArea === 'string') updated.assignedArea = [s.assignedArea];
-            
-            if (s.salaryDaily === undefined) updated.salaryDaily = s.salaryBase || 500;
-            if (!s.allowedModules) {
-                const allModules = Object.values(ModuleType);
-                updated.allowedModules = s.role.includes('Médico') || s.role.includes('Admin') ? allModules : [ModuleType.MONITOR];
-            }
-            return updated;
-        });
-    }
-    return data;
-  });
+  // staffList is now a prop
 
   const [shifts, setShifts] = useState<WorkShift[]>(() => {
     const saved = localStorage.getItem('med_work_shifts_v2');
@@ -51,6 +36,12 @@ const StaffManagement: React.FC = () => {
       const saved = localStorage.getItem('med_expenses_v1');
       return saved ? JSON.parse(saved) : [];
   });
+
+  // Helper to update staffList via prop
+  const setStaffList = (value: React.SetStateAction<StaffMember[]>) => {
+      const newValue = value instanceof Function ? value(staffList) : value;
+      onUpdateStaffList(newValue);
+  };
 
   // Filters & UI State
   const [searchTerm, setSearchTerm] = useState('');
@@ -97,8 +88,7 @@ const StaffManagement: React.FC = () => {
   const [legalWeeklyHours, setLegalWeeklyHours] = useState<number>(48); 
   const [generatedPayroll, setGeneratedPayroll] = useState<PayrollRecord | null>(null);
 
-  // Persist Data
-  useEffect(() => { localStorage.setItem('med_staff_v2', JSON.stringify(staffList)); }, [staffList]);
+  // Persist Data (Only local ones)
   useEffect(() => { localStorage.setItem('med_work_shifts_v2', JSON.stringify(shifts)); }, [shifts]);
   useEffect(() => { localStorage.setItem('med_payrolls_v1', JSON.stringify(payrolls)); }, [payrolls]);
   useEffect(() => { localStorage.setItem('med_expenses_v1', JSON.stringify(expenses)); }, [expenses]);
@@ -123,7 +113,7 @@ const StaffManagement: React.FC = () => {
   };
 
   const filteredStaff = useMemo(() => {
-    return staffList.filter(s => {
+    return (staffList || []).filter(s => {
       const matchesSearch = s.name.toLowerCase().includes(searchTerm.toLowerCase()) || s.cedula?.includes(searchTerm);
       const matchesRole = roleFilter === 'TODOS' || s.role === roleFilter;
       return matchesSearch && matchesRole;
