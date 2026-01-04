@@ -34,7 +34,7 @@ import {
   Server,
   Briefcase
 } from 'lucide-react';
-import { DoctorInfo } from '../types';
+import { DoctorInfo, ClinicDocument } from '../types';
 
 interface SettingsProps {
   doctorInfo: DoctorInfo;
@@ -62,7 +62,10 @@ const SettingsView: React.FC<SettingsProps> = ({ doctorInfo, onUpdateDoctor }) =
   const [newService, setNewService] = useState('');
 
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [uploadType, setUploadType] = useState<'title' | 'cedula' | 'cover' | 'avatar' | 'gallery' | null>(null);
+  const [uploadType, setUploadType] = useState<'title' | 'cedula' | 'cover' | 'avatar' | 'gallery' | 'clinicDoc' | null>(null);
+  
+  // State for adding a specific clinic document
+  const [clinicDocName, setClinicDocName] = useState('');
 
   useEffect(() => {
       if (location.state && (location.state as any).initialTab) {
@@ -96,6 +99,23 @@ const SettingsView: React.FC<SettingsProps> = ({ doctorInfo, onUpdateDoctor }) =
       if (uploadType === 'gallery') {
           setProfile({...profile, gallery: [...(profile.gallery || []), url]});
       }
+      if (uploadType === 'clinicDoc') {
+          if (!clinicDocName) {
+              alert("Por favor seleccione o escriba el tipo de documento antes de subir.");
+              return;
+          }
+          const newDoc: ClinicDocument = {
+              id: Date.now().toString(),
+              name: clinicDocName,
+              url: url,
+              uploadDate: new Date().toLocaleDateString('es-MX')
+          };
+          setProfile(prev => ({
+              ...prev,
+              clinicDocuments: [...(prev.clinicDocuments || []), newDoc]
+          }));
+          setClinicDocName('');
+      }
       
       setUploadType(null);
     }
@@ -114,6 +134,13 @@ const SettingsView: React.FC<SettingsProps> = ({ doctorInfo, onUpdateDoctor }) =
       setProfile(prev => ({
           ...prev,
           services: (prev.services || []).filter((_, i) => i !== index)
+      }));
+  };
+  
+  const removeClinicDoc = (id: string) => {
+      setProfile(prev => ({
+          ...prev,
+          clinicDocuments: (prev.clinicDocuments || []).filter(doc => doc.id !== id)
       }));
   };
 
@@ -150,7 +177,7 @@ const SettingsView: React.FC<SettingsProps> = ({ doctorInfo, onUpdateDoctor }) =
         <div className="lg:col-span-3 space-y-3">
           {[
             { id: 'profile', label: 'Identidad Médica', icon: <User className="w-4 h-4" /> },
-            { id: 'clinic', label: 'Práctica / Establecimiento', icon: <Briefcase className="w-4 h-4" /> },
+            { id: 'clinic', label: 'Práctica / Establecimiento', icon: <Building2 className="w-4 h-4" /> },
             { id: 'docs', label: 'Documentación Legal', icon: <FileText className="w-4 h-4" /> },
             { id: 'public_profile', label: 'Perfil Público / Muro', icon: <Globe className="w-4 h-4" /> },
             { id: 'security', label: 'Seguridad y e.firma', icon: <ShieldCheck className="w-4 h-4" /> },
@@ -266,6 +293,70 @@ const SettingsView: React.FC<SettingsProps> = ({ doctorInfo, onUpdateDoctor }) =
                   <input type="email" name="email" value={profile.email} onChange={handleInputChange} className="w-full p-5 bg-slate-50 border border-slate-200 rounded-3xl text-sm font-bold text-slate-700" />
                 </div>
               </div>
+
+              {/* SECTION FOR UPLOADING REGULATORY DOCUMENTS */}
+              <div className="p-8 bg-blue-50/50 rounded-[3rem] border border-blue-100 space-y-6">
+                  <h4 className="text-[10px] font-black text-blue-800 uppercase tracking-widest flex items-center gap-2">
+                     <FileText size={14}/> Documentación Regulatoria (COFEPRIS / SALUBRIDAD)
+                  </h4>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                     <div className="space-y-4">
+                        <label className="text-[9px] font-black text-slate-400 uppercase ml-2">Nuevo Documento</label>
+                        <select 
+                           className="w-full p-4 bg-white border border-slate-200 rounded-2xl text-xs font-black uppercase outline-none"
+                           value={clinicDocName}
+                           onChange={e => setClinicDocName(e.target.value)}
+                        >
+                           <option value="">Seleccione tipo...</option>
+                           <option value="Licencia Sanitaria">Licencia Sanitaria</option>
+                           <option value="Aviso de Funcionamiento">Aviso de Funcionamiento</option>
+                           <option value="Título Responsable Sanitario">Título Responsable Sanitario</option>
+                           <option value="Cédula Responsable Sanitario">Cédula Responsable Sanitario</option>
+                           <option value="Permiso de Publicidad">Permiso de Publicidad</option>
+                           <option value="Otro">Otro Documento Oficial</option>
+                        </select>
+                        <button 
+                           onClick={() => { 
+                               if (!clinicDocName) return alert("Seleccione un tipo de documento");
+                               setUploadType('clinicDoc'); 
+                               fileInputRef.current?.click(); 
+                           }} 
+                           className="w-full py-4 bg-blue-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-blue-700 transition-all flex items-center justify-center gap-2"
+                        >
+                           <Upload size={14}/> Subir Archivo (PDF/IMG)
+                        </button>
+                     </div>
+
+                     <div className="space-y-3 max-h-60 overflow-y-auto custom-scrollbar pr-2">
+                        {profile.clinicDocuments && profile.clinicDocuments.length > 0 ? (
+                            profile.clinicDocuments.map(doc => (
+                                <div key={doc.id} className="flex items-center justify-between p-3 bg-white border border-slate-100 rounded-2xl shadow-sm group">
+                                    <div className="flex items-center gap-3">
+                                       <div className="p-2 bg-emerald-50 text-emerald-600 rounded-lg">
+                                          <CheckCircle2 size={16}/>
+                                       </div>
+                                       <div>
+                                          <p className="text-[10px] font-black text-slate-800 uppercase">{doc.name}</p>
+                                          <p className="text-[8px] text-slate-400 font-bold uppercase">{doc.uploadDate}</p>
+                                       </div>
+                                    </div>
+                                    <div className="flex gap-2">
+                                       <a href={doc.url} target="_blank" rel="noreferrer" className="p-2 text-blue-500 hover:bg-blue-50 rounded-lg"><Eye size={14}/></a>
+                                       <button onClick={() => removeClinicDoc(doc.id)} className="p-2 text-rose-400 hover:bg-rose-50 rounded-lg"><Trash2 size={14}/></button>
+                                    </div>
+                                </div>
+                            ))
+                        ) : (
+                            <div className="h-full flex flex-col items-center justify-center text-center p-6 border-2 border-dashed border-slate-200 rounded-3xl opacity-50">
+                               <FileText size={24} className="mb-2 text-slate-400"/>
+                               <p className="text-[9px] font-black uppercase text-slate-400">Sin documentos regulatorios cargados</p>
+                            </div>
+                        )}
+                     </div>
+                  </div>
+              </div>
+
             </div>
           )}
 
@@ -273,7 +364,7 @@ const SettingsView: React.FC<SettingsProps> = ({ doctorInfo, onUpdateDoctor }) =
           {activeTab === 'docs' && (
             <div className="bg-white border border-slate-200 rounded-[3rem] p-12 shadow-sm space-y-12 animate-in slide-in-from-right-4">
                <h3 className="text-xs font-black uppercase tracking-[0.2em] text-blue-600 flex items-center">
-                 <FileText className="w-5 h-5 mr-3" /> Respaldo de Documentación Oficial
+                 <FileText className="w-5 h-5 mr-3" /> Respaldo de Documentación Oficial Personal
                </h3>
 
                <div className="grid grid-cols-1 md:grid-cols-2 gap-10">

@@ -6,7 +6,8 @@ import {
   Lock, Pill, HeartPulse, Droplet, Thermometer, Wind,
   ClipboardList, Calendar, MessageSquare, AlertCircle, Info, 
   Search, Trash2, PlusCircle, Quote, FlaskConical, Zap, Repeat, ShieldAlert,
-  Clock, Clipboard, Scissors, X, Heart, AlertTriangle, CheckCircle2, Maximize2, Scale, Ruler
+  Clock, Clipboard, Scissors, X, Heart, AlertTriangle, CheckCircle2, Maximize2, Scale, Ruler,
+  Brain, FileText, User
 } from 'lucide-react';
 import { Patient, ClinicalNote, Vitals, MedicationPrescription, MedicationStock, PriceItem, PriceType, ChargeItem } from '../../types';
 import { VADEMECUM_DB, INITIAL_STOCK, INITIAL_PRICES } from '../../constants';
@@ -36,18 +37,27 @@ const EvolutionNote: React.FC<{ patients: Patient[], notes: ClinicalNote[], onSa
   }, []);
 
   const [form, setForm] = useState({
-    mainProblem: '',
+    // Identificación y Generales (La fecha, hora, nombre y edad se toman del contexto del paciente/sistema)
+    
+    // S: Subjetivo
+    interrogationSummary: '', // Nuevo: AHFM, APP, APNP, PA, IPAYS
+    subjectiveNarrative: '', // Evolución del cuadro clínico (incluye toxicomanías)
+    
+    // O: Objetivo
+    objectivePhysical: '', 
+    mentalStatus: '', // Nuevo: Estado Mental
+    objectiveResults: '', // Resultados de estudios
+    vitalsInterpretation: 'Estable / Sin eventualidades',
+    
+    // A: Análisis
+    analysisReasoning: '', 
+    mainProblem: '', // Diagnóstico Principal
     secondaryProblems: '',
     cieCode: 'CIE-11: ',
-    subjectiveNarrative: '', 
-    objectivePhysical: '', 
-    objectiveResults: '', 
-    vitalsInterpretation: 'Estable / Sin eventualidades',
-    analysisReasoning: '', 
-    differentialDiagnosis: '', 
-    pronosticoVida: 'Bueno',
-    pronosticoFuncion: 'Bueno',
-    pronosticoRecuperacion: 'Bueno',
+    
+    // P: Plan / Pronóstico
+    pronosticoVida: 'Bueno', // Nuevo
+    pronosticoFuncion: 'Bueno', // Nuevo
     nursingInstructions: '',
     nonPharmaPlan: '',
     medConciliation: '',
@@ -289,15 +299,17 @@ const EvolutionNote: React.FC<{ patients: Patient[], notes: ClinicalNote[], onSa
         </div>
         <div className="text-right">
            <p className="text-sm font-black text-slate-900 uppercase leading-none">{patient.name}</p>
-           <p className="text-[10px] text-slate-500 font-bold uppercase mt-0.5">Exp: {patient.id}</p>
+           <p className="text-[10px] text-slate-500 font-bold uppercase mt-0.5">
+              {patient.age} AÑOS • {patient.sex} • EXP: {patient.id}
+           </p>
         </div>
       </div>
 
       <div className="bg-white border border-slate-200 shadow-xl rounded-[2rem] overflow-hidden flex flex-col lg:flex-row print:border-none print:shadow-none print:rounded-none">
         
-        {/* SIDEBAR IZQUIERDO: VITALES Y SEGURIDAD (Sin cambios importantes, se mantiene igual) */}
+        {/* SIDEBAR IZQUIERDO: VITALES Y SEGURIDAD */}
         <div className="w-full lg:w-80 bg-slate-50 border-r border-slate-200 flex flex-col print:hidden shrink-0">
-           {/* ... Vitales y Seguridad ... */}
+           {/* Vitales */}
            <div className="p-6 border-b border-slate-200">
               <h3 className="text-[10px] font-black uppercase tracking-widest text-slate-500 flex items-center gap-2 mb-4">
                  <Activity size={14} className="text-slate-900" /> Signos Vitales
@@ -325,20 +337,86 @@ const EvolutionNote: React.FC<{ patients: Patient[], notes: ClinicalNote[], onSa
                  ))}
               </div>
            </div>
-           {/* ... Resto del Sidebar ... */}
         </div>
 
         {/* CUERPO CENTRAL PSOAP */}
         <div className="flex-1 flex flex-col bg-white overflow-hidden print:overflow-visible">
            <div className="flex-1 overflow-y-auto p-8 lg:p-10 space-y-8 no-scrollbar print:p-0 print:overflow-visible">
               
-              {/* P, S, O, A Sections (se mantienen igual) */}
-              <div className="bg-slate-50 border border-slate-200 p-6 rounded-2xl space-y-4 print:bg-white print:border-none print:p-0">
+              {/* S: SUBJETIVO */}
+              <div className="space-y-4">
+                 <SectionHeader 
+                    title="S: Subjetivo (Interrogatorio)" 
+                    icon={<User size={16} className="text-blue-600" />} 
+                    onExpand={() => setFullScreenSection('S')}
+                 />
+                 <div className="grid grid-cols-1 gap-4">
+                    <div className="space-y-1">
+                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Resumen del Interrogatorio (AHFM, APP, APNP, PA, IPAYS)</label>
+                        <textarea 
+                            className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-medium outline-none focus:border-blue-400 transition-all h-24 resize-none shadow-inner" 
+                            placeholder="Actualización de antecedentes relevantes..." 
+                            value={form.interrogationSummary}
+                            onChange={e => setForm({...form, interrogationSummary: e.target.value})}
+                        />
+                    </div>
+                    <div className="space-y-1">
+                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Evolución y Cuadro Clínico</label>
+                        <textarea 
+                            className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-medium outline-none focus:border-blue-400 transition-all h-24 resize-none shadow-inner" 
+                            placeholder="Describa evolución, síntomas actuales. Incluya uso/abuso de alcohol, tabaco o toxicomanías si aplica." 
+                            value={form.subjectiveNarrative}
+                            onChange={e => setForm({...form, subjectiveNarrative: e.target.value})}
+                        />
+                    </div>
+                 </div>
+              </div>
+
+              {/* O: OBJETIVO */}
+              <div className="space-y-4">
+                 <SectionHeader 
+                    title="O: Objetivo (Exploración)" 
+                    icon={<Activity size={16} className="text-emerald-600" />} 
+                    onExpand={() => setFullScreenSection('O1')}
+                 />
+                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-1">
+                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Exploración Física</label>
+                        <textarea 
+                            className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-medium outline-none focus:border-emerald-400 transition-all h-32 resize-none shadow-inner" 
+                            placeholder="Hallazgos físicos relevantes..." 
+                            value={form.objectivePhysical}
+                            onChange={e => setForm({...form, objectivePhysical: e.target.value})}
+                        />
+                    </div>
+                    <div className="space-y-1">
+                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Estado Mental</label>
+                        <textarea 
+                            className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-medium outline-none focus:border-emerald-400 transition-all h-32 resize-none shadow-inner" 
+                            placeholder="Alerta, orientado, Glasgow, funciones mentales superiores..." 
+                            value={form.mentalStatus}
+                            onChange={e => setForm({...form, mentalStatus: e.target.value})}
+                        />
+                    </div>
+                 </div>
+                 <div className="space-y-1">
+                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Resultados de Estudios Auxiliares</label>
+                    <textarea 
+                        className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-medium outline-none focus:border-emerald-400 transition-all h-20 resize-none shadow-inner" 
+                        placeholder="Labs, Rayos X, etc..." 
+                        value={form.objectiveResults}
+                        onChange={e => setForm({...form, objectiveResults: e.target.value})}
+                    />
+                 </div>
+              </div>
+
+              {/* A: ANÁLISIS */}
+              <div className="bg-amber-50/50 border border-amber-100 p-6 rounded-2xl space-y-4">
                  <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
                     <div className="md:col-span-9 space-y-1">
                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Diagnóstico Principal</label>
                        <input 
-                          className="w-full p-3 bg-white border border-slate-200 rounded-xl text-sm font-black uppercase outline-none focus:border-blue-500 shadow-sm transition-all text-slate-900" 
+                          className="w-full p-3 bg-white border border-slate-200 rounded-xl text-sm font-black uppercase outline-none focus:border-amber-500 shadow-sm transition-all text-slate-900" 
                           placeholder="Escriba el diagnóstico..." 
                           value={form.mainProblem} 
                           onChange={e => setForm({...form, mainProblem: e.target.value})} 
@@ -354,27 +432,51 @@ const EvolutionNote: React.FC<{ patients: Patient[], notes: ClinicalNote[], onSa
                        />
                     </div>
                  </div>
-                 {/* ... Secondary problems ... */}
-              </div>
-
-              {/* ... S, O, A textareas ... */}
-              <div>
-                 <SectionHeader 
-                    title="A: Análisis y Juicio Clínico" 
-                    icon={<BookOpen size={16} className="text-amber-600" />} 
-                    onExpand={() => setFullScreenSection('A')}
-                 />
-                 <div className="bg-slate-50 border border-slate-200 rounded-2xl overflow-hidden shadow-sm hover:border-amber-300 transition-colors focus-within:bg-white focus-within:border-amber-400 focus-within:ring-4 focus-within:ring-amber-50">
+                 
+                 <div className="space-y-1">
+                    <SectionHeader 
+                        title="Análisis y Juicio Clínico" 
+                        icon={<BookOpen size={16} className="text-amber-600" />} 
+                        onExpand={() => setFullScreenSection('A')}
+                    />
                     <textarea 
-                        className="w-full p-5 text-sm font-medium leading-relaxed outline-none h-32 resize-none text-slate-900 bg-white placeholder-slate-400" 
+                        className="w-full p-4 text-xs font-medium leading-relaxed outline-none h-24 resize-none text-slate-900 bg-white border border-slate-200 rounded-2xl shadow-sm focus:border-amber-400" 
                         placeholder="Integración diagnóstica, justificación terapéutica..." 
                         value={form.analysisReasoning} 
                         onChange={e => setForm({...form, analysisReasoning: e.target.value})} 
                     />
                  </div>
+
+                 {/* PRONÓSTICO */}
+                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-1">
+                       <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Pronóstico de Vida</label>
+                       <select 
+                          className="w-full p-3 bg-white border border-slate-200 rounded-xl text-xs font-bold outline-none"
+                          value={form.pronosticoVida}
+                          onChange={e => setForm({...form, pronosticoVida: e.target.value})}
+                       >
+                          <option>Bueno</option>
+                          <option>Malo</option>
+                          <option>Reservado</option>
+                       </select>
+                    </div>
+                    <div className="space-y-1">
+                       <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Pronóstico de Función</label>
+                       <select 
+                          className="w-full p-3 bg-white border border-slate-200 rounded-xl text-xs font-bold outline-none"
+                          value={form.pronosticoFuncion}
+                          onChange={e => setForm({...form, pronosticoFuncion: e.target.value})}
+                       >
+                          <option>Bueno</option>
+                          <option>Malo</option>
+                          <option>Reservado</option>
+                       </select>
+                    </div>
+                 </div>
               </div>
 
-              {/* P: PLAN (Rp.) - MODIFICADO CON PROCEDIMIENTOS */}
+              {/* P: PLAN (Rp.) */}
               <div className="pt-6 border-t-2 border-slate-100">
                  <div className="flex justify-between items-center mb-4">
                     <label className="text-[11px] font-black text-emerald-700 uppercase tracking-widest flex items-center gap-2">
@@ -473,7 +575,7 @@ const EvolutionNote: React.FC<{ patients: Patient[], notes: ClinicalNote[], onSa
                           <textarea className="w-full p-4 text-[11px] bg-slate-50 border border-slate-200 rounded-2xl outline-none h-24 resize-none focus:bg-white focus:border-blue-400 transition-all text-slate-900 bg-white" placeholder="Dieta, medidas generales..." value={form.nonPharmaPlan} onChange={e => setForm({...form, nonPharmaPlan: e.target.value})} />
                        </div>
                        <div className="space-y-2">
-                          <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1 flex items-center gap-2"><Clock size={14} /> Pronóstico y Seguimiento</label>
+                          <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1 flex items-center gap-2"><Clock size={14} /> Seguimiento</label>
                           <textarea className="w-full p-4 text-[11px] bg-slate-50 border border-slate-200 rounded-2xl outline-none h-24 resize-none focus:bg-white focus:border-blue-400 transition-all text-slate-900 bg-white" value={form.seguimiento} onChange={e => setForm({...form, seguimiento: e.target.value})} />
                        </div>
                     </div>

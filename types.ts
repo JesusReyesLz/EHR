@@ -351,6 +351,13 @@ export interface StockMovement {
   responsible: string;
 }
 
+export interface ClinicDocument {
+  id: string;
+  name: string; // "Licencia Sanitaria", "Aviso de Funcionamiento", etc.
+  url: string;
+  uploadDate: string;
+}
+
 export interface DoctorInfo {
   // Clinic / Multi-Tenant Data
   id?: string; // Added ID for matching
@@ -385,6 +392,9 @@ export interface DoctorInfo {
   // Real-time Status
   isOnline?: boolean; // Available for Telemedicine
   walletBalance?: number; // Saldo acumulado por consultas
+
+  // Clinic Documents
+  clinicDocuments?: ClinicDocument[];
 }
 
 export interface Vitals {

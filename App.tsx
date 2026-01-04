@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { HashRouter as Router, Routes, Route, Navigate, Link, useLocation, useNavigate } from 'react-router-dom';
 import { 
@@ -26,6 +27,9 @@ import EmergencyNote from './views/notes/EmergencyNote';
 import SurgicalNote from './views/notes/SurgicalNote';
 import DischargeNote from './views/notes/DischargeNote';
 import InterconsultaNote from './views/notes/InterconsultaNote';
+import ReferralNote from './views/notes/ReferralNote';
+import CounterReferralNote from './views/notes/CounterReferralNote';
+import ClinicalSummaryNote from './views/notes/ClinicalSummaryNote';
 import ESAVINote from './views/notes/ESAVINote';
 import InformedConsent from './views/InformedConsent';
 import VoluntaryDischarge from './views/VoluntaryDischarge';
@@ -216,9 +220,22 @@ const App: React.FC = () => {
   const handleUpdatePriority = (id: string, priority: PriorityLevel) => {
      setPatients(prev => prev.map(p => p.id === id ? { ...p, priority } : p));
   };
+  
+  // LOGICA CORREGIDA PARA ACTUALIZAR NOTAS EXISTENTES
   const handleSaveNote = (note: ClinicalNote) => {
-    setNotes(prev => [note, ...prev]);
+    setNotes(prev => {
+      const exists = prev.findIndex(n => n.id === note.id);
+      if (exists !== -1) {
+        // Actualizar nota existente
+        const updated = [...prev];
+        updated[exists] = note;
+        return updated;
+      }
+      // Crear nueva nota
+      return [note, ...prev];
+    });
   };
+
   const handleUpdateStaffList = (newStaffList: StaffMember[]) => {
     setStaffList(newStaffList);
   };
@@ -284,7 +301,23 @@ const App: React.FC = () => {
           <Route path="/patient/:id/note/emergency" element={<EmergencyNote patients={patients} notes={notes} onSaveNote={handleSaveNote} />} />
           <Route path="/patient/:id/note/surgical" element={<SurgicalNote patients={patients} notes={notes} onSaveNote={handleSaveNote} />} />
           <Route path="/patient/:id/note/discharge" element={<DischargeNote patients={patients} notes={notes} onSaveNote={handleSaveNote} />} />
+          
+          {/* Rutas de Interconsulta (Crear y Editar) */}
           <Route path="/patient/:id/note/interconsulta" element={<InterconsultaNote patients={patients} notes={notes} onSaveNote={handleSaveNote} />} />
+          <Route path="/patient/:id/note/interconsulta/:noteId" element={<InterconsultaNote patients={patients} notes={notes} onSaveNote={handleSaveNote} />} />
+          
+          {/* Rutas de Referencia y Traslado */}
+          <Route path="/patient/:id/note/referral" element={<ReferralNote patients={patients} notes={notes} onSaveNote={handleSaveNote} doctorInfo={doctorInfo} />} />
+          <Route path="/patient/:id/note/referral/:noteId" element={<ReferralNote patients={patients} notes={notes} onSaveNote={handleSaveNote} doctorInfo={doctorInfo} />} />
+
+          {/* Rutas de Contrarreferencia (NUEVO) */}
+          <Route path="/patient/:id/note/counter-referral" element={<CounterReferralNote patients={patients} notes={notes} onSaveNote={handleSaveNote} doctorInfo={doctorInfo} />} />
+          <Route path="/patient/:id/note/counter-referral/:noteId" element={<CounterReferralNote patients={patients} notes={notes} onSaveNote={handleSaveNote} doctorInfo={doctorInfo} />} />
+          
+          {/* Rutas de Resumen Clínico (NUEVO) */}
+          <Route path="/patient/:id/note/summary" element={<ClinicalSummaryNote patients={patients} notes={notes} onSaveNote={handleSaveNote} doctorInfo={doctorInfo} />} />
+          <Route path="/patient/:id/note/summary/:noteId" element={<ClinicalSummaryNote patients={patients} notes={notes} onSaveNote={handleSaveNote} doctorInfo={doctorInfo} />} />
+
           <Route path="/patient/:id/note/esavi" element={<ESAVINote patients={patients} notes={notes} onSaveNote={handleSaveNote} />} />
           <Route path="/patient/:id/nursing-sheet" element={<NursingSheet patients={patients} onSaveNote={handleSaveNote} onUpdatePatient={handleUpdatePatient} />} />
           <Route path="/patient/:id/auxiliary-order" element={<AuxiliaryOrder patients={patients} onSaveNote={handleSaveNote} />} />
