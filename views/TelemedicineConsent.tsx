@@ -3,15 +3,16 @@ import React, { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { 
   ChevronLeft, Printer, ShieldCheck, Video, 
-  Save, User, Monitor, AlertTriangle, CheckCircle2,
-  Lock, PenTool, ClipboardCheck, Info, Wifi, Camera, ShieldAlert
+  Save, Monitor, CheckCircle2,
+  Lock, PenTool, Info, Wifi, Camera, ShieldAlert,
+  FileSignature, FlaskConical, FileText
 } from 'lucide-react';
 import { Patient, ClinicalNote } from '../types';
 
 interface TelemedicineConsentProps {
   patients: Patient[];
   onSaveNote: (note: ClinicalNote) => void;
-  onUpdatePatient?: (patient: Patient) => void; // Added prop
+  onUpdatePatient?: (patient: Patient) => void; 
 }
 
 const TelemedicineConsent: React.FC<TelemedicineConsentProps> = ({ patients, onSaveNote, onUpdatePatient }) => {
@@ -24,7 +25,10 @@ const TelemedicineConsent: React.FC<TelemedicineConsentProps> = ({ patients, onS
     physicalLimitation: false,
     techRisks: false,
     dataAuthorization: false,
-    privacyNotice: false
+    privacyNotice: false,
+    // New Clauses
+    electronicPrescription: false,
+    remoteLabOrders: false
   });
 
   const [isSigned, setIsSigned] = useState(false);
@@ -34,24 +38,23 @@ const TelemedicineConsent: React.FC<TelemedicineConsentProps> = ({ patients, onS
   const handleSave = () => {
     const allAccepted = Object.values(acceptedTerms).every(v => v);
     if (!allAccepted || !isSigned) {
-      alert("Es obligatorio aceptar todos los puntos de riesgo y firmar digitalmente para validar la teleconsulta.");
+      alert("Es obligatorio aceptar todos los puntos del consentimiento y firmar digitalmente.");
       return;
     }
 
     const newNote: ClinicalNote = {
       id: `TCONS-${Date.now()}`,
       patientId: patient.id,
-      type: 'Consentimiento para Telemedicina',
+      type: 'Consentimiento para Telemedicina y Servicios Digitales',
       date: new Date().toLocaleString('es-MX'),
       author: 'Dr. Alejandro Méndez',
       content: { ...acceptedTerms, location: 'Teleconsulta remota' },
       isSigned: true,
       hash: `CERT-TELE-${Math.random().toString(36).substr(2, 9).toUpperCase()}`,
-      origin: 'Physical' // Usually signed during onboarding or initial setup, though could be remote
+      origin: 'Physical' 
     };
     onSaveNote(newNote);
 
-    // Update patient status to reflect consent
     if (onUpdatePatient) {
         onUpdatePatient({ ...patient, hasTelemedicineConsent: true });
     }
@@ -74,7 +77,7 @@ const TelemedicineConsent: React.FC<TelemedicineConsentProps> = ({ patients, onS
           <div>
             <h1 className="text-2xl font-black text-slate-900 uppercase tracking-tight">Consentimiento Telemedicina</h1>
             <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest mt-1 flex items-center">
-               <ShieldCheck size={12} className="text-emerald-500 mr-2" /> Ley General de Salud • Protección de Datos
+               <ShieldCheck size={12} className="text-emerald-500 mr-2" /> Servicios de Salud Digitales
             </p>
           </div>
         </div>
@@ -106,13 +109,13 @@ const TelemedicineConsent: React.FC<TelemedicineConsentProps> = ({ patients, onS
               <div className="space-y-2">
                  <h3 className="text-xs font-black text-blue-900 uppercase tracking-widest">Declaración de Entendimiento</h3>
                  <p className="text-xs text-blue-800 font-medium leading-relaxed italic">
-                    "Declaro que he sido informado y entiendo que la consulta médica se llevará a cabo de forma remota a través de medios digitales de video y audio."
+                    "Autorizo el uso de tecnologías de la información para la prestación de servicios médicos, incluyendo consulta, prescripción y solicitud de estudios a distancia."
                  </p>
               </div>
            </div>
 
            <div className="space-y-6">
-              <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] border-l-4 border-blue-600 pl-4">Aceptación de Riesgos y Limitaciones</h3>
+              <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] border-l-4 border-blue-600 pl-4">Aceptación de Riesgos y Alcance</h3>
               
               <div className="grid grid-cols-1 gap-4">
                  {[
@@ -120,7 +123,9 @@ const TelemedicineConsent: React.FC<TelemedicineConsentProps> = ({ patients, onS
                     { key: 'physicalLimitation', label: 'Limitación de Evaluación', desc: 'Reconozco que la falta de exploración física presencial puede limitar la precisión diagnóstica.', icon: <Camera size={18} /> },
                     { key: 'techRisks', label: 'Riesgos Tecnológicos', desc: 'Acepto la posibilidad de fallos en la conexión a internet o fallas en el hardware/software.', icon: <Wifi size={18} /> },
                     { key: 'dataAuthorization', label: 'Autorización de Transmisión', desc: 'Autorizo la transmisión cifrada de mis datos, audio y video para este acto médico.', icon: <ShieldAlert size={18} /> },
-                    { key: 'privacyNotice', label: 'Protección de Datos (LFPDPPP)', desc: 'He leído y acepto el aviso de privacidad para el manejo de mis datos personales sensibles.', icon: <Lock size={18} /> }
+                    { key: 'privacyNotice', label: 'Protección de Datos (LFPDPPP)', desc: 'He leído y acepto el aviso de privacidad para el manejo de mis datos personales sensibles.', icon: <Lock size={18} /> },
+                    { key: 'electronicPrescription', label: 'Receta Electrónica', desc: 'Acepto recibir recetas médicas firmadas digitalmente y entiendo su validez legal.', icon: <FileText size={18} /> },
+                    { key: 'remoteLabOrders', label: 'Estudios de Laboratorio', desc: 'Autorizo la generación de órdenes de estudios auxiliares digitales y la recepción de resultados por medios electrónicos.', icon: <FlaskConical size={18} /> }
                  ].map(item => (
                     <button 
                        key={item.key}
@@ -157,7 +162,7 @@ const TelemedicineConsent: React.FC<TelemedicineConsentProps> = ({ patients, onS
                     ) : (
                        <div className="text-slate-400 group-hover:text-blue-600">
                           <PenTool size={40} className="mx-auto" />
-                          <p className="text-[10px] font-black uppercase mt-3">Sellar Consentimiento Paciente</p>
+                          <p className="text-[10px] font-black uppercase mt-3">Click para Sellar Consentimiento</p>
                        </div>
                     )}
                  </div>
@@ -200,7 +205,7 @@ const TelemedicineConsent: React.FC<TelemedicineConsentProps> = ({ patients, onS
                 onClick={handleSave}
                 className="px-10 py-4 bg-blue-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl hover:bg-emerald-600 transition-all flex items-center gap-3"
               >
-                 <Save size={18} /> Validar y Activar Vinculación
+                 <FileSignature size={18} /> Validar Consentimiento
               </button>
            </div>
         </div>

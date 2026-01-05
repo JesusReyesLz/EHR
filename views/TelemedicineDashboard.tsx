@@ -1,4 +1,5 @@
-import React, { useState, useMemo } from 'react';
+
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   Video, Calendar, Clock, Search, Filter, 
@@ -9,7 +10,7 @@ import {
   ChevronRight, ArrowRight, MapPin, ClipboardList, Thermometer,
   Eye, X, Power, Lock, LogIn, WifiOff, BellOff, LogOut, User,
   ArrowLeft, GraduationCap, MessageSquare, ImageIcon, Ambulance, FlaskConical, Plus, Coffee, Truck, Wallet, DollarSign, Download,
-  History, Navigation
+  History, Navigation, Bot, Send, Headphones, CalendarCheck, FileSignature, AlertOctagon, Check
 } from 'lucide-react';
 import { Patient, PatientStatus, AgendaStatus, PriorityLevel, ModuleType, DoctorInfo, TeleIntakeForm, HomeServiceRequest, ClinicalNote, StaffMember } from '../types';
 import { MOCK_DOCTORS, LAB_CATALOG } from '../constants';
@@ -20,14 +21,432 @@ interface TelemedicineDashboardProps {
   onUpdateStatus: (id: string, status: PatientStatus) => void;
   onAddPatient?: (patient: Patient) => void;
   onAddHomeRequest?: (req: HomeServiceRequest) => void;
-  onUpdateHomeRequest?: (req: HomeServiceRequest) => void; // Added for HomeServices integration
+  onUpdateHomeRequest?: (req: HomeServiceRequest) => void; 
   doctorsList?: DoctorInfo[]; 
   onDoctorStatusChange?: (cedula: string, isOnline: boolean) => void; 
   currentUser?: DoctorInfo; 
   notes?: ClinicalNote[]; 
   homeRequests?: HomeServiceRequest[];
-  staffList?: StaffMember[]; // Added for HomeServices integration
+  staffList?: StaffMember[]; 
 }
+
+// --- TELEMEDICINE LEGAL CONSENT MODAL ---
+const TeleConsentModal: React.FC<{
+    isOpen: boolean;
+    onClose: () => void;
+    onAccept: () => void;
+}> = ({ isOpen, onClose, onAccept }) => {
+    const [checks, setChecks] = useState({
+        c1: false, c2: false, c3: false, c4: false
+    });
+
+    const allChecked = Object.values(checks).every(Boolean);
+
+    if (!isOpen) return null;
+
+    return (
+        <div className="fixed inset-0 z-[70] bg-slate-900/95 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in">
+            <div className="bg-white w-full max-w-2xl rounded-[3rem] shadow-2xl overflow-hidden flex flex-col max-h-[90vh] border border-white/20">
+                <div className="p-8 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
+                    <div className="flex items-center gap-4">
+                        <div className="w-14 h-14 bg-blue-600 text-white rounded-2xl flex items-center justify-center shadow-lg"><ShieldCheck size={28}/></div>
+                        <div>
+                            <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">Consentimiento Informado</h3>
+                            <p className="text-[10px] font-bold text-blue-600 uppercase tracking-widest mt-1">Atención Médica a Distancia (Telemedicina)</p>
+                        </div>
+                    </div>
+                    <button onClick={onClose} className="p-3 hover:bg-slate-200 rounded-full transition-colors"><X size={24}/></button>
+                </div>
+
+                <div className="flex-1 overflow-y-auto p-8 space-y-6 custom-scrollbar">
+                    <div className="bg-amber-50 p-6 rounded-3xl border border-amber-100 flex gap-4">
+                        <AlertOctagon className="text-amber-600 flex-shrink-0" size={24}/>
+                        <p className="text-xs text-amber-800 font-medium text-justify leading-relaxed">
+                            <strong>IMPORTANTE:</strong> La telemedicina NO sustituye la atención de urgencias vitales. Si presenta dolor de pecho intenso, dificultad respiratoria severa, pérdida de conciencia o sangrado profuso, acuda inmediatamente a un servicio de Urgencias Hospitalarias o llame al 911.
+                        </p>
+                    </div>
+
+                    <p className="text-xs text-slate-600 font-medium leading-relaxed text-justify">
+                        De conformidad con la normativa sanitaria vigente y la Ley General de Protección de Datos Personales, por medio de la presente otorgo mi consentimiento para recibir atención médica a través de tecnologías de la información. Entiendo y acepto lo siguiente:
+                    </p>
+
+                    <div className="space-y-4">
+                        <label className={`flex gap-4 p-4 rounded-2xl border-2 cursor-pointer transition-all ${checks.c1 ? 'bg-blue-50 border-blue-500' : 'bg-white border-slate-100 hover:border-slate-300'}`}>
+                            <div className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center flex-shrink-0 ${checks.c1 ? 'bg-blue-600 border-blue-600 text-white' : 'border-slate-300'}`}>
+                                {checks.c1 && <Check size={14}/>}
+                            </div>
+                            <input type="checkbox" className="hidden" checked={checks.c1} onChange={() => setChecks(p => ({...p, c1: !p.c1}))} />
+                            <div>
+                                <p className="text-[10px] font-black uppercase text-slate-900">Limitaciones Técnicas y Clínicas</p>
+                                <p className="text-[10px] text-slate-500 mt-1">Comprendo que la evaluación es remota y carece de exploración física directa, lo que podría limitar la precisión diagnóstica en comparación con una consulta presencial.</p>
+                            </div>
+                        </label>
+
+                        <label className={`flex gap-4 p-4 rounded-2xl border-2 cursor-pointer transition-all ${checks.c2 ? 'bg-blue-50 border-blue-500' : 'bg-white border-slate-100 hover:border-slate-300'}`}>
+                            <div className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center flex-shrink-0 ${checks.c2 ? 'bg-blue-600 border-blue-600 text-white' : 'border-slate-300'}`}>
+                                {checks.c2 && <Check size={14}/>}
+                            </div>
+                            <input type="checkbox" className="hidden" checked={checks.c2} onChange={() => setChecks(p => ({...p, c2: !p.c2}))} />
+                            <div>
+                                <p className="text-[10px] font-black uppercase text-slate-900">Fallas Tecnológicas</p>
+                                <p className="text-[10px] text-slate-500 mt-1">Acepto que pueden ocurrir interrupciones en la conexión, video o audio ajenas al personal médico, y autorizo el cambio a llamada telefónica si fuera necesario.</p>
+                            </div>
+                        </label>
+
+                        <label className={`flex gap-4 p-4 rounded-2xl border-2 cursor-pointer transition-all ${checks.c3 ? 'bg-blue-50 border-blue-500' : 'bg-white border-slate-100 hover:border-slate-300'}`}>
+                            <div className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center flex-shrink-0 ${checks.c3 ? 'bg-blue-600 border-blue-600 text-white' : 'border-slate-300'}`}>
+                                {checks.c3 && <Check size={14}/>}
+                            </div>
+                            <input type="checkbox" className="hidden" checked={checks.c3} onChange={() => setChecks(p => ({...p, c3: !p.c3}))} />
+                            <div>
+                                <p className="text-[10px] font-black uppercase text-slate-900">Privacidad y Protección de Datos</p>
+                                <p className="text-[10px] text-slate-500 mt-1">Autorizo el uso de plataformas encriptadas para la transmisión de mi imagen, voz y datos clínicos sensibles para fines exclusivos de mi atención médica.</p>
+                            </div>
+                        </label>
+
+                        <label className={`flex gap-4 p-4 rounded-2xl border-2 cursor-pointer transition-all ${checks.c4 ? 'bg-blue-50 border-blue-500' : 'bg-white border-slate-100 hover:border-slate-300'}`}>
+                            <div className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center flex-shrink-0 ${checks.c4 ? 'bg-blue-600 border-blue-600 text-white' : 'border-slate-300'}`}>
+                                {checks.c4 && <Check size={14}/>}
+                            </div>
+                            <input type="checkbox" className="hidden" checked={checks.c4} onChange={() => setChecks(p => ({...p, c4: !p.c4}))} />
+                            <div>
+                                <p className="text-[10px] font-black uppercase text-slate-900">Autorización Voluntaria</p>
+                                <p className="text-[10px] text-slate-500 mt-1">Solicito la atención voluntariamente y confirmo que tengo capacidad legal para otorgar este consentimiento o soy el tutor legal del paciente.</p>
+                            </div>
+                        </label>
+                    </div>
+                </div>
+
+                <div className="p-8 border-t border-slate-100 bg-white">
+                    <button 
+                        onClick={onAccept}
+                        disabled={!allChecked}
+                        className={`w-full py-5 rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl flex items-center justify-center gap-3 transition-all ${allChecked ? 'bg-slate-900 text-white hover:bg-blue-600' : 'bg-slate-200 text-slate-400 cursor-not-allowed'}`}
+                    >
+                        <FileSignature size={18}/> Aceptar y Continuar
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+// --- CHAT ASSISTANT COMPONENT (UPDATED WITH SCHEDULING LOGIC) ---
+const ClinicChatAssistant: React.FC<{ 
+    doctorsList: DoctorInfo[];
+    patients: Patient[];
+    onAddPatient?: (p: Patient) => void;
+    onAddHomeRequest?: (req: HomeServiceRequest) => void;
+}> = ({ doctorsList, patients, onAddPatient, onAddHomeRequest }) => {
+    const [isOpen, setIsOpen] = useState(false);
+    const [isTyping, setIsTyping] = useState(false);
+    const [inputValue, setInputValue] = useState('');
+    
+    // Conversation State Management
+    const [flowState, setFlowState] = useState<'IDLE' | 'BOOKING_TYPE' | 'DOC_SELECT' | 'SLOT_SELECT' | 'LAB_TYPE' | 'LAB_CONFIRM' | 'CONFIRM_APPT'>('IDLE');
+    const [bookingData, setBookingData] = useState<any>({});
+
+    const [messages, setMessages] = useState<{
+        id: string, 
+        text: string, 
+        sender: 'bot' | 'user' | 'agent', 
+        type?: 'text' | 'options' | 'slots',
+        options?: {label: string, value: string, action?: () => void}[],
+        slots?: string[]
+    }[]>([
+        { id: '1', text: '¡Hola! 👋 Soy MediBot. Puedo ayudarte a agendar citas, solicitar laboratorios o resolver dudas de la clínica.', sender: 'bot', type: 'text' }
+    ]);
+    const scrollRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }, [messages, isTyping, isOpen]);
+
+    // --- AGENT LOGIC & AVAILABILITY CHECK ---
+    const getAvailableSlots = (doctorCedula: string, date: string) => {
+        const doctor = doctorsList.find(d => d.cedula === doctorCedula);
+        if (!doctor) return [];
+        
+        // Mock Schedule: 09:00 to 18:00
+        const baseSlots = ['09:00', '10:00', '11:00', '12:00', '13:00', '16:00', '17:00', '18:00'];
+        
+        // Filter out existing appointments
+        const takenSlots = patients
+            .filter(p => p.assignedDoctorId === doctorCedula && p.scheduledDate === date && p.status !== PatientStatus.ATTENDED && p.status !== PatientStatus.ONLINE_QUEUE)
+            .map(p => p.appointmentTime);
+            
+        return baseSlots.filter(slot => !takenSlots.includes(slot));
+    };
+
+    const processMessage = (text: string, payload?: any) => {
+        const lower = text.toLowerCase();
+        let responseMsgs: any[] = [];
+        let nextFlow = flowState;
+
+        // --- GLOBAL COMMANDS ---
+        if (lower.includes('hola') || lower.includes('inicio')) {
+            nextFlow = 'IDLE';
+            responseMsgs.push({ text: "¡Hola de nuevo! ¿En qué puedo ayudarte?", type: 'text' });
+        }
+        else if (lower.includes('agendar') || lower.includes('cita')) {
+            nextFlow = 'BOOKING_TYPE';
+            responseMsgs.push({ 
+                text: "¿Qué tipo de servicio necesitas agendar?", 
+                type: 'options',
+                options: [
+                    { label: "👨‍⚕️ Consulta Médica", value: "consulta", action: () => processMessage("consulta") },
+                    { label: "🧪 Laboratorios", value: "laboratorio", action: () => processMessage("laboratorio") }
+                ]
+            });
+        }
+        // --- BOOKING FLOW: CONSULTA ---
+        else if (flowState === 'BOOKING_TYPE' && lower.includes('consulta')) {
+            nextFlow = 'DOC_SELECT';
+            // Group doctors by specialty
+            const specialties = Array.from(new Set(doctorsList.map(d => d.specialty)));
+            responseMsgs.push({
+                text: "Perfecto. Selecciona una especialidad o médico:",
+                type: 'options',
+                options: doctorsList.map(d => ({
+                    label: `Dr. ${d.name.split(' ')[0]} (${d.specialty})`,
+                    value: d.cedula,
+                    action: () => processMessage("select_doc", d)
+                }))
+            });
+        }
+        else if (flowState === 'DOC_SELECT' && payload) { // Payload is Doctor Object
+            const doc = payload as DoctorInfo;
+            setBookingData({ ...bookingData, doctor: doc, date: new Date().toISOString().split('T')[0] }); // Default today
+            const slots = getAvailableSlots(doc.cedula, new Date().toISOString().split('T')[0]);
+            
+            if (slots.length > 0) {
+                nextFlow = 'SLOT_SELECT';
+                responseMsgs.push({ 
+                    text: `El Dr. ${doc.name} tiene disponibilidad hoy. Selecciona un horario:`,
+                    type: 'options', // Reusing options for slots visual
+                    options: slots.map(s => ({ label: s, value: s, action: () => processMessage("select_slot", s) }))
+                });
+            } else {
+                nextFlow = 'IDLE';
+                responseMsgs.push({ text: "Lo siento, este médico no tiene espacios hoy. Intenta llamar a recepción para fechas futuras.", type: 'text' });
+            }
+        }
+        else if (flowState === 'SLOT_SELECT' && payload) { // Payload is Slot String
+            const slot = payload as string;
+            setBookingData({ ...bookingData, time: slot });
+            nextFlow = 'CONFIRM_APPT';
+            responseMsgs.push({
+                text: `Confirma tu cita:\n\n👨‍⚕️ ${bookingData.doctor.name}\n📅 Hoy\n⏰ ${slot}\n💲 Costo: $${bookingData.doctor.price}`,
+                type: 'options',
+                options: [
+                    { label: "✅ Confirmar Cita", value: "confirm", action: () => processMessage("confirm_appt") },
+                    { label: "❌ Cancelar", value: "cancel", action: () => processMessage("cancel") }
+                ]
+            });
+        }
+        else if (text === 'confirm_appt') {
+            if (onAddPatient) {
+                onAddPatient({
+                    id: `BOT-${Date.now()}`,
+                    name: 'PACIENTE CHAT (TU)', // In real app use logged user
+                    curp: 'XXXX000000XXXXXX00',
+                    age: 30, sex: 'M', bloodType: 'O+', allergies: [],
+                    status: PatientStatus.SCHEDULED,
+                    priority: PriorityLevel.ROUTINE,
+                    assignedModule: ModuleType.OUTPATIENT, // Or Telemedicine depending on context
+                    scheduledDate: bookingData.date,
+                    appointmentTime: bookingData.time,
+                    assignedDoctorId: bookingData.doctor.cedula,
+                    assignedDoctorName: bookingData.doctor.name,
+                    reason: "Agendado vía Asistente Virtual",
+                    agendaStatus: AgendaStatus.PENDING,
+                    chronicDiseases: []
+                });
+                responseMsgs.push({ text: "¡Listo! Tu cita ha sido agendada exitosamente. Te esperamos.", type: 'text' });
+            }
+            nextFlow = 'IDLE';
+            setBookingData({});
+        }
+
+        // --- BOOKING FLOW: LAB ---
+        else if (flowState === 'BOOKING_TYPE' && lower.includes('laboratorio')) {
+            nextFlow = 'LAB_TYPE';
+            responseMsgs.push({
+                text: "¿Dónde prefieres la toma de muestra?",
+                type: 'options',
+                options: [
+                    { label: "🚑 A Domicilio", value: "home", action: () => processMessage("lab_home") },
+                    { label: "🏥 En Clínica", value: "clinic", action: () => processMessage("lab_clinic") }
+                ]
+            });
+        }
+        else if (text === 'lab_home') {
+             if (onAddHomeRequest) {
+                 onAddHomeRequest({
+                     id: `BOT-LAB-${Date.now()}`,
+                     patientId: 'GUEST',
+                     patientName: 'PACIENTE CHAT',
+                     patientAddress: 'Ubicación Actual (Chat)',
+                     patientPhone: '55-0000-0000',
+                     requestedBy: 'MediBot',
+                     requestedDate: new Date().toISOString(),
+                     status: 'Pendiente',
+                     studies: ['Check-up General (Bot)']
+                 });
+                 responseMsgs.push({ text: "He generado una solicitud de unidad móvil. Una enfermera te contactará en breve para confirmar tu ubicación exacta.", type: 'text' });
+             }
+             nextFlow = 'IDLE';
+        }
+        else if (text === 'lab_clinic') {
+             responseMsgs.push({ text: "Para laboratorio en clínica no necesitas cita, puedes acudir en ayunas de 7:00 AM a 11:00 AM. ¡Te esperamos!", type: 'text' });
+             nextFlow = 'IDLE';
+        }
+
+        // --- INFO QUERIES (FALLBACK) ---
+        else if (lower.includes('precio')) {
+             const minPrice = Math.min(...doctorsList.map(d => d.price));
+             responseMsgs.push({ text: `Nuestras consultas van desde $${minPrice}. ¿Te gustaría agendar?`, type: 'text' });
+        }
+        else if (lower.includes('ubicacion')) {
+             responseMsgs.push({ text: "Estamos en Av. Insurgentes Sur 123. Contamos con Valet Parking.", type: 'text' });
+        }
+        else {
+             responseMsgs.push({ text: "No estoy seguro de entender. ¿Quieres agendar una cita o hablar con un humano?", type: 'options', options: [{ label: "👤 Hablar con Humano", value: "human", action: () => processMessage("human") }] });
+        }
+
+        if (text === 'cancel') {
+            responseMsgs = [{ text: "Operación cancelada. ¿En qué más puedo ayudarte?", type: 'text' }];
+            nextFlow = 'IDLE';
+        }
+        
+        if (text === 'human') {
+             responseMsgs = [{ text: "Conectando con agente... (Simulación)", type: 'text' }];
+             nextFlow = 'IDLE';
+        }
+
+        return { responseMsgs, nextFlow };
+    };
+
+    const handleSend = (text: string = inputValue, payload?: any) => {
+        if (!text && !payload) return;
+
+        // User Message (only show if typed, not if clicking internal logic buttons sometimes)
+        if (!payload) {
+            setMessages(prev => [...prev, { id: Date.now().toString(), text: text, sender: 'user' }]);
+            setInputValue('');
+        }
+        
+        setIsTyping(true);
+        setFlowState(prev => {
+            // Logic execution wrapper to access current state inside timeout if needed, 
+            // but here we use the functional update or separate logic.
+            // For simplicity in this mock, we execute logic immediately but delay display.
+            const result = processMessage(text, payload);
+            
+            setTimeout(() => {
+                const newMsgs = result.responseMsgs.map((m: any, i: number) => ({
+                    id: `bot-${Date.now()}-${i}`,
+                    sender: 'bot',
+                    ...m
+                }));
+                setMessages(prev => [...prev, ...newMsgs]);
+                setIsTyping(false);
+            }, 800);
+
+            return result.nextFlow;
+        });
+    };
+
+    return (
+        <>
+            <button 
+                onClick={() => setIsOpen(!isOpen)}
+                className={`fixed bottom-6 right-6 p-4 rounded-full shadow-2xl transition-all z-[60] flex items-center justify-center ${isOpen ? 'bg-slate-200 text-slate-600 rotate-90' : 'bg-indigo-600 text-white hover:scale-110 hover:bg-indigo-700'}`}
+            >
+                {isOpen ? <X size={24} /> : <MessageSquare size={24} fill="currentColor" />}
+            </button>
+
+            {isOpen && (
+                <div className="fixed bottom-24 right-6 w-96 h-[600px] bg-white rounded-[2.5rem] shadow-2xl border border-slate-200 z-[60] flex flex-col overflow-hidden animate-in slide-in-from-bottom-10 fade-in duration-300">
+                    <div className="bg-slate-900 p-5 flex items-center justify-between shadow-md z-10">
+                        <div className="flex items-center gap-3">
+                            <div className="relative">
+                                <div className="w-12 h-12 bg-indigo-500 rounded-full flex items-center justify-center text-white border-2 border-slate-800">
+                                    <Bot size={24} />
+                                </div>
+                                <div className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-emerald-500 border-2 border-slate-900 rounded-full animate-pulse"></div>
+                            </div>
+                            <div>
+                                <h4 className="text-white font-black text-sm uppercase tracking-wide">MediBot IA</h4>
+                                <p className="text-indigo-300 text-[9px] font-bold uppercase tracking-widest">Asistente Inteligente</p>
+                            </div>
+                        </div>
+                        <button onClick={() => setIsOpen(false)} className="text-slate-400 hover:text-white transition-colors"><X size={20}/></button>
+                    </div>
+
+                    <div className="flex-1 bg-slate-50 p-4 overflow-y-auto custom-scrollbar space-y-4" ref={scrollRef}>
+                        {messages.map((msg) => (
+                            <div key={msg.id} className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
+                                <div className={`max-w-[85%] space-y-2`}>
+                                    {msg.text && (
+                                        <div className={`p-4 rounded-2xl text-xs font-medium leading-relaxed shadow-sm ${
+                                            msg.sender === 'user' 
+                                            ? 'bg-indigo-600 text-white rounded-br-sm' 
+                                            : 'bg-white text-slate-700 border border-slate-200 rounded-bl-sm'
+                                        }`}>
+                                            {msg.text}
+                                        </div>
+                                    )}
+                                    {msg.type === 'options' && msg.options && (
+                                        <div className="flex flex-wrap gap-2">
+                                            {msg.options.map((opt, idx) => (
+                                                <button 
+                                                    key={idx}
+                                                    onClick={opt.action}
+                                                    className="px-4 py-2 bg-indigo-100 text-indigo-700 rounded-xl text-[10px] font-black uppercase hover:bg-indigo-600 hover:text-white transition-all shadow-sm border border-indigo-200"
+                                                >
+                                                    {opt.label}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        ))}
+                        {isTyping && (
+                            <div className="flex justify-start">
+                                <div className="bg-white border border-slate-200 p-3 rounded-2xl rounded-bl-sm shadow-sm flex gap-1 items-center">
+                                    <span className="text-[10px] font-bold text-slate-400 mr-2">Escribiendo</span>
+                                    <div className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce"></div>
+                                    <div className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce delay-75"></div>
+                                    <div className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce delay-150"></div>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="p-3 bg-white border-t border-slate-100">
+                        <form 
+                            onSubmit={(e) => { e.preventDefault(); handleSend(); }}
+                            className="flex items-center gap-2 bg-slate-100 p-1.5 rounded-2xl border border-slate-200"
+                        >
+                            <input 
+                                className="flex-1 bg-transparent px-4 py-3 text-xs font-medium outline-none text-slate-700 placeholder:text-slate-400"
+                                placeholder="Escribe aquí..."
+                                value={inputValue}
+                                onChange={(e) => setInputValue(e.target.value)}
+                            />
+                            <button type="submit" className="p-3 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-colors shadow-md">
+                                <Send size={16} />
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            )}
+        </>
+    );
+};
+
 
 // ... (DoctorPublicProfile component remains the same) ...
 const DoctorPublicProfile: React.FC<{ 
@@ -551,7 +970,10 @@ const PatientView: React.FC<{
     doctorsList: DoctorInfo[];
     notes?: ClinicalNote[];
     homeRequests?: HomeServiceRequest[]; // Receive real-time requests from props
-}> = ({ onQuickRequest, onDoctorSelect, onViewProfile, onHomeLabRequest, searchTerm, setSearchTerm, doctorsList, notes, homeRequests = [] }) => {
+    onAddPatient?: (p: Patient) => void;
+    onAddHomeRequest?: (req: HomeServiceRequest) => void;
+    patients: Patient[];
+}> = ({ onQuickRequest, onDoctorSelect, onViewProfile, onHomeLabRequest, searchTerm, setSearchTerm, doctorsList, notes, homeRequests = [], onAddPatient, onAddHomeRequest, patients }) => {
     const [patientTab, setPatientTab] = useState<'services' | 'history'>('services');
 
     const filteredDoctors = doctorsList.filter(d => 
@@ -571,7 +993,11 @@ const PatientView: React.FC<{
     }, [notes]);
 
     return (
-        <div className="space-y-8 animate-in fade-in">
+        <div className="space-y-8 animate-in fade-in relative">
+            
+            {/* INTEGRATE CHAT ASSISTANT HERE */}
+            <ClinicChatAssistant doctorsList={doctorsList} patients={patients} onAddPatient={onAddPatient} onAddHomeRequest={onAddHomeRequest} />
+
             {/* Navigation Tabs for Patient */}
             <div className="flex justify-center no-print">
                 <div className="flex bg-white p-1.5 rounded-2xl shadow-sm border border-slate-200">
@@ -837,6 +1263,7 @@ const TelemedicineDashboard: React.FC<TelemedicineDashboardProps & {
   });
 
   // States for Modals
+  const [showConsentModal, setShowConsentModal] = useState(false);
   const [showIntakeModal, setShowIntakeModal] = useState(false);
   const [showHomeLabModal, setShowHomeLabModal] = useState(false); // NEW STATE
   const [showTriagePreview, setShowTriagePreview] = useState<Patient | null>(null);
@@ -882,6 +1309,12 @@ const TelemedicineDashboard: React.FC<TelemedicineDashboardProps & {
 
   const initiatePatientRequest = (type: 'quick' | 'specific', doctor?: DoctorInfo) => {
       setSelectedDoctorForRequest(doctor);
+      // New Flow: Consent -> Intake
+      setShowConsentModal(true);
+  };
+
+  const handleConsentAccept = () => {
+      setShowConsentModal(false);
       setShowIntakeModal(true);
   };
 
@@ -909,7 +1342,8 @@ const TelemedicineDashboard: React.FC<TelemedicineDashboardProps & {
           agendaStatus: AgendaStatus.ARRIVED_ON_TIME,
           assignedDoctorId: selectedDoctorForRequest?.cedula,
           assignedDoctorName: selectedDoctorForRequest?.name,
-          teleIntake: intakeData 
+          teleIntake: intakeData,
+          hasTelemedicineConsent: true // Mark consent as signed
       };
       onAddPatient(newPatient);
       setShowIntakeModal(false);
@@ -1067,6 +1501,9 @@ const TelemedicineDashboard: React.FC<TelemedicineDashboardProps & {
             doctorsList={doctorsList}
             notes={notes}
             homeRequests={homeRequests}
+            onAddPatient={onAddPatient} // Pass to PatientView for ClinicChatAssistant
+            onAddHomeRequest={onAddHomeRequest} // Pass to PatientView
+            patients={patients} // Pass patients for conflict check
           />
       ) : (
           /* VISTA MÉDICO ... (Sin cambios aquí) ... */
@@ -1323,6 +1760,13 @@ const TelemedicineDashboard: React.FC<TelemedicineDashboardProps & {
           )
       )}
 
+      {/* NEW: Telemedicine Consent Modal */}
+      <TeleConsentModal 
+          isOpen={showConsentModal} 
+          onClose={() => setShowConsentModal(false)}
+          onAccept={handleConsentAccept}
+      />
+
       <IntakeModal isOpen={showIntakeModal} onClose={() => setShowIntakeModal(false)} onSubmit={handleIntakeSubmit} preSelectedDoctor={selectedDoctorForRequest} />
       <HomeLabRequestModal isOpen={showHomeLabModal} onClose={() => setShowHomeLabModal(false)} onSubmit={handleHomeLabSubmit} />
       
@@ -1369,6 +1813,10 @@ const TelemedicineDashboard: React.FC<TelemedicineDashboardProps & {
                               <p className="text-[9px] font-bold text-slate-400 uppercase mb-1">Alergias</p>
                               <p className="text-xs font-black uppercase text-rose-600">{showTriagePreview.teleIntake?.allergies || 'Negadas'}</p>
                           </div>
+                      </div>
+                      <div className="p-4 bg-blue-50 border border-blue-100 rounded-2xl flex items-center gap-3">
+                          <ShieldCheck size={20} className="text-blue-600"/>
+                          <p className="text-[10px] font-bold text-blue-800 uppercase">Consentimiento Informado Firmado Digitalmente</p>
                       </div>
                   </div>
 

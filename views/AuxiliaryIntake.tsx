@@ -5,9 +5,10 @@ import {
   ChevronLeft, Microscope, ImageIcon, Save, User, Search, 
   FlaskConical, CheckCircle2, Plus, X, ClipboardList, Info, 
   CreditCard, UserCheck, Timer, AlertCircle, Fingerprint, Heart,
-  Calendar, FileText, ArrowRight, Database, History, UserPlus
+  Calendar, FileText, ArrowRight, Database, History, UserPlus,
+  ShieldCheck, FileSignature
 } from 'lucide-react';
-import { Patient, ClinicalNote, ModuleType, PatientStatus, PriorityLevel, ChargeItem, PriceType, PriceItem } from '../types';
+import { Patient, ClinicalNote, ModuleType, PatientStatus, PriorityLevel, ChargeItem, PriceItem, PriceType } from '../types';
 import { LAB_CATALOG, IMAGING_CATALOG, INITIAL_PRICES } from '../constants';
 
 interface AuxiliaryIntakeProps {
@@ -23,6 +24,10 @@ const AuxiliaryIntake: React.FC<AuxiliaryIntakeProps> = ({ patients, onSaveNote,
   const [isNewPatient, setIsNewPatient] = useState(false);
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
   const [activeTab, setActiveTab] = useState<'lab' | 'imaging'>('lab');
+  
+  // Consent State
+  const [showConsent, setShowConsent] = useState(false);
+  const [consentSigned, setConsentSigned] = useState(false);
 
   // Load prices from localStorage to get dynamically created studies
   const prices: PriceItem[] = useMemo(() => {
@@ -37,7 +42,6 @@ const AuxiliaryIntake: React.FC<AuxiliaryIntakeProps> = ({ patients, onSaveNote,
           preparation: 'Consultar indicaciones',
           indications: 'Estudio de Laboratorio'
       }));
-      // Filter out duplicates based on name
       const combined = [...LAB_CATALOG, ...dynamicLabs];
       return Array.from(new Map(combined.map(item => [item.name, item])).values());
   }, [prices]);
@@ -74,11 +78,16 @@ const AuxiliaryIntake: React.FC<AuxiliaryIntakeProps> = ({ patients, onSaveNote,
 
   const selectedCount = opForm.labStudies.length + opForm.imagingStudies.length;
 
+  // Determine if any selected study requires consent (e.g., Contrast, Biopsy, HIV)
+  const requiresConsent = useMemo(() => {
+      const allStudies = [...opForm.labStudies, ...opForm.imagingStudies].join(' ').toLowerCase();
+      return allStudies.includes('contraste') || allStudies.includes('biopsia') || allStudies.includes('vih') || allStudies.includes('punción');
+  }, [opForm]);
+
   // Búsqueda en TODA la base de datos (Histórico y Activos)
   const filteredPatients = useMemo(() => {
     if (searchTerm.length < 2) return [];
     const search = searchTerm.toLowerCase();
-    // Filtramos para evitar duplicados visuales si hay registros históricos (OLD-) pero permitimos encontrar al paciente original
     return patients
       .filter(p => !p.id.startsWith('OLD-')) 
       .filter(p => 
@@ -95,18 +104,18 @@ const AuxiliaryIntake: React.FC<AuxiliaryIntakeProps> = ({ patients, onSaveNote,
     } else {
       setOpForm({...opForm, [key]: [...current, study]});
     }
+    // Reset consent if studies change
+    setConsentSigned(false);
   };
 
   const handleSelectExisting = (p: Patient) => {
     setSelectedPatient(p);
-    // Pre-llenamos el formulario con los datos de la base de datos
     setPatientForm({ 
       ...p, 
-      // Forzamos el estatus y módulo para la nueva admisión a auxiliares
       status: PatientStatus.WAITING_FOR_SAMPLES,
       assignedModule: ModuleType.AUXILIARY,
       priority: PriorityLevel.ROUTINE,
-      reason: '' // Limpiamos el motivo anterior para poner los nuevos estudios
+      reason: '' 
     });
     setSearchTerm('');
   };
@@ -119,6 +128,12 @@ const AuxiliaryIntake: React.FC<AuxiliaryIntakeProps> = ({ patients, onSaveNote,
       alert("Seleccione al menos un estudio para el ingreso.");
       return;
     }
+    
+    if (requiresConsent && !consentSigned) {
+        alert("Algunos estudios seleccionados requieren Consentimiento Informado. Por favor, fírmelo antes de continuar.");
+        setShowConsent(true);
+        return;
+    }
 
     const studySummary = [...opForm.labStudies, ...opForm.imagingStudies].join(', ');
     
@@ -127,7 +142,6 @@ const AuxiliaryIntake: React.FC<AuxiliaryIntakeProps> = ({ patients, onSaveNote,
     const allSelectedStudies = [...opForm.labStudies, ...opForm.imagingStudies];
     
     allSelectedStudies.forEach(studyName => {
-        // Intentar encontrar precio en el catálogo maestro (prices state loaded from storage)
         const priceItem = prices.find(p => p.name === studyName);
         const price = priceItem ? priceItem.price : 0;
         const tax = priceItem ? (price * priceItem.taxPercent / 100) : 0;
@@ -148,23 +162,19 @@ const AuxiliaryIntake: React.FC<AuxiliaryIntakeProps> = ({ patients, onSaveNote,
     let pToSave: Patient;
 
     if (selectedPatient) {
-      // ACTUALIZACIÓN DE PACIENTE EXISTENTE (REINGRESO A AUXILIARES)
-      // Combinar cargos pendientes nuevos con existentes si hubiera
       const existingPending = selectedPatient.pendingCharges || [];
-      
       pToSave = {
-        ...selectedPatient, // Mantenemos ID e historial
-        ...patientForm as Patient, // Sobrescribimos datos editados si hubo
+        ...selectedPatient, 
+        ...patientForm as Patient, 
         status: PatientStatus.WAITING_FOR_SAMPLES,
         assignedModule: ModuleType.AUXILIARY,
         reason: studySummary,
         lastVisit: new Date().toISOString().split('T')[0],
-        paymentStatus: 'Pendiente',
+        paymentStatus: 'Pendiente', 
         pendingCharges: [...existingPending, ...pendingCharges]
       };
       onUpdatePatient(pToSave);
     } else {
-      // PACIENTE TOTALMENTE NUEVO
       pToSave = {
         ...patientForm as Patient,
         id: `AUX-${Date.now().toString().slice(-4)}`,
@@ -176,18 +186,38 @@ const AuxiliaryIntake: React.FC<AuxiliaryIntakeProps> = ({ patients, onSaveNote,
         allergies: [],
         chronicDiseases: [],
         lastVisit: new Date().toISOString().split('T')[0],
-        paymentStatus: 'Pendiente',
+        paymentStatus: 'Pendiente', 
         pendingCharges: pendingCharges
       };
       onAddPatient(pToSave);
     }
 
-    navigate('/');
+    // Save consent note if required and signed
+    if (requiresConsent && consentSigned) {
+        const consentNote: ClinicalNote = {
+            id: `CONS-LAB-${Date.now()}`,
+            patientId: pToSave.id,
+            type: 'Consentimiento Informado (Laboratorio/Imagen)',
+            date: new Date().toLocaleString('es-MX'),
+            author: 'Admisión Auxiliares',
+            content: {
+                authorizedAct: studySummary,
+                risks: 'Reacción adversa a medio de contraste, hematoma, infección (según procedimiento).',
+                benefits: 'Diagnóstico preciso para tratamiento.',
+                contingencyAuth: true
+            },
+            isSigned: true
+        };
+        onSaveNote(consentNote);
+    }
+
+    navigate('/'); 
   };
 
   return (
     <div className="max-w-7xl mx-auto pb-40 animate-in fade-in">
-      <div className="bg-white border-b-8 border-indigo-600 p-10 rounded-t-[3.5rem] shadow-2xl mb-10 flex flex-col lg:flex-row justify-between items-center gap-8">
+      {/* ... Header and Patient Search Section (same as original) ... */}
+       <div className="bg-white border-b-8 border-indigo-600 p-10 rounded-t-[3.5rem] shadow-2xl mb-10 flex flex-col lg:flex-row justify-between items-center gap-8">
         <div className="flex items-center gap-6">
           <button onClick={() => navigate(-1)} className="p-4 bg-slate-900 text-white rounded-2xl hover:bg-indigo-600 shadow-xl"><ChevronLeft size={24} /></button>
           <h1 className="text-3xl font-black text-slate-900 uppercase tracking-tight leading-none">Admisión de Servicios Auxiliares</h1>
@@ -200,6 +230,7 @@ const AuxiliaryIntake: React.FC<AuxiliaryIntakeProps> = ({ patients, onSaveNote,
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
         <div className="lg:col-span-8 space-y-10">
+           {/* ... Patient Selection Logic (Same as original) ... */}
            <div className="bg-white border border-slate-200 rounded-[3rem] p-12 shadow-sm space-y-10">
               <h3 className="text-sm font-black uppercase tracking-widest text-slate-900 flex items-center gap-4 border-b border-slate-50 pb-6">
                  {isNewPatient ? <UserPlus size={20} className="text-indigo-600" /> : <Database size={20} className="text-indigo-600" />}
@@ -249,11 +280,6 @@ const AuxiliaryIntake: React.FC<AuxiliaryIntakeProps> = ({ patients, onSaveNote,
                            ))}
                         </div>
                      </div>
-                   )}
-                   {searchTerm.length > 2 && filteredPatients.length === 0 && (
-                      <div className="p-8 text-center text-slate-400">
-                         <p className="font-bold text-xs uppercase">No se encontraron pacientes con esos datos.</p>
-                      </div>
                    )}
                 </div>
               ) : (
@@ -325,10 +351,23 @@ const AuxiliaryIntake: React.FC<AuxiliaryIntakeProps> = ({ patients, onSaveNote,
                        )) : <p className="text-[10px] italic opacity-40">Sin estudios seleccionados</p>}
                     </div>
                  </div>
+                 
+                 {/* CONSENT REQUIREMENT INDICATOR */}
+                 {requiresConsent && (
+                     <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-2xl flex items-center gap-3">
+                         <AlertCircle className="text-amber-500 flex-shrink-0" size={16}/>
+                         <div className="space-y-1">
+                             <p className="text-[9px] font-black text-amber-500 uppercase tracking-widest">Requiere Consentimiento</p>
+                             <button onClick={() => setShowConsent(true)} className="text-[9px] underline text-white hover:text-amber-400">
+                                 {consentSigned ? '✅ Firmado y Validado' : '⚠️ Pendiente de Firma'}
+                             </button>
+                         </div>
+                     </div>
+                 )}
 
                  <div className="bg-blue-50/10 p-6 rounded-2xl border border-white/5">
                    <p className="text-[9px] text-blue-300 font-medium uppercase leading-relaxed tracking-tight">
-                     "Nota: Si el paciente ya existe en el sistema, esta acción actualizará su estatus a 'En Espera de Toma' en el módulo de Auxiliares, manteniendo su historial clínico previo."
+                     "Nota: Al guardar, se generarán cargos pendientes en la cuenta del paciente. Deberá realizar el pago en Caja antes de proceder a la toma de muestra."
                    </p>
                  </div>
 
@@ -343,6 +382,58 @@ const AuxiliaryIntake: React.FC<AuxiliaryIntakeProps> = ({ patients, onSaveNote,
            </div>
         </div>
       </div>
+
+      {/* CONSENT MODAL */}
+      {showConsent && (
+          <div className="fixed inset-0 z-[100] bg-slate-900/95 backdrop-blur flex items-center justify-center p-4 animate-in fade-in">
+              <div className="bg-white w-full max-w-2xl rounded-[3rem] shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+                  <div className="p-8 border-b border-slate-100 flex justify-between items-center">
+                      <div className="flex items-center gap-4">
+                          <ShieldCheck size={32} className="text-indigo-600"/>
+                          <div>
+                             <h3 className="text-xl font-black text-slate-900 uppercase">Consentimiento Informado</h3>
+                             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Para procedimientos diagnósticos invasivos</p>
+                          </div>
+                      </div>
+                      <button onClick={() => setShowConsent(false)}><X size={24} className="text-slate-400"/></button>
+                  </div>
+                  <div className="p-10 space-y-6 overflow-y-auto custom-scrollbar">
+                      <p className="text-xs text-justify font-medium text-slate-600 leading-relaxed">
+                          Por medio de la presente, autorizo al personal técnico y médico del laboratorio para realizar la toma de muestras y/o estudios de imagenología solicitados (incluyendo el uso de medios de contraste o punciones si aplica).
+                          <br/><br/>
+                          He sido informado de los riesgos potenciales como hematomas, reacciones alérgicas leves a severas, o molestias locales, así como de los beneficios diagnósticos.
+                          <br/><br/>
+                          Confirmo que he proporcionado información veraz sobre mis antecedentes alérgicos y estado de salud.
+                      </p>
+                      
+                      <div 
+                         onClick={() => setConsentSigned(!consentSigned)}
+                         className={`h-32 border-2 border-dashed rounded-3xl flex items-center justify-center cursor-pointer transition-all ${consentSigned ? 'bg-emerald-50 border-emerald-500' : 'bg-slate-50 border-slate-200 hover:border-indigo-500 group'}`}
+                      >
+                          {consentSigned ? (
+                              <div className="text-emerald-600 text-center space-y-2">
+                                  <CheckCircle2 size={40} className="mx-auto"/>
+                                  <p className="text-[10px] font-black uppercase tracking-widest">Firmado Digitalmente</p>
+                              </div>
+                          ) : (
+                              <div className="text-slate-400 text-center space-y-2 group-hover:text-indigo-600">
+                                  <FileSignature size={32} className="mx-auto"/>
+                                  <p className="text-[10px] font-black uppercase tracking-widest">Click para Firmar</p>
+                              </div>
+                          )}
+                      </div>
+                  </div>
+                  <div className="p-6 border-t border-slate-100 bg-slate-50 flex justify-end">
+                      <button 
+                        onClick={() => setShowConsent(false)} 
+                        className="px-8 py-3 bg-indigo-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-slate-900 transition-all shadow-lg"
+                      >
+                          Guardar y Cerrar
+                      </button>
+                  </div>
+              </div>
+          </div>
+      )}
     </div>
   );
 };

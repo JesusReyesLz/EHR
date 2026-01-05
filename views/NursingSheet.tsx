@@ -4,9 +4,21 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { 
   ChevronLeft, Printer, ShieldCheck, Activity, Pill, Droplets, Trash2, Plus, 
   Clock, Save, User, X, FlaskConical, HeartPulse, FileText, CheckCircle2, 
-  Thermometer, Wind, Droplet, Scale, Ruler, History, AlertTriangle, Check, XCircle
+  Thermometer, Wind, Droplet, Scale, Ruler, History, AlertTriangle, Check, XCircle,
+  Eye, Syringe, Brain, AlertOctagon, ClipboardList, BedDouble
 } from 'lucide-react';
+import { 
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine 
+} from 'recharts';
 import { Patient, ClinicalNote, MedicationLog, LiquidEntry, Vitals } from '../types';
+
+interface ProcedureLog {
+  id: string;
+  time: string;
+  procedure: string;
+  notes: string;
+  nurse: string;
+}
 
 const NursingSheet: React.FC<{ patients: Patient[], onSaveNote: (n: ClinicalNote) => void, onUpdatePatient: (p: Patient) => void }> = ({ patients, onSaveNote, onUpdatePatient }) => {
   const { id } = useParams();
@@ -16,6 +28,20 @@ const NursingSheet: React.FC<{ patients: Patient[], onSaveNote: (n: ClinicalNote
   const [sheetDate, setSheetDate] = useState(new Date().toISOString().split('T')[0]);
   const [shift, setShift] = useState('Matutino');
   const [nurseName, setNurseName] = useState('Enf. Lucía Rodríguez');
+
+  // Datos Clínicos Adicionales
+  const [habitus, setHabitus] = useState('Paciente consciente, orientado, con facies de dolor leve, coloración de tegumentos normal, bien hidratado.');
+  const [observations, setObservations] = useState('');
+  
+  // Escalas y Riesgos
+  const [painScale, setPainScale] = useState({ score: 0, location: 'Sin dolor' });
+  const [fallRisk, setFallRisk] = useState<'Bajo' | 'Medio' | 'Alto'>('Bajo');
+  const [ulcerRisk, setUlcerRisk] = useState<'Sin Riesgo' | 'Riesgo Moderado' | 'Alto Riesgo'>('Sin Riesgo');
+
+  // Procedimientos
+  const [procedures, setProcedures] = useState<ProcedureLog[]>([]);
+  const [procForm, setProcForm] = useState({ name: '', notes: '', time: '' });
+  const [showProcModal, setShowProcModal] = useState(false);
 
   // Modal para añadir toma de signos
   const [showVitalsModal, setShowVitalsModal] = useState(false);
@@ -53,12 +79,28 @@ const NursingSheet: React.FC<{ patients: Patient[], onSaveNote: (n: ClinicalNote
   const totalIngresos = useMemo(() => liquidsForDay.filter(l => l.type === 'Ingreso').reduce((a,b) => a + b.amount, 0), [liquidsForDay]);
   const totalEgresos = useMemo(() => liquidsForDay.filter(l => l.type === 'Egreso').reduce((a,b) => a + b.amount, 0), [liquidsForDay]);
 
+  // Preparar datos para gráfica
+  const chartData = useMemo(() => {
+    return (patient?.vitalsHistory || [])
+      .slice(0, 10) // Últimos 10 registros
+      .reverse()
+      .map(v => {
+        const [sys, dia] = v.bp.includes('/') ? v.bp.split('/').map(Number) : [0, 0];
+        return {
+          time: v.date.split(' ')[1]?.substring(0, 5) || '00:00',
+          hr: v.hr,
+          temp: v.temp,
+          sys: sys || null,
+          dia: dia || null
+        };
+      });
+  }, [patient?.vitalsHistory]);
+
   const handleRegisterVitals = () => {
     if (!patient) return;
     const timestamp = new Date().toLocaleString('es-MX');
     const entry = { ...newVitals, date: timestamp };
     
-    // Actualizamos el paciente global para que la ficha y la gráfica vean los mismos datos
     onUpdatePatient({ 
       ...patient, 
       currentVitals: entry, 
@@ -83,6 +125,20 @@ const NursingSheet: React.FC<{ patients: Patient[], onSaveNote: (n: ClinicalNote
     onUpdatePatient({ ...patient, medicationLogs: newLogs });
     setShowMedModal(false);
     setMedForm({ ...medForm, name: '', dosage: '' });
+  };
+
+  const handleSaveProcedure = () => {
+      if (!procForm.name) return;
+      const newProc: ProcedureLog = {
+          id: Date.now().toString(),
+          time: procForm.time || new Date().toLocaleTimeString('es-MX', {hour:'2-digit', minute:'2-digit'}),
+          procedure: procForm.name.toUpperCase(),
+          notes: procForm.notes,
+          nurse: nurseName
+      };
+      setProcedures([...procedures, newProc]);
+      setShowProcModal(false);
+      setProcForm({ name: '', notes: '', time: '' });
   };
 
   const handleSaveLiquid = () => {
@@ -112,8 +168,12 @@ const NursingSheet: React.FC<{ patients: Patient[], onSaveNote: (n: ClinicalNote
         shift, 
         nurse: nurseName, 
         meds: medLogs, 
+        procedures,
+        habitus,
+        observations,
+        risks: { fall: fallRisk, ulcer: ulcerRisk, pain: painScale },
         balance: totalIngresos - totalEgresos, 
-        vitalsSummary: patient?.vitalsHistory?.slice(0, 5) 
+        vitalsSummary: patient?.vitalsHistory?.slice(0, 8) 
       },
       isSigned: true,
       hash: `CERT-ENF-${Math.random().toString(36).substr(2, 9).toUpperCase()}`
@@ -121,10 +181,24 @@ const NursingSheet: React.FC<{ patients: Patient[], onSaveNote: (n: ClinicalNote
     navigate(`/patient/${id}`);
   };
 
+  const getRiskColor = (level: string) => {
+      if (level.includes('Alto')) return 'bg-rose-500 text-white border-rose-600';
+      if (level.includes('Medio') || level.includes('Moderado')) return 'bg-amber-400 text-amber-900 border-amber-500';
+      return 'bg-emerald-500 text-white border-emerald-600';
+  };
+
+  const getPainColor = (score: number) => {
+      if (score === 0) return 'bg-emerald-500';
+      if (score <= 3) return 'bg-blue-400';
+      if (score <= 6) return 'bg-amber-400';
+      if (score <= 8) return 'bg-orange-500';
+      return 'bg-rose-600';
+  };
+
   if (!patient) return null;
 
   return (
-    <div className="max-w-7xl mx-auto pb-40 animate-in fade-in space-y-10">
+    <div className="max-w-7xl mx-auto pb-40 animate-in fade-in space-y-8">
       
       {/* TOOLBAR */}
       <div className="bg-white border border-slate-200 p-6 rounded-[2.5rem] shadow-xl flex flex-wrap items-center justify-between gap-6 no-print">
@@ -132,13 +206,13 @@ const NursingSheet: React.FC<{ patients: Patient[], onSaveNote: (n: ClinicalNote
             <button onClick={() => navigate(-1)} className="p-3 bg-slate-900 text-white rounded-xl hover:bg-blue-600 transition-all shadow-lg"><ChevronLeft size={20}/></button>
             <div>
                <h1 className="text-xl font-black text-slate-900 uppercase">Hoja de Enfermería</h1>
-               <p className="text-[9px] font-black text-blue-600 uppercase tracking-widest mt-1">Registros de Turno • {sheetDate}</p>
+               <p className="text-[9px] font-black text-blue-600 uppercase tracking-widest mt-1">Registros Clínicos • {sheetDate}</p>
             </div>
          </div>
          <div className="flex items-center gap-4">
             <input type="date" className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-black" value={sheetDate} onChange={e => setSheetDate(e.target.value)} />
             <select className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-black uppercase" value={shift} onChange={e => setShift(e.target.value)}>
-               <option>Matutino</option><option>Vespertino</option><option>Nocturno</option>
+               <option>Matutino</option><option>Vespertino</option><option>Nocturno A</option><option>Nocturno B</option><option>Jornada Especial</option>
             </select>
          </div>
       </div>
@@ -150,154 +224,299 @@ const NursingSheet: React.FC<{ patients: Patient[], onSaveNote: (n: ClinicalNote
             {patient.name.charAt(0)}
           </div>
           <div>
-            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">PACIENTE</p>
+            <div className="flex items-center gap-3 mb-1">
+                <span className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-[9px] font-black uppercase tracking-widest">Exp: {patient.id}</span>
+                <span className="px-3 py-1 bg-slate-100 text-slate-600 rounded-full text-[9px] font-black uppercase tracking-widest">Cama: {patient.bedNumber || 'Sin Asignar'}</span>
+            </div>
             <h2 className="text-3xl font-black text-slate-900 uppercase tracking-tighter">{patient.name}</h2>
-            <div className="flex gap-10 mt-4">
-              <div><p className="text-[10px] font-black text-slate-300 uppercase">EDAD</p><p className="font-black text-slate-700">{patient.age}A</p></div>
-              <div><p className="text-[10px] font-black text-slate-300 uppercase">SEXO</p><p className="font-black text-slate-700">{patient.sex}</p></div>
-              <div><p className="text-[10px] font-black text-slate-300 uppercase">CAMA</p><p className="font-black text-slate-700">{patient.bedNumber || 'BOX-01'}</p></div>
+            <div className="flex gap-6 mt-3 text-xs text-slate-500 font-bold uppercase">
+               <span>Edad: {patient.age} Años</span>
+               <span>Sexo: {patient.sex}</span>
+               <span>Nac: {patient.curp.substring(4,10)}</span>
             </div>
           </div>
         </div>
-        <div className="text-right">
-          <p className="text-[10px] font-black text-rose-600 uppercase tracking-widest mb-1">ALERGIAS</p>
-          <p className="text-2xl font-black text-rose-600 uppercase tracking-tighter">
-            {patient.allergies.length > 0 ? patient.allergies.join(', ') : 'NEGADAS'}
-          </p>
+        <div className="text-right space-y-2">
+            <div className="flex items-center justify-end gap-2 text-rose-600">
+                <AlertOctagon size={16} />
+                <p className="text-[10px] font-black uppercase tracking-widest">Alergias</p>
+            </div>
+            <p className="text-xl font-black text-rose-700 uppercase tracking-tight bg-rose-50 px-4 py-2 rounded-xl border border-rose-100">
+                {patient.allergies.length > 0 ? patient.allergies.join(', ') : 'NEGADAS'}
+            </p>
         </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-        <div className="lg:col-span-12 space-y-8">
+        
+        {/* COLUMNA IZQUIERDA: GRÁFICAS Y SIGNOS */}
+        <div className="lg:col-span-8 space-y-8">
           
-          {/* CONTROL DE SIGNOS VITALES (SÁBANA) */}
-          <div className="bg-white border border-slate-200 rounded-[3rem] shadow-xl overflow-hidden">
-             <div className="p-10 flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  <Activity className="text-emerald-600" />
-                  <h3 className="text-sm font-black uppercase text-slate-900 tracking-widest">CONTROL DE SIGNOS VITALES (SÁBANA)</h3>
-                </div>
-                <button 
-                  onClick={() => setShowVitalsModal(true)}
-                  className="flex items-center px-8 py-3 bg-[#059669] hover:bg-slate-900 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-lg transition-all"
-                >
-                  <Plus className="mr-2" size={18} /> AÑADIR TOMA
-                </button>
-             </div>
-             
-             <div className="overflow-x-auto px-10 pb-10">
-                <table className="w-full text-center border-separate border-spacing-y-4">
-                   <thead>
-                      <tr className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
-                         <th className="pb-4">HORARIO</th>
-                         <th className="pb-4">TEMP (°C)</th>
-                         <th className="pb-4">F.C. (LPM)</th>
-                         <th className="pb-4">F.R. (RPM)</th>
-                         <th className="pb-4">T.A. (MMHG)</th>
-                         <th className="pb-4">SAT O2 (%)</th>
-                      </tr>
-                   </thead>
-                   <tbody>
-                      {patient.vitalsHistory?.map((v, i) => (
-                         <tr key={i} className="hover:bg-slate-50 transition-all">
-                            <td className="p-4 bg-slate-50 rounded-l-2xl flex items-center justify-center gap-2">
-                               <span className="font-black text-slate-900">{v.date.split(', ')[1]}</span>
-                               <Clock size={14} className="text-slate-400" />
-                            </td>
-                            <td className="p-4 font-black text-emerald-600 text-sm">{v.temp}</td>
-                            <td className="p-4 font-black text-slate-700 text-sm">{v.hr}</td>
-                            <td className="p-4 font-black text-slate-700 text-sm">{v.rr}</td>
-                            <td className="p-4 font-black text-slate-700 text-sm">{v.bp}</td>
-                            <td className="p-4 bg-slate-50 rounded-r-2xl font-black text-blue-600 text-sm">{v.o2}</td>
-                         </tr>
-                      ))}
-                      {(!patient.vitalsHistory || patient.vitalsHistory.length === 0) && (
-                        <tr><td colSpan={6} className="py-20 text-center opacity-20 font-black uppercase text-[10px]">Sin registros en este turno</td></tr>
-                      )}
-                   </tbody>
-                </table>
-             </div>
-          </div>
+           {/* HABITUS EXTERIOR */}
+           <div className="bg-white border border-slate-200 rounded-[2.5rem] p-8 shadow-sm">
+                <h3 className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-3 flex items-center gap-2">
+                    <Eye size={14}/> Habitus Exterior / Valoración Inicial
+                </h3>
+                <textarea 
+                    className="w-full bg-slate-50 p-4 rounded-2xl text-sm font-medium text-slate-700 outline-none resize-none h-20 focus:bg-white focus:ring-2 focus:ring-blue-100 transition-all"
+                    value={habitus}
+                    onChange={e => setHabitus(e.target.value)}
+                    placeholder="Descripción general del paciente al recibir turno..."
+                />
+           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            {/* REGISTRO DE MEDICAMENTOS */}
-            <div className="bg-white border border-slate-200 rounded-[3rem] shadow-sm overflow-hidden flex flex-col">
-               <div className="p-8 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
-                  <h3 className="text-[10px] font-black uppercase flex items-center gap-2">
-                    <Pill className="w-5 h-5 text-blue-600" /> Administración Farmacológica
-                  </h3>
-                  <button 
-                    onClick={() => setShowMedModal(true)} 
-                    className="px-6 py-2.5 bg-blue-600 text-white rounded-xl text-[10px] font-black uppercase shadow-lg hover:bg-slate-900 transition-all"
-                  >
-                    + Registrar Aplicación
-                  </button>
+           {/* GRÁFICA DE SIGNOS VITALES */}
+           <div className="bg-white border border-slate-200 rounded-[3rem] shadow-xl overflow-hidden p-8">
+               <div className="flex justify-between items-center mb-6">
+                    <h3 className="text-sm font-black uppercase text-slate-900 tracking-widest flex items-center gap-2">
+                        <Activity className="text-blue-600" size={18}/> Gráfica de Signos Vitales
+                    </h3>
+                    <button 
+                      onClick={() => setShowVitalsModal(true)}
+                      className="flex items-center gap-2 px-6 py-2 bg-slate-900 text-white rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-blue-600 transition-all shadow-md"
+                    >
+                        <Plus size={14}/> Nueva Toma
+                    </button>
                </div>
-               <div className="divide-y divide-slate-50 flex-1 min-h-[300px]">
-                  {medLogs.map((m) => (
-                     <div key={m.id} className="p-6 flex items-center justify-between group hover:bg-blue-50/20 transition-all">
-                        <div className="flex items-center gap-6">
-                           <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shadow-sm ${m.status === 'Aplicado' ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'}`}>
-                              {m.status === 'Aplicado' ? <Check size={20} /> : <XCircle size={20} />}
-                           </div>
-                           <div>
-                              <p className="text-sm font-black uppercase text-slate-900">{m.medName}</p>
-                              <p className="text-[10px] text-slate-500 font-bold uppercase mt-1 italic">{m.time} hrs • {m.dosage} • {m.status} • Por: {m.nurse}</p>
-                           </div>
+               
+               <div className="h-64 w-full">
+                    {chartData.length > 0 ? (
+                        <ResponsiveContainer width="100%" height="100%">
+                            <LineChart data={chartData} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
+                                <CartesianGrid stroke="#f1f5f9" strokeDasharray="3 3" vertical={false} />
+                                <XAxis dataKey="time" stroke="#94a3b8" fontSize={10} tickMargin={10} axisLine={false} tickLine={false} />
+                                <YAxis stroke="#94a3b8" fontSize={10} axisLine={false} tickLine={false} domain={['auto', 'auto']} />
+                                <Tooltip 
+                                    contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)' }}
+                                    itemStyle={{ fontSize: '12px', fontWeight: 'bold', textTransform: 'uppercase' }}
+                                />
+                                <Line type="monotone" dataKey="sys" stroke="#3b82f6" strokeWidth={3} name="T.A. Sistólica" dot={{r: 4}} />
+                                <Line type="monotone" dataKey="dia" stroke="#93c5fd" strokeWidth={3} name="T.A. Diastólica" dot={{r: 4}} />
+                                <Line type="monotone" dataKey="hr" stroke="#f43f5e" strokeWidth={3} name="Frec. Cardiaca" dot={{r: 4}} />
+                                <Line type="monotone" dataKey="temp" stroke="#f59e0b" strokeWidth={2} name="Temp" dot={{r: 3}} />
+                            </LineChart>
+                        </ResponsiveContainer>
+                    ) : (
+                        <div className="h-full flex items-center justify-center text-slate-300 font-black uppercase text-xs tracking-widest border-2 border-dashed border-slate-100 rounded-3xl">
+                            Sin datos para graficar
                         </div>
-                        <button onClick={() => onUpdatePatient({...patient, medicationLogs: patient.medicationLogs?.filter(l => l.id !== m.id)})} className="opacity-0 group-hover:opacity-100 text-rose-300 p-2 hover:bg-rose-50 hover:text-rose-600 rounded-lg transition-all"><Trash2 size={18}/></button>
-                     </div>
-                  ))}
-                  {medLogs.length === 0 && <div className="py-20 text-center text-slate-300 font-black uppercase text-[10px] tracking-widest">Ningún fármaco administrado</div>}
+                    )}
                </div>
+
+               <div className="mt-8 overflow-x-auto">
+                    <table className="w-full text-center border-separate border-spacing-2">
+                        <thead>
+                            <tr className="text-[8px] font-black text-slate-400 uppercase tracking-widest">
+                                <th className="pb-2">Hora</th>
+                                <th className="pb-2">T.A.</th>
+                                <th className="pb-2">F.C.</th>
+                                <th className="pb-2">F.R.</th>
+                                <th className="pb-2">Temp</th>
+                                <th className="pb-2">SatO2</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {patient.vitalsHistory?.slice(0, 6).map((v, i) => (
+                                <tr key={i} className="group">
+                                    <td className="bg-slate-50 rounded-lg p-2 text-[10px] font-bold">{v.date.split(' ')[1].substring(0,5)}</td>
+                                    <td className="bg-blue-50 text-blue-700 rounded-lg p-2 text-[10px] font-black">{v.bp}</td>
+                                    <td className="bg-rose-50 text-rose-700 rounded-lg p-2 text-[10px] font-black">{v.hr}</td>
+                                    <td className="bg-emerald-50 text-emerald-700 rounded-lg p-2 text-[10px] font-black">{v.rr}</td>
+                                    <td className="bg-amber-50 text-amber-700 rounded-lg p-2 text-[10px] font-black">{v.temp}°</td>
+                                    <td className="bg-cyan-50 text-cyan-700 rounded-lg p-2 text-[10px] font-black">{v.o2}%</td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+               </div>
+           </div>
+           
+           {/* REGISTRO DE MEDICAMENTOS Y PROCEDIMIENTOS */}
+           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+               <div className="bg-white border border-slate-200 rounded-[3rem] shadow-sm overflow-hidden flex flex-col h-full">
+                    <div className="p-6 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
+                        <h3 className="text-[10px] font-black uppercase flex items-center gap-2 text-slate-700">
+                            <Pill className="w-4 h-4 text-purple-600" /> Medicamentos
+                        </h3>
+                        <button onClick={() => setShowMedModal(true)} className="p-2 bg-purple-100 text-purple-700 rounded-lg hover:bg-purple-600 hover:text-white transition-all"><Plus size={16}/></button>
+                    </div>
+                    <div className="flex-1 overflow-y-auto max-h-80 p-2 space-y-2 custom-scrollbar">
+                        {medLogs.map((m) => (
+                            <div key={m.id} className="p-4 bg-white border border-slate-100 rounded-2xl flex justify-between items-start group hover:border-purple-200 transition-all">
+                                <div>
+                                    <p className="text-xs font-black uppercase text-slate-800">{m.medName}</p>
+                                    <p className="text-[9px] text-slate-500 font-bold mt-1">{m.dosage} • {m.time} hrs</p>
+                                </div>
+                                <div className={`p-1.5 rounded-lg ${m.status === 'Aplicado' ? 'bg-emerald-100 text-emerald-600' : 'bg-rose-100 text-rose-600'}`}>
+                                    {m.status === 'Aplicado' ? <Check size={14}/> : <X size={14}/>}
+                                </div>
+                            </div>
+                        ))}
+                        {medLogs.length === 0 && <div className="text-center py-10 text-[9px] text-slate-400 font-bold uppercase opacity-50">Sin registros</div>}
+                    </div>
+               </div>
+
+               <div className="bg-white border border-slate-200 rounded-[3rem] shadow-sm overflow-hidden flex flex-col h-full">
+                    <div className="p-6 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
+                        <h3 className="text-[10px] font-black uppercase flex items-center gap-2 text-slate-700">
+                            <ClipboardList className="w-4 h-4 text-blue-600" /> Procedimientos
+                        </h3>
+                        <button onClick={() => setShowProcModal(true)} className="p-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-600 hover:text-white transition-all"><Plus size={16}/></button>
+                    </div>
+                    <div className="flex-1 overflow-y-auto max-h-80 p-2 space-y-2 custom-scrollbar">
+                        {procedures.map((p) => (
+                            <div key={p.id} className="p-4 bg-white border border-slate-100 rounded-2xl hover:border-blue-200 transition-all">
+                                <div className="flex justify-between items-start">
+                                    <p className="text-xs font-black uppercase text-slate-800">{p.procedure}</p>
+                                    <span className="text-[9px] font-mono font-bold text-slate-400">{p.time}</span>
+                                </div>
+                                {p.notes && <p className="text-[10px] text-slate-500 mt-2 italic bg-slate-50 p-2 rounded-lg">"{p.notes}"</p>}
+                            </div>
+                        ))}
+                        {procedures.length === 0 && <div className="text-center py-10 text-[9px] text-slate-400 font-bold uppercase opacity-50">Sin procedimientos</div>}
+                    </div>
+               </div>
+           </div>
+        </div>
+
+        {/* COLUMNA DERECHA: RIESGOS, BALANCE Y CIERRE */}
+        <div className="lg:col-span-4 space-y-6">
+            
+            {/* SEMÁFORO DE RIESGOS */}
+            <div className="bg-white border border-slate-200 rounded-[2.5rem] p-8 shadow-sm space-y-6">
+                <h3 className="text-[10px] font-black uppercase tracking-widest text-slate-400 flex items-center gap-2">
+                    <ShieldCheck size={14}/> Valoración de Riesgos
+                </h3>
+
+                <div className="space-y-4">
+                    {/* Riesgo Caídas */}
+                    <div className="space-y-2">
+                        <div className="flex justify-between text-[9px] font-bold uppercase text-slate-500">
+                            <span>Riesgo Caídas (Downton)</span>
+                            <span>{fallRisk}</span>
+                        </div>
+                        <div className="flex gap-1">
+                            {['Bajo', 'Medio', 'Alto'].map(lvl => (
+                                <button 
+                                    key={lvl} 
+                                    onClick={() => setFallRisk(lvl as any)}
+                                    className={`flex-1 h-3 rounded-full transition-all ${fallRisk === lvl ? getRiskColor(lvl) : 'bg-slate-100 hover:bg-slate-200'}`}
+                                />
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* Riesgo Úlceras */}
+                    <div className="space-y-2">
+                        <div className="flex justify-between text-[9px] font-bold uppercase text-slate-500">
+                            <span>Riesgo UPP (Braden)</span>
+                            <span>{ulcerRisk}</span>
+                        </div>
+                        <div className="flex gap-1">
+                            {['Sin Riesgo', 'Riesgo Moderado', 'Alto Riesgo'].map(lvl => (
+                                <button 
+                                    key={lvl} 
+                                    onClick={() => setUlcerRisk(lvl as any)}
+                                    className={`flex-1 h-3 rounded-full transition-all ${ulcerRisk === lvl ? getRiskColor(lvl) : 'bg-slate-100 hover:bg-slate-200'}`}
+                                />
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* Escala Dolor (EVA) */}
+                    <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
+                        <div className="flex justify-between items-center">
+                             <p className="text-[9px] font-black uppercase text-slate-500">Escala de Dolor (EVA)</p>
+                             <span className={`w-8 h-8 flex items-center justify-center rounded-lg text-white font-black text-sm ${getPainColor(painScale.score)}`}>{painScale.score}</span>
+                        </div>
+                        <input 
+                            type="range" min="0" max="10" 
+                            className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-slate-900"
+                            value={painScale.score}
+                            onChange={e => setPainScale({...painScale, score: parseInt(e.target.value)})}
+                        />
+                        <select 
+                            className="w-full p-2 bg-white border border-slate-200 rounded-xl text-[10px] font-bold uppercase outline-none"
+                            value={painScale.location}
+                            onChange={e => setPainScale({...painScale, location: e.target.value})}
+                        >
+                            <option>Sin dolor</option>
+                            <option>Cefalea / Cabeza</option>
+                            <option>Torácico / Precordial</option>
+                            <option>Abdominal</option>
+                            <option>Herida Quirúrgica</option>
+                            <option>Extremidades</option>
+                            <option>Generalizado</option>
+                        </select>
+                    </div>
+                </div>
             </div>
 
             {/* BALANCE HÍDRICO */}
-            <div className="bg-white border border-slate-200 rounded-[3rem] shadow-sm overflow-hidden">
-               <div className="p-8 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
-                  <h3 className="text-[10px] font-black uppercase flex items-center gap-2">
-                    <Droplets className="w-5 h-5 text-blue-600" /> Control Hídrico
-                  </h3>
-                  <div className="flex gap-2">
-                     <button onClick={() => { setLiquidForm({id:'', concept:'SOLUCIÓN FISIOLÓGICA 0.9%', amount:250, type:'Ingreso'}); setShowLiquidModal(true); }} className="px-5 py-2 bg-blue-600 text-white rounded-xl text-[9px] font-black uppercase">+ Ingreso</button>
-                     <button onClick={() => { setLiquidForm({id:'', concept:'DIURESIS', amount:250, type:'Egreso'}); setShowLiquidModal(true); }} className="px-5 py-2 bg-rose-600 text-white rounded-xl text-[9px] font-black uppercase">+ Egreso</button>
-                  </div>
-               </div>
-               <div className="grid grid-cols-2 divide-x border-b border-slate-100 min-h-[200px]">
-                  <div className="p-6 space-y-3 bg-blue-50/20">
-                     {liquidsForDay.filter(l => l.type === 'Ingreso').map(l => <div key={l.id} className="flex justify-between items-center bg-white p-4 rounded-xl border border-blue-100 shadow-sm"><span className="text-[10px] font-black uppercase">{l.concept}</span><span className="text-sm font-black text-blue-700">{l.amount} ml</span></div>)}
-                  </div>
-                  <div className="p-6 space-y-3 bg-rose-50/20">
-                     {liquidsForDay.filter(l => l.type === 'Egreso').map(l => <div key={l.id} className="flex justify-between items-center bg-white p-4 rounded-xl border border-rose-100 shadow-sm"><span className="text-[10px] font-black uppercase">{l.concept}</span><span className="text-sm font-black text-rose-700">{l.amount} ml</span></div>)}
-                  </div>
-               </div>
-               <div className="p-8 bg-slate-900 text-white flex justify-between items-center">
-                  <p className="text-[11px] font-black uppercase text-blue-400 tracking-[0.3em]">Balance Final:</p>
-                  <p className={`text-4xl font-black ${totalIngresos - totalEgresos < 0 ? 'text-rose-400' : 'text-emerald-400'}`}>{totalIngresos - totalEgresos} <span className="text-xs uppercase">ml</span></p>
-               </div>
-            </div>
-          </div>
-
-          {/* VALIDACIÓN Y CERTIFICACIÓN */}
-          <div className="bg-slate-900 text-white p-12 rounded-[4rem] shadow-2xl flex flex-col md:flex-row items-center justify-between gap-10 border-b-[10px] border-emerald-600">
-             <div className="flex items-center gap-8">
-                <div className="w-16 h-16 bg-white/10 rounded-[1.5rem] flex items-center justify-center text-emerald-400 shadow-inner"><ShieldCheck size={32} /></div>
-                <div>
-                   <h4 className="text-xl font-black uppercase tracking-tight">Certificación de Turno</h4>
-                   <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mt-1">NOM-004-SSA3 • INTEGRIDAD CLÍNICA</p>
+            <div className="bg-slate-900 text-white rounded-[2.5rem] p-8 shadow-xl space-y-6 relative overflow-hidden">
+                <div className="relative z-10 flex justify-between items-center border-b border-white/10 pb-4">
+                    <h3 className="text-xs font-black uppercase tracking-widest flex items-center gap-2">
+                        <Droplets size={14} className="text-cyan-400"/> Balance de Líquidos
+                    </h3>
+                    <div className="flex gap-2">
+                        <button onClick={() => { setLiquidForm({id:'', concept:'SOLUCIÓN', amount:250, type:'Ingreso'}); setShowLiquidModal(true); }} className="p-1.5 bg-blue-600 rounded-lg hover:bg-blue-500 transition-colors"><Plus size={14}/></button>
+                        <button onClick={() => { setLiquidForm({id:'', concept:'URESIS', amount:250, type:'Egreso'}); setShowLiquidModal(true); }} className="p-1.5 bg-rose-600 rounded-lg hover:bg-rose-500 transition-colors"><Plus size={14}/></button>
+                    </div>
                 </div>
-             </div>
-             <div className="flex-1 max-w-xl">
-                <input className="w-full bg-white/5 border border-white/10 p-5 rounded-2xl text-xs font-black uppercase mb-4 focus:bg-white/10 outline-none" value={nurseName} onChange={e => setNurseName(e.target.value)} placeholder="Responsable del Turno" />
-                <textarea className="w-full bg-white/5 border border-white/10 p-6 rounded-2xl text-[11px] h-24 italic" defaultValue="Paciente hemodinámicamente estable. Se entrega turno sin eventualidades." />
-             </div>
-             <button onClick={handleFinalSave} className="px-12 py-8 bg-emerald-600 hover:bg-emerald-700 text-white rounded-[2rem] font-black text-sm uppercase tracking-[0.2em] shadow-xl transition-all active:scale-95">
-                Cerrar y Sellar Hoja
-             </button>
-          </div>
+                
+                <div className="grid grid-cols-2 gap-4 relative z-10 text-center">
+                    <div className="bg-white/5 rounded-2xl p-4">
+                        <p className="text-[9px] text-blue-300 uppercase tracking-widest mb-1">Ingresos</p>
+                        <p className="text-2xl font-black">{totalIngresos}</p>
+                    </div>
+                    <div className="bg-white/5 rounded-2xl p-4">
+                        <p className="text-[9px] text-rose-300 uppercase tracking-widest mb-1">Egresos</p>
+                        <p className="text-2xl font-black">{totalEgresos}</p>
+                    </div>
+                </div>
+
+                <div className="text-center relative z-10 pt-2">
+                    <p className="text-[10px] text-slate-400 uppercase tracking-widest mb-1">Balance Total</p>
+                    <p className={`text-4xl font-black tracking-tighter ${totalIngresos - totalEgresos > 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                        {totalIngresos - totalEgresos > 0 ? '+' : ''}{totalIngresos - totalEgresos} <span className="text-sm text-white/50 font-bold">ml</span>
+                    </p>
+                </div>
+            </div>
+
+            {/* OBSERVACIONES */}
+            <div className="bg-amber-50 border border-amber-100 rounded-[2.5rem] p-8 shadow-sm space-y-4">
+                <h3 className="text-[10px] font-black uppercase text-amber-800 tracking-widest flex items-center gap-2">
+                    <FileText size={14}/> Observaciones de Enfermería
+                </h3>
+                <textarea 
+                    className="w-full bg-white p-4 rounded-2xl text-xs font-medium text-slate-700 outline-none resize-none h-32 focus:ring-2 focus:ring-amber-200 transition-all border border-amber-100"
+                    placeholder="Eventualidades, respuesta a tratamientos, pendientes..."
+                    value={observations}
+                    onChange={e => setObservations(e.target.value)}
+                />
+            </div>
+
+            {/* CIERRE */}
+            <div className="space-y-4 pt-4 border-t border-slate-200">
+                <input 
+                    className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-black text-center uppercase outline-none focus:bg-white transition-all"
+                    value={nurseName}
+                    onChange={e => setNurseName(e.target.value)}
+                    placeholder="Nombre de la Enfermera(o)"
+                />
+                <button 
+                    onClick={handleFinalSave}
+                    className="w-full py-5 bg-emerald-600 text-white rounded-[1.5rem] font-black text-xs uppercase tracking-widest shadow-xl hover:bg-emerald-700 transition-all flex items-center justify-center gap-2"
+                >
+                    <ShieldCheck size={18}/> Cerrar Turno
+                </button>
+            </div>
+
         </div>
       </div>
 
+      {/* MODALES REUTILIZABLES */}
+      
       {/* MODAL SIGNOS VITALES */}
       {showVitalsModal && (
         <div className="fixed inset-0 z-[500] flex items-center justify-center p-6 bg-slate-900/90 backdrop-blur-md animate-in fade-in">
@@ -345,6 +564,33 @@ const NursingSheet: React.FC<{ patients: Patient[], onSaveNote: (n: ClinicalNote
               </button>
            </div>
         </div>
+      )}
+
+      {/* MODAL PROCEDIMIENTOS */}
+      {showProcModal && (
+          <div className="fixed inset-0 z-[500] flex items-center justify-center p-6 bg-slate-900/90 backdrop-blur-md animate-in fade-in">
+              <div className="bg-white w-full max-w-lg rounded-[3rem] shadow-2xl p-12 space-y-8">
+                  <div className="flex justify-between items-center">
+                      <h3 className="text-2xl font-black text-slate-900 uppercase">Registrar Procedimiento</h3>
+                      <button onClick={() => setShowProcModal(false)}><X size={24}/></button>
+                  </div>
+                  <div className="space-y-4">
+                      <div className="space-y-2">
+                          <label className="text-[9px] font-black uppercase text-slate-400 ml-2">Nombre del Procedimiento</label>
+                          <input className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold uppercase outline-none" placeholder="Ej: Curación de herida, Sondaje..." value={procForm.name} onChange={e => setProcForm({...procForm, name: e.target.value})} />
+                      </div>
+                      <div className="space-y-2">
+                          <label className="text-[9px] font-black uppercase text-slate-400 ml-2">Hora Realización</label>
+                          <input type="time" className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold" value={procForm.time} onChange={e => setProcForm({...procForm, time: e.target.value})} />
+                      </div>
+                      <div className="space-y-2">
+                          <label className="text-[9px] font-black uppercase text-slate-400 ml-2">Notas / Observaciones</label>
+                          <textarea className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-medium outline-none resize-none h-24" placeholder="Detalles del procedimiento..." value={procForm.notes} onChange={e => setProcForm({...procForm, notes: e.target.value})} />
+                      </div>
+                      <button onClick={handleSaveProcedure} className="w-full py-5 bg-blue-600 text-white rounded-2xl font-black uppercase text-xs tracking-widest hover:bg-slate-900 transition-all">Guardar</button>
+                  </div>
+              </div>
+          </div>
       )}
 
       {/* MODAL MEDICAMENTOS */}

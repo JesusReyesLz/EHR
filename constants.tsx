@@ -421,7 +421,15 @@ export const NOTE_CATEGORIES = [
       'Nota de Evolución',
       'Nota Inicial de Urgencias',
       'Nota de Interconsulta',
+      'Resumen Clínico',
+      'Nota de Referencia y Traslado',
+      'Nota de Contrarreferencia',
       'Nota Pre-operatoria',
+      'Nota Pre-anestésica',
+      'Hoja de Registro Anestésico',
+      'Nota Quirúrgica',
+      'Nota Post-anestésica',
+      'Nota de Alta de Recuperación',
       'Nota Post-operatoria',
       'Nota de Egreso / Alta'
     ]
@@ -440,6 +448,7 @@ export const NOTE_CATEGORIES = [
     title: 'Servicios y Otros',
     notes: [
       'Solicitud de Estudios',
+      'Reporte de Resultados / Interpretación',
       'Hoja de Enfermería',
       'Receta Médica',
       'Registro de Transfusión',

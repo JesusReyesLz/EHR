@@ -10,7 +10,10 @@ import {
   CheckCircle2,
   ArrowRight,
   Stethoscope,
-  X
+  X,
+  Calendar,
+  AlertOctagon,
+  Scale
 } from 'lucide-react';
 import { Patient, MedicationPrescription, MedicationStock, Vitals, DoctorInfo, ClinicalNote, PriceItem, PriceType, ChargeItem } from '../types';
 import { VADEMECUM_DB, INITIAL_STOCK, INITIAL_PRICES } from '../constants';
@@ -57,11 +60,18 @@ const Prescription: React.FC<{ patients: Patient[], doctorInfo: DoctorInfo, onSa
   
   const dataFromNote = location.state as { diagnosis?: string, meds?: MedicationPrescription[], generalPlan?: string, cieCode?: string } | null;
 
-  const [medications, setMedications] = useState<MedicationPrescription[]>(dataFromNote?.meds || []);
+  // Extended Medication Type for UI (includes Pharma Form)
+  interface ExtendedMedication extends MedicationPrescription {
+      pharmaceuticalForm?: string; // Tableta, Jarabe, Solución, etc.
+  }
+
+  const [medications, setMedications] = useState<ExtendedMedication[]>(dataFromNote?.meds || []);
   const [prescriptionData, setPrescriptionData] = useState({
     diagnostico: dataFromNote?.diagnosis || '',
     cieCode: dataFromNote?.cieCode || '',
     indicaciones: dataFromNote?.generalPlan || '',
+    alarmSigns: '', // Signos de alarma
+    nextAppointment: '', // Próxima Cita
     folio: `REC-MX-${Date.now().toString().slice(-8)}`,
     fecha: new Date().toLocaleDateString('es-MX', { day: '2-digit', month: 'long', year: 'numeric' })
   });
@@ -114,11 +124,12 @@ const Prescription: React.FC<{ patients: Patient[], doctorInfo: DoctorInfo, onSa
   };
 
   const selectMedFromDB = (med: MedicationStock & { totalStock: number }) => {
-    const newMed: MedicationPrescription = {
+    const newMed: ExtendedMedication = {
       id: `MED-${Date.now()}`,
-      name: med.name,
+      name: med.name, // Comercial
       genericName: med.genericName,
-      presentation: med.presentation,
+      presentation: med.presentation, // Caja c/X
+      pharmaceuticalForm: med.presentation.split(' ')[0] || 'Tableta', // Heurística simple, editable
       dosage: med.concentration || '',
       frequency: 'Cada 8 horas',
       duration: '7 días',
@@ -137,20 +148,22 @@ const Prescription: React.FC<{ patients: Patient[], doctorInfo: DoctorInfo, onSa
   };
 
   const addManualTreatment = () => {
-    const newMed: MedicationPrescription = {
+    const newMed: ExtendedMedication = {
       id: `TRAT-${Date.now()}`,
-      name: 'NUEVO TRATAMIENTO / INSUMO',
+      name: 'NUEVO TRATAMIENTO',
       genericName: '',
+      pharmaceuticalForm: 'Tableta',
       dosage: '',
       frequency: '',
       duration: '',
-      route: 'N/A',
-      instructions: ''
+      route: 'Oral',
+      instructions: '',
+      presentation: 'Caja'
     };
     setMedications([...medications, newMed]);
   };
 
-  const updateMed = (mid: string, field: keyof MedicationPrescription, value: string) => {
+  const updateMed = (mid: string, field: keyof ExtendedMedication, value: string) => {
     setMedications(medications.map(m => m.id === mid ? { ...m, [field]: value } : m));
   };
 
@@ -160,6 +173,11 @@ const Prescription: React.FC<{ patients: Patient[], doctorInfo: DoctorInfo, onSa
     if (medications.length === 0 && selectedProcedures.length === 0) {
       alert("Debe agregar al menos un medicamento o procedimiento para guardar.");
       return;
+    }
+    
+    if(!prescriptionData.diagnostico) {
+        alert("El diagnóstico es obligatorio por ley.");
+        return;
     }
 
     const newNote: ClinicalNote = {
@@ -172,8 +190,10 @@ const Prescription: React.FC<{ patients: Patient[], doctorInfo: DoctorInfo, onSa
         diagnosis: prescriptionData.diagnostico,
         cieCode: prescriptionData.cieCode,
         meds: medications,
-        procedures: selectedProcedures, // Guardamos procedimientos
+        procedures: selectedProcedures,
         instructions: prescriptionData.indicaciones,
+        alarmSigns: prescriptionData.alarmSigns,
+        nextAppointment: prescriptionData.nextAppointment,
         folio: prescriptionData.folio,
         vitals: vitals
       },
@@ -187,18 +207,17 @@ const Prescription: React.FC<{ patients: Patient[], doctorInfo: DoctorInfo, onSa
     if (patient && onUpdatePatient) {
         const pendingCharges: ChargeItem[] = [];
         
-        // Procesar medicamentos (Buscar precio en catalogo si existe, o dejar en $0.00 si es manual)
+        // Procesar medicamentos
         medications.forEach(med => {
             const priceItem = prices.find(p => p.name === med.name || p.name.includes(med.name));
-            // Si existe en catálogo, usar precio y tax. Si no, precio 0 (manual)
             const unitPrice = priceItem ? priceItem.price : 0;
             const tax = priceItem ? (unitPrice * priceItem.taxPercent / 100) : 0;
             
             pendingCharges.push({
                 id: generateId('CHG'),
                 date: new Date().toISOString(),
-                concept: med.name, // Usar nombre de receta
-                quantity: 1, // Por defecto 1
+                concept: med.name,
+                quantity: 1, 
                 unitPrice: unitPrice,
                 tax: tax,
                 total: unitPrice + tax,
@@ -227,7 +246,6 @@ const Prescription: React.FC<{ patients: Patient[], doctorInfo: DoctorInfo, onSa
 
         // Actualizar paciente con cargos pendientes si hay
         if (pendingCharges.length > 0) {
-            // Utilizamos onUpdatePatient pasado desde App.tsx para asegurar la actualización del estado global
             onUpdatePatient({
                 ...patient,
                 paymentStatus: 'Pendiente', // Bloquear auxiliares si es necesario
@@ -241,7 +259,7 @@ const Prescription: React.FC<{ patients: Patient[], doctorInfo: DoctorInfo, onSa
     
     const toast = document.createElement('div');
     toast.className = 'fixed bottom-10 left-1/2 -translate-x-1/2 bg-emerald-600 text-white px-10 py-5 rounded-3xl font-black text-xs uppercase tracking-widest shadow-2xl z-[300] animate-in slide-in-from-bottom-4';
-    toast.innerHTML = 'Receta registrada y cargos generados en caja';
+    toast.innerHTML = 'Receta certificada y cargos generados en caja';
     document.body.appendChild(toast);
     setTimeout(() => toast.remove(), 4000);
   };
@@ -314,14 +332,14 @@ const Prescription: React.FC<{ patients: Patient[], doctorInfo: DoctorInfo, onSa
                 onClick={handleSaveToExpedient}
                 className="px-8 py-3 bg-emerald-600 text-white rounded-2xl font-black text-[10px] uppercase shadow-lg hover:bg-slate-900 transition-all flex items-center gap-3"
               >
-                <FileCheck size={18} /> Guardar y Generar Cargos
+                <FileCheck size={18} /> Certificar Receta
               </button>
            ) : (
               <button 
                 onClick={() => navigate(`/patient/${id}`)}
                 className="px-8 py-3 bg-blue-600 text-white rounded-2xl font-black text-[10px] uppercase shadow-lg hover:bg-slate-900 transition-all flex items-center gap-3"
               >
-                Finalizar y Ver Expediente <ArrowRight size={18} />
+                Finalizar y Salir <ArrowRight size={18} />
               </button>
            )}
 
@@ -336,6 +354,39 @@ const Prescription: React.FC<{ patients: Patient[], doctorInfo: DoctorInfo, onSa
       {!isPreview ? (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
           <div className="lg:col-span-8 space-y-6">
+            
+            {/* ALERTA DE ALERGIAS */}
+            <div className={`p-4 rounded-[2rem] border-2 flex items-center gap-4 ${patient.allergies.length > 0 ? 'bg-rose-50 border-rose-200' : 'bg-slate-50 border-slate-100'}`}>
+                <div className={`p-2 rounded-xl ${patient.allergies.length > 0 ? 'bg-rose-100 text-rose-600' : 'bg-slate-200 text-slate-400'}`}>
+                    <AlertOctagon size={20} />
+                </div>
+                <div>
+                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Alergias Registradas</p>
+                    <p className={`text-sm font-black uppercase ${patient.allergies.length > 0 ? 'text-rose-700' : 'text-slate-700'}`}>
+                        {patient.allergies.length > 0 ? patient.allergies.join(', ') : 'Negadas'}
+                    </p>
+                </div>
+            </div>
+
+            {/* BARRA DE VITALES RAPIDA */}
+            <div className="bg-slate-900 text-white p-6 rounded-[2rem] shadow-lg flex justify-between items-center overflow-x-auto no-scrollbar gap-4">
+                {[
+                   { l: 'Peso', v: vitals?.weight + ' kg', i: <Scale size={14}/> },
+                   { l: 'Talla', v: vitals?.height + ' cm', i: <Activity size={14}/> },
+                   { l: 'IMC', v: vitals?.bmi, i: <Activity size={14}/> },
+                   { l: 'Temp', v: vitals?.temp + '°C', i: <Thermometer size={14}/> },
+                   { l: 'T.A.', v: vitals?.bp, i: <Heart size={14}/> },
+                ].map(v => (
+                    <div key={v.l} className="flex items-center gap-2 bg-white/10 px-4 py-2 rounded-xl border border-white/5 min-w-[100px]">
+                        {v.i}
+                        <div>
+                            <p className="text-[8px] font-bold text-slate-400 uppercase">{v.l}</p>
+                            <p className="text-xs font-black">{v.v || '--'}</p>
+                        </div>
+                    </div>
+                ))}
+            </div>
+
             <div className="bg-white border border-slate-200 rounded-[3rem] p-10 shadow-sm space-y-8">
               <div className="flex items-center gap-4 border-b border-slate-50 pb-6">
                  <div className="w-10 h-10 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center"><Pill size={24} /></div>
@@ -346,29 +397,61 @@ const Prescription: React.FC<{ patients: Patient[], doctorInfo: DoctorInfo, onSa
                 {medications.map((m, idx) => (
                   <div key={m.id} className="p-6 bg-slate-50 border border-slate-200 rounded-[2.5rem] space-y-5 group animate-in slide-in-from-right-2">
                     <div className="flex justify-between items-center">
-                       <div className="flex-1 flex items-center gap-4">
-                          <span className="w-7 h-7 bg-slate-900 text-white rounded-lg flex items-center justify-center font-black text-[10px]">{idx + 1}</span>
-                          <input className="bg-transparent border-none p-0 text-[13px] font-black text-slate-900 uppercase w-full outline-none focus:ring-0" value={m.name} onChange={e => updateMed(m.id, 'name', e.target.value.toUpperCase())} />
+                       <div className="flex-1 space-y-2">
+                           <div className="flex gap-2">
+                               <span className="w-6 h-6 bg-slate-900 text-white rounded-lg flex items-center justify-center font-black text-[10px] mt-1">{idx + 1}</span>
+                               <div className="flex-1">
+                                   <label className="text-[8px] font-bold text-slate-400 uppercase tracking-widest block">Nombre Comercial</label>
+                                   <input className="bg-transparent border-b border-slate-300 p-1 text-[13px] font-black text-slate-900 uppercase w-full outline-none focus:border-blue-500" value={m.name} onChange={e => updateMed(m.id, 'name', e.target.value.toUpperCase())} placeholder="Nombre Comercial" />
+                               </div>
+                           </div>
+                           <div className="ml-8">
+                                <label className="text-[8px] font-bold text-slate-400 uppercase tracking-widest block">Sustancia Activa (Genérico)</label>
+                                <input className="bg-transparent border-b border-slate-300 p-1 text-xs font-bold text-slate-600 uppercase w-full outline-none focus:border-blue-500" value={m.genericName} onChange={e => updateMed(m.id, 'genericName', e.target.value.toUpperCase())} placeholder="Nombre Genérico" />
+                           </div>
                        </div>
-                       <button onClick={() => setMedications(medications.filter(med => med.id !== m.id))} className="text-slate-300 hover:text-rose-600 transition-all"><Trash2 size={18} /></button>
+                       <button onClick={() => setMedications(medications.filter(med => med.id !== m.id))} className="text-slate-300 hover:text-rose-600 transition-all p-3"><Trash2 size={18} /></button>
                     </div>
                     
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
                        {[
-                         { f: 'dosage', l: 'Dosis' },
-                         { f: 'frequency', l: 'Frecuencia' },
-                         { f: 'route', l: 'Vía' },
-                         { f: 'duration', l: 'Duración' }
+                         { f: 'pharmaceuticalForm', l: 'Forma Farm.', p: 'Tableta, Jarabe' },
+                         { f: 'dosage', l: 'Dosis / Conc.', p: '500 mg' },
+                         { f: 'presentation', l: 'Presentación', p: 'Caja c/30' },
+                         { f: 'route', l: 'Vía Admin.', p: 'Oral' },
+                         { f: 'duration', l: 'Duración', p: '7 días' }
                        ].map(item => (
                          <div key={item.f} className="space-y-1.5">
                             <label className="text-[7px] font-black text-slate-400 uppercase tracking-widest block ml-1">{item.l}</label>
-                            <input className="w-full p-2 bg-white border border-slate-200 rounded-xl text-[10px] font-bold uppercase outline-none focus:border-blue-600 shadow-sm" value={(m as any)[item.f]} onChange={e => updateMed(m.id, item.f as any, e.target.value)} />
+                            {item.f === 'route' ? (
+                                <select 
+                                    className="w-full p-2 bg-white border border-slate-200 rounded-xl text-[10px] font-bold uppercase outline-none focus:border-blue-600 shadow-sm"
+                                    value={(m as any)[item.f]} 
+                                    onChange={e => updateMed(m.id, item.f as any, e.target.value)}
+                                >
+                                    <option>Oral</option><option>Intramuscular</option><option>Intravenosa</option><option>Subcutánea</option><option>Tópica</option><option>Oftálmica</option><option>Ótica</option><option>Nasal</option><option>Rectal</option><option>Vaginal</option>
+                                </select>
+                            ) : (
+                                <input 
+                                    className="w-full p-2 bg-white border border-slate-200 rounded-xl text-[10px] font-bold uppercase outline-none focus:border-blue-600 shadow-sm" 
+                                    value={(m as any)[item.f]} 
+                                    onChange={e => updateMed(m.id, item.f as any, e.target.value)} 
+                                    placeholder={item.p}
+                                />
+                            )}
                          </div>
                        ))}
                     </div>
-                    <div className="space-y-1.5">
-                       <label className="text-[7px] font-black text-slate-400 uppercase tracking-widest block ml-1">Instrucciones precisas</label>
-                       <input className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-[10px] font-medium italic outline-none focus:border-emerald-300 shadow-sm" placeholder="Instrucciones..." value={m.instructions} onChange={e => updateMed(m.id, 'instructions', e.target.value)} />
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="space-y-1.5">
+                           <label className="text-[7px] font-black text-slate-400 uppercase tracking-widest block ml-1">Frecuencia (Cada cuánto)</label>
+                           <input className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-[10px] font-bold uppercase outline-none focus:border-emerald-300 shadow-sm" placeholder="Ej: Cada 8 horas" value={m.frequency} onChange={e => updateMed(m.id, 'frequency', e.target.value)} />
+                        </div>
+                        <div className="space-y-1.5">
+                           <label className="text-[7px] font-black text-slate-400 uppercase tracking-widest block ml-1">Instrucciones Específicas</label>
+                           <input className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-[10px] font-medium italic outline-none focus:border-emerald-300 shadow-sm" placeholder="Ej: Tomar con alimentos..." value={m.instructions} onChange={e => updateMed(m.id, 'instructions', e.target.value)} />
+                        </div>
                     </div>
                   </div>
                 ))}
@@ -400,18 +483,30 @@ const Prescription: React.FC<{ patients: Patient[], doctorInfo: DoctorInfo, onSa
           </div>
 
           <div className="lg:col-span-4 space-y-6">
-            <div className="bg-slate-900 text-white rounded-[3rem] p-10 shadow-2xl space-y-8 sticky top-32 border-b-[10px] border-blue-600">
-               <h3 className="text-[11px] font-black uppercase tracking-widest text-blue-400 flex items-center gap-3">
-                  <ClipboardList size={18} /> Datos de Receta
+            <div className="bg-white border border-slate-200 rounded-[3rem] p-8 shadow-sm space-y-6 sticky top-32">
+               <h3 className="text-[11px] font-black uppercase tracking-widest text-blue-600 flex items-center gap-3">
+                  <ClipboardList size={18} /> Datos de la Receta
                </h3>
                <div className="space-y-6">
-                  <div className="space-y-3">
-                     <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest ml-1">Diagnóstico (CIE-11)</label>
-                     <textarea className="w-full bg-white/5 border border-white/10 p-5 rounded-2xl text-[11px] font-black uppercase outline-none h-20 focus:bg-white/10" value={prescriptionData.diagnostico} onChange={e => setPrescriptionData({...prescriptionData, diagnostico: e.target.value})} />
+                  <div className="space-y-2">
+                     <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest ml-1">Diagnóstico (CIE-10)</label>
+                     <textarea className="w-full bg-slate-50 border border-slate-200 p-4 rounded-2xl text-[11px] font-black uppercase outline-none h-24 focus:bg-white focus:border-blue-300 resize-none" value={prescriptionData.diagnostico} onChange={e => setPrescriptionData({...prescriptionData, diagnostico: e.target.value})} placeholder="Diagnóstico principal..." />
+                     <input className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl text-[10px] font-mono uppercase outline-none" value={prescriptionData.cieCode} onChange={e => setPrescriptionData({...prescriptionData, cieCode: e.target.value})} placeholder="Código CIE-10 (Opcional)" />
                   </div>
-                  <div className="space-y-3">
-                     <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest ml-1">Indicaciones Generales</label>
-                     <textarea className="w-full bg-white/5 border border-white/10 p-5 rounded-2xl text-[11px] font-medium italic outline-none h-36 focus:bg-white/10" value={prescriptionData.indicaciones} onChange={e => setPrescriptionData({...prescriptionData, indicaciones: e.target.value})} />
+                  
+                  <div className="space-y-2">
+                     <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest ml-1">Medidas Generales y Dieta</label>
+                     <textarea className="w-full bg-slate-50 border border-slate-200 p-4 rounded-2xl text-[11px] font-medium uppercase outline-none h-32 focus:bg-white focus:border-blue-300 resize-none" value={prescriptionData.indicaciones} onChange={e => setPrescriptionData({...prescriptionData, indicaciones: e.target.value})} placeholder="Dieta, cuidados generales, ejercicio..." />
+                  </div>
+
+                  <div className="space-y-2">
+                     <label className="text-[9px] font-black text-rose-500 uppercase tracking-widest ml-1 flex items-center gap-1"><AlertCircle size={10}/> Signos de Alarma</label>
+                     <textarea className="w-full bg-rose-50 border border-rose-100 p-4 rounded-2xl text-[11px] font-medium uppercase outline-none h-20 resize-none text-rose-900 placeholder:text-rose-300" value={prescriptionData.alarmSigns} onChange={e => setPrescriptionData({...prescriptionData, alarmSigns: e.target.value})} placeholder="Acudir a urgencias si presenta..." />
+                  </div>
+
+                  <div className="space-y-2">
+                     <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest ml-1 flex items-center gap-1"><Calendar size={10}/> Próxima Cita</label>
+                     <input type="date" className="w-full bg-slate-50 border border-slate-200 p-4 rounded-2xl text-xs font-bold uppercase outline-none" value={prescriptionData.nextAppointment} onChange={e => setPrescriptionData({...prescriptionData, nextAppointment: e.target.value})} />
                   </div>
                </div>
             </div>
@@ -420,14 +515,14 @@ const Prescription: React.FC<{ patients: Patient[], doctorInfo: DoctorInfo, onSa
       ) : (
         <div className="bg-white shadow-2xl rounded-[3.5rem] overflow-hidden flex flex-col print:shadow-none print:rounded-none">
            {/* El componente de impresión PrescriptionDoc se reutiliza aquí */}
-           <PrescriptionDoc patient={patient} vitals={vitals} meds={medications} procedures={selectedProcedures} data={prescriptionData} doctor={doctorInfo} label="ORIGINAL - EXPEDIENTE" />
+           <PrescriptionDoc patient={patient} vitals={vitals} meds={medications} procedures={selectedProcedures} data={prescriptionData} doctor={doctorInfo} label="ORIGINAL - FARMACIA / PACIENTE" />
            <div className="h-12 bg-slate-50 flex items-center justify-center no-print border-y border-slate-100 relative">
               <div className="w-full border-t-2 border-dashed border-slate-300 mx-10"></div>
               <span className="absolute px-8 py-1.5 bg-white border border-slate-200 rounded-full text-[9px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-3">
-                <Landmark size={12} /> Copia Paciente / Farmacia
+                <Landmark size={12} /> Copia Expediente
               </span>
            </div>
-           <PrescriptionDoc patient={patient} vitals={vitals} meds={medications} procedures={selectedProcedures} data={prescriptionData} doctor={doctorInfo} label="COPIA - PACIENTE" />
+           <PrescriptionDoc patient={patient} vitals={vitals} meds={medications} procedures={selectedProcedures} data={prescriptionData} doctor={doctorInfo} label="COPIA - EXPEDIENTE" />
         </div>
       )}
     </div>
@@ -435,118 +530,128 @@ const Prescription: React.FC<{ patients: Patient[], doctorInfo: DoctorInfo, onSa
 };
 
 const PrescriptionDoc = ({ patient, vitals, meds, procedures, data, doctor, label }: any) => (
-  <div className="relative p-12 bg-white flex flex-col border-b border-slate-100 last:border-b-0 print:p-10 print:h-[50vh]">
-     <div className="flex justify-between border-b-4 border-slate-900 pb-6 mb-8">
+  <div className="relative p-12 bg-white flex flex-col border-b border-slate-100 last:border-b-0 print:p-10 print:h-[50vh] print:border-none">
+     {/* HEADER LEGAL (DOCTOR INFO) */}
+     <div className="flex justify-between border-b-4 border-slate-900 pb-6 mb-6">
         <div className="flex gap-6">
-           <div className="w-16 h-16 bg-slate-900 rounded-2xl flex items-center justify-center text-white shadow-lg"><Heart size={32} /></div>
+           <div className="w-16 h-16 bg-slate-900 rounded-2xl flex items-center justify-center text-white shadow-lg print:border print:border-black print:text-black print:bg-transparent"><Heart size={32} /></div>
            <div className="space-y-0.5">
-              <h2 className="text-xl font-black text-slate-900 tracking-tighter uppercase leading-none">{doctor.hospital}</h2>
-              <p className="text-[8px] font-bold text-slate-500 uppercase">{doctor.address} • Tel: {doctor.phone}</p>
-              <div className="pt-2">
-                 <p className="text-[13px] font-black text-slate-900 uppercase leading-none">Dr. {doctor.name}</p>
-                 <p className="text-[8px] font-black text-blue-600 uppercase tracking-widest mt-1">{doctor.specialty} • Cédula Prof: {doctor.cedula} • {doctor.institution}</p>
+              <h2 className="text-xl font-black text-slate-900 tracking-tighter uppercase leading-none">{doctor.name}</h2>
+              <p className="text-[10px] font-bold text-blue-700 uppercase tracking-widest">{doctor.specialty}</p>
+              <div className="pt-2 text-[8px] font-medium text-slate-600 uppercase leading-tight space-y-0.5">
+                 <p><span className="font-bold">Cédula Prof:</span> {doctor.cedula}</p>
+                 <p><span className="font-bold">Título expedido por:</span> {doctor.institution}</p>
+                 <p><span className="font-bold">Dirección:</span> {doctor.address} • Tel: {doctor.phone}</p>
               </div>
            </div>
         </div>
         <div className="text-right flex flex-col justify-between items-end">
            <QrCode size={48} className="text-slate-900 opacity-90" />
-           <div className="mt-2">
+           <div className="mt-2 text-right">
               <p className="text-[11px] font-black text-slate-900 tracking-tighter uppercase leading-none">FOLIO: {data.folio}</p>
               <p className="text-[8px] font-bold text-slate-400 mt-1 uppercase">{data.fecha}</p>
            </div>
         </div>
      </div>
 
-     <div className="flex gap-10">
-        <div className="w-24 bg-slate-50 border border-slate-200 rounded-[2rem] p-4 space-y-4 shrink-0 h-fit">
-           <p className="text-[7px] font-black text-slate-400 uppercase text-center border-b border-slate-200 pb-2">Somatometría</p>
-           {[
-             { l: 'T.A.', v: vitals?.bp || '--/--' },
-             { l: 'F.C.', v: vitals?.hr || '--' },
-             { l: 'T°', v: vitals?.temp || '--' },
-             { l: 'SpO2', v: vitals?.o2 || '--' }
-           ].map(v => (
-             <div key={v.l} className="text-center">
-                <span className="text-[6px] font-black text-slate-400 uppercase block leading-none">{v.l}</span>
-                <p className="text-[12px] font-black text-slate-900">{v.v}</p>
-             </div>
-           ))}
+     {/* PATIENT DATA & SOMATOMETRY */}
+     <div className="mb-6 border border-slate-300 rounded-xl p-3 flex flex-wrap gap-y-2 text-[9px] uppercase">
+        <div className="w-full flex justify-between border-b border-slate-200 pb-2 mb-2">
+            <div><span className="font-bold text-slate-500">Paciente:</span> <span className="font-black text-slate-900 text-sm ml-1">{patient.name}</span></div>
+            <div><span className="font-bold text-slate-500">Edad:</span> <span className="font-black ml-1">{patient.age} Años</span></div>
+            <div><span className="font-bold text-slate-500">Sexo:</span> <span className="font-black ml-1">{patient.sex}</span></div>
+        </div>
+        
+        {/* Vitales Inline */}
+        <div className="flex gap-4 w-full">
+            <span><b className="text-slate-500">Peso:</b> {vitals?.weight} kg</span>
+            <span><b className="text-slate-500">Talla:</b> {vitals?.height} cm</span>
+            <span><b className="text-slate-500">IMC:</b> {vitals?.bmi}</span>
+            <span><b className="text-slate-500">Temp:</b> {vitals?.temp}°C</span>
+            <span><b className="text-slate-500">T.A.:</b> {vitals?.bp}</span>
+            <span><b className="text-slate-500">SatO2:</b> {vitals?.o2}%</span>
+        </div>
+        
+        {/* Alergias Warning */}
+        <div className="w-full mt-2 pt-2 border-t border-slate-200">
+            <span className="font-bold text-slate-500">Alergias:</span> <span className="font-black text-rose-600">{patient.allergies?.join(', ') || 'NEGADAS'}</span>
         </div>
 
+        {/* Diagnóstico */}
+        <div className="w-full mt-1">
+            <span className="font-bold text-slate-500">Diagnóstico (CIE-10):</span> <span className="font-black ml-1">{data.diagnostico} {data.cieCode ? `(${data.cieCode})` : ''}</span>
+        </div>
+     </div>
+
+     <div className="flex-1 flex gap-8">
         <div className="flex-1 space-y-6">
-           <div className="grid grid-cols-3 gap-6 border-b border-slate-100 pb-4">
-              <div className="col-span-2 space-y-1">
-                 <label className="text-[7px] font-black text-slate-400 uppercase block">Paciente</label>
-                 <p className="text-[14px] font-black text-slate-900 uppercase tracking-tight">{patient.name}</p>
+           {/* BODY: MEDICATIONS */}
+           <div className="space-y-4 min-h-[150px]">
+              <div className="flex items-center gap-3 mb-2">
+                 <span className="text-[24px] font-black text-slate-900 italic font-serif">Rx.</span>
               </div>
-              <div className="text-right space-y-1">
-                 <label className="text-[7px] font-black text-slate-400 uppercase block">Edad / Sexo</label>
-                 <p className="text-[12px] font-bold text-slate-700 uppercase">{patient.age} AÑOS / {patient.sex}</p>
-              </div>
-           </div>
-
-           <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
-              <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">Diagnóstico Médico</p>
-              <p className="text-[10px] font-black text-slate-900 uppercase leading-snug">
-                 {data.diagnostico || 'DIAGNÓSTICO RESERVADO'}
-              </p>
-           </div>
-
-           <div className="space-y-5 min-h-[150px]">
-              <div className="flex items-center gap-3 mb-4">
-                 <span className="text-[18px] font-black text-slate-900 italic">Rp.</span>
-                 <div className="h-[2px] flex-1 bg-slate-900/5"></div>
-              </div>
-              <div className="space-y-6">
+              <div className="space-y-5">
                  {meds.map((m: any, idx: number) => (
-                    <div key={m.id} className="relative pl-8">
-                       <span className="absolute left-0 top-0 font-black text-slate-200 text-2xl">{idx + 1}</span>
-                       <p className="text-[12px] font-black text-slate-900 uppercase leading-none">
-                          {m.genericName || m.name} <span className="text-[9px] text-slate-500 font-bold italic">({m.name})</span>
-                       </p>
-                       <p className="text-[10px] font-bold text-slate-600 uppercase tracking-tight">
-                         {m.dosage} {m.frequency} VÍA {m.route} DURANTE {m.duration}.
-                       </p>
-                       {m.instructions && <p className="text-[9px] text-blue-700 italic font-bold mt-1 leading-none">{m.instructions}</p>}
+                    <div key={m.id} className="relative pl-6 border-l-2 border-slate-200">
+                       <span className="absolute -left-[9px] top-0 font-black text-slate-400 text-xs bg-white py-1">{idx + 1}</span>
+                       <div className="text-[11px] font-black text-slate-900 uppercase leading-snug">
+                          {m.genericName} <span className="font-medium text-slate-600">({m.name})</span>
+                       </div>
+                       <div className="text-[9px] font-bold text-slate-500 uppercase mt-0.5">
+                          {m.pharmaceuticalForm} • {m.dosage} • {m.presentation}
+                       </div>
+                       <div className="text-[10px] font-black text-slate-800 uppercase mt-1 bg-slate-50 p-2 rounded border border-slate-100 print:bg-transparent print:border-none print:p-0 print:mt-0.5">
+                         {m.dosage} VIA {m.route}, {m.frequency} DURANTE {m.duration}.
+                       </div>
+                       {m.instructions && <p className="text-[9px] text-slate-600 italic mt-0.5 leading-tight">Nota: {m.instructions}</p>}
                     </div>
                  ))}
               </div>
            </div>
-           
-           {/* Sección de Procedimientos en Impresión */}
-           {procedures && procedures.length > 0 && (
-              <div className="space-y-3 pt-2">
-                 <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 pb-1">Procedimientos Realizados / Solicitados</p>
-                 <div className="space-y-1">
-                    {procedures.map((p: any, i: number) => (
-                       <p key={i} className="text-[10px] font-bold text-slate-700 uppercase">• {p.name}</p>
-                    ))}
-                 </div>
-              </div>
-           )}
+        </div>
 
-           <div className="pt-4 border-t-2 border-slate-100">
-              <h4 className="text-[8px] font-black text-slate-900 uppercase tracking-widest flex items-center gap-2 mb-2">
-                 <ClipboardList size={10} className="text-blue-600" /> Indicaciones
-              </h4>
-              <p className="text-[10px] text-slate-600 italic font-medium leading-relaxed bg-slate-50 p-4 rounded-2xl border border-slate-100 uppercase">
-                 "{data.indicaciones || 'Vigilancia estrecha de síntomas.'}"
-              </p>
-           </div>
+        {/* RIGHT COLUMN: INDICATIONS & APPOINTMENT */}
+        <div className="w-1/3 border-l border-slate-200 pl-8 flex flex-col justify-between">
+             <div className="space-y-6">
+                 {data.indicaciones && (
+                     <div>
+                        <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">Medidas Generales / Dieta</p>
+                        <p className="text-[9px] font-medium text-slate-800 uppercase leading-relaxed">{data.indicaciones}</p>
+                     </div>
+                 )}
+                 {data.alarmSigns && (
+                     <div>
+                        <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">Signos de Alarma</p>
+                        <p className="text-[9px] font-bold text-slate-800 uppercase leading-relaxed">{data.alarmSigns}</p>
+                     </div>
+                 )}
+                 {procedures && procedures.length > 0 && (
+                    <div>
+                        <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">Procedimientos Realizados</p>
+                        {procedures.map((p: any, i: number) => (
+                           <p key={i} className="text-[9px] font-bold text-slate-700 uppercase">• {p.name}</p>
+                        ))}
+                    </div>
+                 )}
+             </div>
+
+             <div className="mt-8 pt-4 border-t border-slate-200">
+                  <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">Próxima Cita</p>
+                  <p className="text-sm font-black text-slate-900 uppercase">{data.nextAppointment || 'Abierta / PRN'}</p>
+             </div>
         </div>
      </div>
 
-     <div className="mt-auto pt-6 border-t-2 border-slate-900 flex justify-between items-end">
-        <div className="space-y-3">
-           <div className="px-4 py-1.5 bg-slate-900 text-white rounded-xl text-[7px] font-black uppercase tracking-[0.2em] flex items-center gap-3 w-fit">
-              <ShieldCheck size={14} className="text-blue-400" /> Receta Certificada digitalmente
+     <div className="mt-auto pt-8 flex justify-between items-end">
+        <div className="space-y-2">
+           <div className="px-4 py-1 bg-slate-100 text-slate-600 rounded text-[7px] font-black uppercase tracking-widest w-fit border border-slate-200">
+              Receta Médica Privada
            </div>
-           <p className="text-[8px] font-black text-slate-400 uppercase">{label}</p>
+           <p className="text-[8px] font-black text-slate-300 uppercase">{label}</p>
         </div>
         <div className="text-center space-y-1">
-           <div className="w-56 h-[1px] bg-slate-900 mx-auto"></div>
-           <p className="text-[12px] font-black text-slate-900 uppercase leading-none mt-1">Dr. {doctor.name}</p>
-           <p className="text-[7px] font-bold text-slate-500 uppercase tracking-widest">Firma Médica Autorizada</p>
+           <div className="w-48 h-[1px] bg-slate-900 mx-auto"></div>
+           <p className="text-[10px] font-black text-slate-900 uppercase leading-none mt-2">Firma del Médico</p>
         </div>
      </div>
   </div>
