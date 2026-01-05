@@ -29,7 +29,7 @@ import PreoperativeNote from './views/notes/PreoperativeNote';
 import PreAnestheticNote from './views/notes/PreAnestheticNote';
 import AnestheticRecord from './views/notes/AnestheticRecord'; 
 import PostAnestheticNote from './views/notes/PostAnestheticNote'; 
-import RecoveryDischargeNote from './views/notes/RecoveryDischargeNote'; // Import New Component
+import RecoveryDischargeNote from './views/notes/RecoveryDischargeNote'; 
 import PostOperativeNote from './views/notes/PostOperativeNote';
 import SurgicalNote from './views/notes/SurgicalNote'; 
 import DischargeNote from './views/notes/DischargeNote';
@@ -38,6 +38,8 @@ import ReferralNote from './views/notes/ReferralNote';
 import CounterReferralNote from './views/notes/CounterReferralNote';
 import ClinicalSummaryNote from './views/notes/ClinicalSummaryNote';
 import ESAVINote from './views/notes/ESAVINote';
+import EpiDeathReport from './views/notes/EpiDeathReport';
+import MedicalCertificate from './views/notes/MedicalCertificate'; // NEW IMPORT
 import InformedConsent from './views/InformedConsent';
 import VoluntaryDischarge from './views/VoluntaryDischarge';
 import MPNotification from './views/MPNotification';
@@ -61,17 +63,14 @@ function Layout({ children, currentModule, onModuleChange, doctorInfo }: any) {
   const location = useLocation();
   const navigate = useNavigate();
   
-  // Detectar si estamos en un perfil de paciente para mantener el contexto
   const patientMatch = location.pathname.match(/\/patient\/([^/]+)/);
   const currentPatientId = patientMatch ? patientMatch[1] : null;
 
   const menuItems = [
     { icon: <Users className="w-4 h-4" />, label: 'Monitor Activo', path: '/' },
     { icon: <MonitorIcon className="w-4 h-4" />, label: 'Centro de Mando', path: '/monitor' },
-    // Accesos directos a Finanzas y Caja
     { icon: <ShoppingBag className="w-4 h-4" />, label: 'Caja / Tickets', path: '/billing', state: currentPatientId ? { patientId: currentPatientId } : undefined },
     { icon: <PieChart className="w-4 h-4" />, label: 'Finanzas', path: '/finance' },
-    // Fin Módulos Financieros
     { icon: <History className="w-4 h-4" />, label: 'Archivo Histórico', path: '/history-registry' },
     { icon: <Calendar className="w-4 h-4" />, label: 'Agenda Operativa', path: '/agenda' },
     { icon: <Package className="w-4 h-4" />, label: 'Farmacia / Stock', path: '/inventory' },
@@ -81,7 +80,6 @@ function Layout({ children, currentModule, onModuleChange, doctorInfo }: any) {
     { icon: <Settings className="w-4 h-4" />, label: 'Configuración', path: '/settings' },
   ];
 
-  // AGREGADOS BILLING Y FINANCE AL TOP BAR PARA ACCESO RÁPIDO
   const modules = [
     ModuleType.OUTPATIENT, 
     ModuleType.EMERGENCY, 
@@ -98,7 +96,6 @@ function Layout({ children, currentModule, onModuleChange, doctorInfo }: any) {
     <div className="min-h-screen flex flex-col bg-slate-50 text-slate-900">
       <nav className="bg-white border-b border-slate-200 sticky top-0 z-[60] shadow-sm no-print">
         <div className="max-w-full px-2 lg:px-6 flex justify-between h-16 items-center gap-2">
-          {/* Left Section: Logo */}
           <div className="flex items-center gap-4 flex-1 min-w-0"> 
             <div className="flex items-center gap-3 shrink-0">
               <div className="w-8 h-8 lg:w-10 lg:h-10 bg-blue-600 rounded-xl flex items-center justify-center shadow-lg"><ShieldCheck className="text-white w-5 h-5 lg:w-6 lg:h-6" /></div>
@@ -124,8 +121,6 @@ function Layout({ children, currentModule, onModuleChange, doctorInfo }: any) {
               ))}
             </div>
           </div>
-          
-          {/* Right Section: User Info & Logout */}
           <div className="flex items-center gap-3 shrink-0">
             <div className="text-right hidden md:block">
               <p className="text-xs font-black uppercase tracking-tighter">Dr. {doctorInfo?.name}</p>
@@ -135,9 +130,7 @@ function Layout({ children, currentModule, onModuleChange, doctorInfo }: any) {
           </div>
         </div>
       </nav>
-      
       <div className="flex flex-1 overflow-hidden">
-        {/* Sidebar Navigation */}
         <aside className="w-16 lg:w-60 bg-white border-r border-slate-200 fixed left-0 top-16 h-full z-50 no-print flex flex-col transition-all duration-300">
           <div className="flex-1 py-2 lg:py-4 px-2 lg:px-3 space-y-1 overflow-y-auto custom-scrollbar">
             {menuItems.map((item) => (
@@ -154,8 +147,6 @@ function Layout({ children, currentModule, onModuleChange, doctorInfo }: any) {
             ))}
           </div>
         </aside>
-        
-        {/* Main Content Area */}
         <main className="flex-1 ml-16 lg:ml-60 p-4 lg:p-8 overflow-y-auto transition-all duration-300 w-full">{children}</main>
       </div>
     </div>
@@ -166,7 +157,6 @@ const App: React.FC = () => {
   const [currentModule, setCurrentModule] = useState<ModuleType>(ModuleType.OUTPATIENT);
   const [doctorInfo, setDoctorInfo] = useState<DoctorInfo>(MOCK_DOCTORS[0]);
   
-  // Safe Initialization with Try-Catch
   const [patients, setPatients] = useState<Patient[]>(() => {
     try {
       const saved = localStorage.getItem('med_patients_v6');
@@ -205,7 +195,6 @@ const App: React.FC = () => {
     } catch { return MOCK_DOCTORS; }
   });
 
-  // Effects for Persistence
   useEffect(() => { localStorage.setItem('med_patients_v6', JSON.stringify(patients)); }, [patients]);
   useEffect(() => { localStorage.setItem('med_notes_v6', JSON.stringify(notes)); }, [notes]);
   useEffect(() => { localStorage.setItem('med_staff_v2', JSON.stringify(staffList)); }, [staffList]);
@@ -228,17 +217,14 @@ const App: React.FC = () => {
      setPatients(prev => prev.map(p => p.id === id ? { ...p, priority } : p));
   };
   
-  // LOGICA CORREGIDA PARA ACTUALIZAR NOTAS EXISTENTES
   const handleSaveNote = (note: ClinicalNote) => {
     setNotes(prev => {
       const exists = prev.findIndex(n => n.id === note.id);
       if (exists !== -1) {
-        // Actualizar nota existente
         const updated = [...prev];
         updated[exists] = note;
         return updated;
       }
-      // Crear nueva nota
       return [note, ...prev];
     });
   };
@@ -289,12 +275,12 @@ const App: React.FC = () => {
               onUpdateStatus={handleUpdateStatus} 
               onAddPatient={handleAddPatient} 
               onAddHomeRequest={handleAddHomeRequest} 
-              onUpdateHomeRequest={handleUpdateHomeRequest} // Passed prop
+              onUpdateHomeRequest={handleUpdateHomeRequest}
               doctorsList={doctorsList} 
               currentUser={doctorInfo} 
               notes={notes} 
               homeRequests={homeRequests}
-              staffList={staffList} // Passed prop
+              staffList={staffList}
             />
           } />
           <Route path="/telemedicine/:id" element={<Telemedicine patients={patients} notes={notes} onSaveNote={handleSaveNote} onUpdatePatient={handleUpdatePatient} onAddHomeRequest={handleAddHomeRequest} />} />
@@ -302,50 +288,48 @@ const App: React.FC = () => {
           <Route path="/staff" element={<StaffManagement staffList={staffList} onUpdateStaffList={handleUpdateStaffList} />} />
           <Route path="/settings" element={<SettingsView doctorInfo={doctorInfo} onUpdateDoctor={setDoctorInfo} />} />
           <Route path="/daily-report" element={<DailyReport patients={patients} notes={notes} />} />
-          <Route path="/patient/:id/history" element={<MedicalHistory patients={patients} notes={notes} onUpdatePatient={handleUpdatePatient} onSaveNote={handleSaveNote} />} />
+          <Route path="/patient/:id/history" element={<MedicalHistory patients={patients} notes={notes} onUpdatePatient={handleUpdatePatient} onSaveNote={handleSaveNote} doctorInfo={doctorInfo} />} />
           <Route path="/patient/:id/prescription" element={<Prescription patients={patients} doctorInfo={doctorInfo} onSaveNote={handleSaveNote} onUpdatePatient={handleUpdatePatient} />} />
-          <Route path="/patient/:id/note/evolution" element={<EvolutionNote patients={patients} notes={notes} onSaveNote={handleSaveNote} onUpdatePatient={handleUpdatePatient} />} />
-          <Route path="/patient/:id/note/emergency" element={<EmergencyNote patients={patients} notes={notes} onSaveNote={handleSaveNote} />} />
-          <Route path="/patient/:id/note/admission" element={<HospitalAdmissionNote patients={patients} notes={notes} onSaveNote={handleSaveNote} />} />
-          <Route path="/patient/:id/note/preoperative" element={<PreoperativeNote patients={patients} notes={notes} onSaveNote={handleSaveNote} />} /> 
-          <Route path="/patient/:id/note/preanesthetic" element={<PreAnestheticNote patients={patients} notes={notes} onSaveNote={handleSaveNote} />} />
-          <Route path="/patient/:id/note/anesthetic-record" element={<AnestheticRecord patients={patients} notes={notes} onSaveNote={handleSaveNote} />} />
-          <Route path="/patient/:id/note/postanesthetic" element={<PostAnestheticNote patients={patients} notes={notes} onSaveNote={handleSaveNote} />} /> 
-          <Route path="/patient/:id/note/recovery-discharge" element={<RecoveryDischargeNote patients={patients} notes={notes} onSaveNote={handleSaveNote} />} /> {/* NEW ROUTE */}
-          <Route path="/patient/:id/note/surgical" element={<SurgicalNote patients={patients} notes={notes} onSaveNote={handleSaveNote} />} />
-          <Route path="/patient/:id/note/postoperative" element={<PostOperativeNote patients={patients} notes={notes} onSaveNote={handleSaveNote} />} />
-          <Route path="/patient/:id/note/discharge" element={<DischargeNote patients={patients} notes={notes} onSaveNote={handleSaveNote} />} />
           
-          {/* Rutas de Interconsulta (Crear y Editar) */}
-          <Route path="/patient/:id/note/interconsulta" element={<InterconsultaNote patients={patients} notes={notes} onSaveNote={handleSaveNote} />} />
-          <Route path="/patient/:id/note/interconsulta/:noteId" element={<InterconsultaNote patients={patients} notes={notes} onSaveNote={handleSaveNote} />} />
-          
-          {/* Rutas de Referencia y Traslado */}
+          {/* Clinical Notes Routes - Passing doctorInfo */}
+          <Route path="/patient/:id/note/evolution" element={<EvolutionNote patients={patients} notes={notes} onSaveNote={handleSaveNote} onUpdatePatient={handleUpdatePatient} doctorInfo={doctorInfo} />} />
+          <Route path="/patient/:id/note/emergency" element={<EmergencyNote patients={patients} notes={notes} onSaveNote={handleSaveNote} doctorInfo={doctorInfo} />} />
+          <Route path="/patient/:id/note/admission" element={<HospitalAdmissionNote patients={patients} notes={notes} onSaveNote={handleSaveNote} doctorInfo={doctorInfo} />} />
+          <Route path="/patient/:id/note/preoperative" element={<PreoperativeNote patients={patients} notes={notes} onSaveNote={handleSaveNote} doctorInfo={doctorInfo} />} /> 
+          <Route path="/patient/:id/note/preanesthetic" element={<PreAnestheticNote patients={patients} notes={notes} onSaveNote={handleSaveNote} doctorInfo={doctorInfo} />} />
+          <Route path="/patient/:id/note/anesthetic-record" element={<AnestheticRecord patients={patients} notes={notes} onSaveNote={handleSaveNote} doctorInfo={doctorInfo} />} />
+          <Route path="/patient/:id/note/postanesthetic" element={<PostAnestheticNote patients={patients} notes={notes} onSaveNote={handleSaveNote} doctorInfo={doctorInfo} />} /> 
+          <Route path="/patient/:id/note/recovery-discharge" element={<RecoveryDischargeNote patients={patients} notes={notes} onSaveNote={handleSaveNote} doctorInfo={doctorInfo} />} />
+          <Route path="/patient/:id/note/surgical" element={<SurgicalNote patients={patients} notes={notes} onSaveNote={handleSaveNote} doctorInfo={doctorInfo} />} />
+          <Route path="/patient/:id/note/postoperative" element={<PostOperativeNote patients={patients} notes={notes} onSaveNote={handleSaveNote} doctorInfo={doctorInfo} />} />
+          <Route path="/patient/:id/note/discharge" element={<DischargeNote patients={patients} notes={notes} onSaveNote={handleSaveNote} doctorInfo={doctorInfo} />} />
+          <Route path="/patient/:id/note/interconsulta" element={<InterconsultaNote patients={patients} notes={notes} onSaveNote={handleSaveNote} doctorInfo={doctorInfo} />} />
+          <Route path="/patient/:id/note/interconsulta/:noteId" element={<InterconsultaNote patients={patients} notes={notes} onSaveNote={handleSaveNote} doctorInfo={doctorInfo} />} />
           <Route path="/patient/:id/note/referral" element={<ReferralNote patients={patients} notes={notes} onSaveNote={handleSaveNote} doctorInfo={doctorInfo} />} />
           <Route path="/patient/:id/note/referral/:noteId" element={<ReferralNote patients={patients} notes={notes} onSaveNote={handleSaveNote} doctorInfo={doctorInfo} />} />
-
-          {/* Rutas de Contrarreferencia (NUEVO) */}
           <Route path="/patient/:id/note/counter-referral" element={<CounterReferralNote patients={patients} notes={notes} onSaveNote={handleSaveNote} doctorInfo={doctorInfo} />} />
           <Route path="/patient/:id/note/counter-referral/:noteId" element={<CounterReferralNote patients={patients} notes={notes} onSaveNote={handleSaveNote} doctorInfo={doctorInfo} />} />
-          
-          {/* Rutas de Resumen Clínico (NUEVO) */}
           <Route path="/patient/:id/note/summary" element={<ClinicalSummaryNote patients={patients} notes={notes} onSaveNote={handleSaveNote} doctorInfo={doctorInfo} />} />
           <Route path="/patient/:id/note/summary/:noteId" element={<ClinicalSummaryNote patients={patients} notes={notes} onSaveNote={handleSaveNote} doctorInfo={doctorInfo} />} />
+          <Route path="/patient/:id/note/esavi" element={<ESAVINote patients={patients} notes={notes} onSaveNote={handleSaveNote} doctorInfo={doctorInfo} />} />
+          <Route path="/patient/:id/note/epi-death" element={<EpiDeathReport patients={patients} notes={notes} onSaveNote={handleSaveNote} doctorInfo={doctorInfo} />} />
+          <Route path="/patient/:id/note/medical-certificate" element={<MedicalCertificate patients={patients} onSaveNote={handleSaveNote} doctorInfo={doctorInfo} />} />
 
-          <Route path="/patient/:id/note/esavi" element={<ESAVINote patients={patients} notes={notes} onSaveNote={handleSaveNote} />} />
+          {/* Other Documents */}
           <Route path="/patient/:id/nursing-sheet" element={<NursingSheet patients={patients} onSaveNote={handleSaveNote} onUpdatePatient={handleUpdatePatient} />} />
-          <Route path="/patient/:id/auxiliary-order" element={<AuxiliaryOrder patients={patients} onSaveNote={handleSaveNote} />} />
-          <Route path="/patient/:id/auxiliary-report" element={<AuxiliaryReport patients={patients} onSaveNote={handleSaveNote} onUpdatePatient={handleUpdatePatient} />} />
+          <Route path="/patient/:id/auxiliary-order" element={<AuxiliaryOrder patients={patients} onSaveNote={handleSaveNote} doctorInfo={doctorInfo} />} />
+          <Route path="/patient/:id/auxiliary-report" element={<AuxiliaryReport patients={patients} onSaveNote={handleSaveNote} onUpdatePatient={handleUpdatePatient} doctorInfo={doctorInfo} />} />
           <Route path="/auxiliary-intake" element={<AuxiliaryIntake patients={patients} onSaveNote={handleSaveNote} onUpdatePatient={handleUpdatePatient} onAddPatient={handleAddPatient} />} />
           <Route path="/patient/:id/consent" element={<InformedConsent patients={patients} onSaveNote={handleSaveNote} doctorInfo={doctorInfo} />} />
           <Route path="/patient/:id/voluntary-discharge" element={<VoluntaryDischarge patients={patients} onSaveNote={handleSaveNote} doctorInfo={doctorInfo} />} />
-          <Route path="/patient/:id/mp-notification" element={<MPNotification patients={patients} onSaveNote={handleSaveNote} />} />
-          <Route path="/patient/:id/death-certificate" element={<DeathCertificate patients={patients} onSaveNote={handleSaveNote} />} />
-          <Route path="/patient/:id/transfusion" element={<TransfusionRegistry patients={patients} onSaveNote={handleSaveNote} />} />
-          <Route path="/patient/:id/social-work" element={<SocialWorkSheet patients={patients} onSaveNote={handleSaveNote} />} />
-          <Route path="/patient/:id/stomatology" element={<StomatologyExpedient patients={patients} onSaveNote={handleSaveNote} />} />
-          <Route path="/patient/:id/epidemiology" element={<EpidemiologyStudy patients={patients} onSaveNote={handleSaveNote} />} />
-          <Route path="/patient/:id/telemedicine-consent" element={<TelemedicineConsent patients={patients} onSaveNote={handleSaveNote} onUpdatePatient={handleUpdatePatient} />} />
+          <Route path="/patient/:id/mp-notification" element={<MPNotification patients={patients} onSaveNote={handleSaveNote} doctorInfo={doctorInfo} />} />
+          <Route path="/patient/:id/death-certificate" element={<DeathCertificate patients={patients} onSaveNote={handleSaveNote} doctorInfo={doctorInfo} />} />
+          <Route path="/patient/:id/transfusion" element={<TransfusionRegistry patients={patients} onSaveNote={handleSaveNote} doctorInfo={doctorInfo} />} />
+          <Route path="/patient/:id/social-work" element={<SocialWorkSheet patients={patients} onSaveNote={handleSaveNote} doctorInfo={doctorInfo} />} />
+          <Route path="/patient/:id/stomatology" element={<StomatologyExpedient patients={patients} onSaveNote={handleSaveNote} doctorInfo={doctorInfo} />} />
+          <Route path="/patient/:id/epidemiology" element={<EpidemiologyStudy patients={patients} onSaveNote={handleSaveNote} doctorInfo={doctorInfo} />} />
+          <Route path="/patient/:id/telemedicine-consent" element={<TelemedicineConsent patients={patients} onSaveNote={handleSaveNote} onUpdatePatient={handleUpdatePatient} doctorInfo={doctorInfo} />} />
+          
           <Route path="/history-registry" element={<HistoryRegistries patients={patients} notes={notes} />} />
           <Route path="/logs" element={<AdminLogs />} />
           <Route path="/prices" element={<PriceCatalog />} />
