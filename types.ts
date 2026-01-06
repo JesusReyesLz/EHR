@@ -471,6 +471,221 @@ export interface HomeServiceRequest {
     commission?: number; // Monto ganado por el servicio
 }
 
+// --- PERINATAL & PREGNANCY TYPES ---
+export interface PerinatalVisit {
+  id: string;
+  date: string;
+  gestationalAge: number; // Semanas
+  weight: number;
+  bp: string; // Tensión Arterial
+  fundalHeight: number; // cm
+  fetalHeartRate: number; // lpm
+  fetalPosition: string; // Cefálico, Pélvico, Transverso
+  edema: string; // +, ++, +++, Neg
+  alarmSigns: boolean;
+  notes: string;
+  nextAppointment: string;
+}
+
+export interface PregnancyRecord {
+   id: string;
+   status: 'Active' | 'Finished';
+   startDate: string; // Usually FUM date or creation date
+   endDate?: string;
+   outcome?: 'Parto' | 'Cesárea' | 'Aborto' | 'Ectópico' | 'Otro';
+   
+   // Obstetric Data Snapshot
+   fum: string;
+   fpp: string;
+   ultrasoundDate: string;
+   ultrasoundWeeks: number;
+   
+   gesta: number;
+   para: number;
+   cesarean: number;
+   abortions: number;
+   
+   riskFactors: string[];
+   vaccines: {
+        tdpa: boolean;
+        influenza: boolean;
+        covid: boolean;
+        hepatitisB: boolean;
+   };
+   supplements: {
+        folicAcid: boolean;
+        iron: boolean;
+        calcium: boolean;
+        multivitamin: boolean;
+   };
+   
+   visits: PerinatalVisit[];
+}
+
+// --- CHRONIC DISEASE TYPES ---
+export interface TreatmentPlan {
+    id: string;
+    drug: string;
+    dose: string;
+    frequency: string;
+    active: boolean;
+}
+
+export interface ChronicVisit {
+    id: string;
+    date: string;
+    weight: number;
+    bp: string;
+    glucose: number; // mg/dL
+    
+    // Extended Lipid Profile
+    totalCholesterol?: number; // mg/dL
+    hdl?: number; // mg/dL
+    ldl?: number; // mg/dL
+    triglycerides?: number; // mg/dL
+
+    hba1c?: number; // %
+    waistCircumference?: number; // cm
+    
+    // Adherence Check
+    adherenceToMeds: 'Buena' | 'Regular' | 'Mala';
+    adherenceToDiet: 'Buena' | 'Regular' | 'Mala';
+    
+    notes: string;
+    medicationAdjustments?: string;
+    nextAppointment: string;
+    labResults?: string; // Resumen de labs traídos
+    
+    // Treatment Snapshot (Lo que se indicó en esa visita)
+    treatmentSnapshot?: string; 
+    // Checkups performed during this visit (e.g., 'ophthalmology', 'dental')
+    checkupsPerformed?: string[];
+}
+
+export interface ChronicDiseaseRecord {
+    id: string;
+    status: 'Active' | 'Archived';
+    startDate: string;
+    endDate?: string;
+    diagnosis: string[]; // ['Diabetes', 'Hipertensión', 'Obesidad', 'Dislipidemia']
+    
+    // Risk Stratification
+    cardiovascularRisk: 'Bajo' | 'Moderado' | 'Alto' | 'Muy Alto';
+    
+    // Goals (Metas Terapéuticas)
+    goals: {
+        hba1cTarget: number; // < 7% generally
+        bpTargetSystolic: number; // < 130
+        bpTargetDiastolic: number; // < 80
+        ldlTarget: number; // < 100 or < 70 depending on risk
+        bmiTarget: number;
+        waistTarget: number; // < 90/80 cm
+    };
+    
+    // Baseline (Valores Iniciales)
+    baseline: {
+        weight: number;
+        hba1c: number;
+        bp: string;
+        lipidProfile?: string; // Texto resumen
+    };
+    
+    // Active Medication List
+    currentMedications: TreatmentPlan[];
+    nutritionPlan: string; // Texto libre dieta
+
+    visits: ChronicVisit[];
+    
+    // Checklists - Stores DATE string of last checkup or EMPTY string if not done
+    annualCheckups: {
+        ophthalmology: string; // Date or ''
+        dental: string;
+        footExam: string;
+        cardiology: string;
+        nephrology: string;
+        nutrition: string;
+    };
+}
+
+// --- PREVENTIVE HEALTH / HEALTHY CHILD TYPES ---
+
+export interface VaccineRecord {
+    id: string;
+    name: string;
+    doseNumber: string; // 1a, 2a, Refuerzo
+    targetAge: string; // e.g. "Al nacer", "2 meses", "Anual"
+    applicationDate: string; // Date or ''
+    batch?: string;
+    notes?: string;
+}
+
+export interface ScreeningRecord {
+    id: string;
+    name: string;
+    category: 'Metabólico' | 'Visual' | 'Auditivo' | 'Cáncer' | 'Desarrollo' | 'Geriátrico';
+    targetPopulation: string; // e.g., "Mujeres > 25", "Recién Nacido"
+    status: 'Pendiente' | 'Realizado' | 'Normal' | 'Anormal';
+    lastDate: string;
+    nextDueDate: string;
+    resultSummary?: string;
+}
+
+export interface PreventiveVisit {
+    id: string;
+    date: string;
+    ageGroup: string; // "Lactante", "Escolar", "Adulto"
+    weight: number;
+    height: number;
+    bmi?: number;
+    headCircumference?: number; // Para niños < 2-3 años
+    developmentMilestones?: string; // Hitos del desarrollo (se sentó, caminó, habla)
+    physicalActivity?: string;
+    nutritionAssessment?: string;
+    notes: string;
+}
+
+// New Interface for Health Promotion
+export interface PromotionTopic {
+    topic: string;
+    date: string;
+    notes?: string;
+}
+
+export interface HealthControlRecord {
+    id: string;
+    patientId: string;
+    lifeStage: 'Recién Nacido' | 'Lactante' | 'Preescolar' | 'Escolar' | 'Adolescente' | 'Adulto Joven' | 'Adulto' | 'Adulto Mayor';
+    
+    vaccines: VaccineRecord[];
+    screenings: ScreeningRecord[];
+    visits: PreventiveVisit[];
+    
+    // Specific Trackers based on age
+    deworming?: { lastDate: string }; // Desparasitación (niños)
+    vitaminA?: { lastDate: string }; // Vitamina A (niños)
+    sexualHealth?: { method: string, counselingDate: string }; // Adolescentes/Adultos
+    
+    // NEW FIELD: Health Promotion Topics
+    healthPromotion?: PromotionTopic[]; // Array of topics covered
+}
+
+// --- SUIVE / DISCHARGE DATA ---
+export interface DischargeData {
+    diagnosticos: { name: string; status: string }[];
+    program: string;
+    programDetails: {
+        consultationType: '1a Vez' | 'Subsecuente';
+        isIndigenous: boolean;
+        isDisability: boolean;
+        isMigrant?: boolean;
+        referral: string;
+        specifics?: Record<string, any>;
+    };
+    notes: string;
+    medico: string;
+    timestamp: string;
+}
+
 export interface Patient {
   id: string;
   clinicId?: string; // Link to Clinic DB
@@ -489,7 +704,10 @@ export interface Patient {
   assignedModule: ModuleType;
   currentVitals?: Vitals;
   vitalsHistory?: Vitals[];
-  history?: any;
+  history?: {
+      dischargeData?: DischargeData; // Data for SUIVE
+      [key: string]: any;
+  };
   bedNumber?: string;
   transitTargetBed?: string;
   transitTargetModule?: ModuleType;
@@ -516,6 +734,15 @@ export interface Patient {
   assignedDoctorName?: string;
   hasTelemedicineConsent?: boolean; // Flag para consentimiento firmado
   teleIntake?: TeleIntakeForm; // Datos del cuestionario previo
+
+  // Perinatal History (Multi-Pregnancy Support)
+  pregnancyHistory?: PregnancyRecord[];
+
+  // Chronic Disease Control (New)
+  chronicHistory?: ChronicDiseaseRecord[];
+
+  // Preventive Health Control (New)
+  healthControl?: HealthControlRecord;
 }
 
 export interface ClinicalNote {

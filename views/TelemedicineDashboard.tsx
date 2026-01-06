@@ -255,6 +255,7 @@ const ClinicChatAssistant: React.FC<{
                     priority: PriorityLevel.ROUTINE,
                     assignedModule: ModuleType.OUTPATIENT, // Or Telemedicine depending on context
                     scheduledDate: bookingData.date,
+                    lastVisit: bookingData.date, // Add lastVisit
                     appointmentTime: bookingData.time,
                     assignedDoctorId: bookingData.doctor.cedula,
                     assignedDoctorName: bookingData.doctor.name,
@@ -1335,7 +1336,7 @@ const TelemedicineDashboard: React.FC<TelemedicineDashboardProps & {
           priority: PriorityLevel.MEDIUM,
           assignedModule: ModuleType.TELEMEDICINE,
           scheduledDate: today,
-          lastVisit: today,
+          lastVisit: today, // Add lastVisit
           appointmentTime: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
           reason: reasonText,
           chronicDiseases: intakeData.chronicConditions,

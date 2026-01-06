@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { 
@@ -9,11 +8,11 @@ import {
   Clock, Clipboard, Scissors, X, Heart, AlertTriangle, CheckCircle2, Maximize2, Scale, Ruler,
   Brain, FileText, User
 } from 'lucide-react';
-import { Patient, ClinicalNote, Vitals, MedicationPrescription, MedicationStock, PriceItem, PriceType, ChargeItem } from '../../types';
+import { Patient, ClinicalNote, Vitals, MedicationPrescription, MedicationStock, PriceItem, PriceType, ChargeItem, DoctorInfo } from '../../types';
 import { VADEMECUM_DB, INITIAL_STOCK, INITIAL_PRICES } from '../../constants';
 
 // Added onUpdatePatient prop
-const EvolutionNote: React.FC<{ patients: Patient[], notes: ClinicalNote[], onSaveNote: (n: ClinicalNote) => void, onUpdatePatient: (p: Patient) => void }> = ({ patients, notes, onSaveNote, onUpdatePatient }) => {
+const EvolutionNote: React.FC<{ patients: Patient[], notes: ClinicalNote[], onSaveNote: (n: ClinicalNote) => void, onUpdatePatient: (p: Patient) => void, doctorInfo?: DoctorInfo }> = ({ patients, notes, onSaveNote, onUpdatePatient, doctorInfo }) => {
   const { id, noteId } = useParams();
   const navigate = useNavigate();
   const patient = patients.find(p => p.id === id);
@@ -170,7 +169,7 @@ const EvolutionNote: React.FC<{ patients: Patient[], notes: ClinicalNote[], onSa
       patientId: patient?.id || '',
       type: 'Nota de Evolución PSOAP',
       date: new Date().toLocaleString('es-MX'),
-      author: 'Dr. Alejandro Méndez',
+      author: doctorInfo?.name || 'Dr. Alejandro Méndez',
       content: { 
          ...form, 
          vitals, 
@@ -537,7 +536,7 @@ const EvolutionNote: React.FC<{ patients: Patient[], notes: ClinicalNote[], onSa
                                 <span className="w-6 h-6 bg-slate-200 text-slate-500 rounded-lg flex items-center justify-center font-black text-[10px]">{idx + 1}</span>
                                 <input className="bg-transparent border-none p-0 text-sm font-black text-slate-900 uppercase w-full outline-none focus:ring-0" value={m.name} onChange={e => updateMed(m.id, 'name', e.target.value.toUpperCase())} />
                              </div>
-                             <button onClick={() => removeMed(m.id)} className="text-slate-300 hover:text-rose-600 transition-colors p-2"><X size={16} /></button>
+                             <button onClick={() => removeMed(m.id)} className="text-slate-300 hover:text-rose-600 transition-colors p-2"><X size={16}/></button>
                           </div>
                           
                           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">

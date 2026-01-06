@@ -17,369 +17,521 @@ import {
   X,
   Eye,
   FileBadge,
-  Calendar
+  Calendar,
+  AlertTriangle,
+  ClipboardList,
+  Baby,
+  Stethoscope,
+  PieChart,
+  ExternalLink
 } from 'lucide-react';
-import { Patient, PatientStatus, ClinicalNote } from '../types';
+import { Patient, PatientStatus, ClinicalNote, ModuleType } from '../types';
 
 interface DailyReportProps {
   patients: Patient[];
   notes: ClinicalNote[];
 }
 
+// Helper para fecha local correcta (Evita desfase de zona horaria)
+const getLocalToday = () => {
+    const d = new Date();
+    return new Date(d.getTime() - (d.getTimezoneOffset() * 60000)).toISOString().split('T')[0];
+};
+
+// Catálogo simplificado de Grupos SUIVE para mapeo automático
+const SUIVE_GROUPS = [
+    { id: 'IRAS', label: 'Infecciones Respiratorias Agudas (J00-J06, J20-J22)', keywords: ['respiratoria', 'faringitis', 'amigdalitis', 'rinofaringitis', 'bronquitis', 'gripe', 'catarro', 'j00', 'j01', 'j02', 'j03', 'j04', 'j05', 'j06'] },
+    { id: 'EDAS', label: 'Infecciones Intestinales (A00-A09)', keywords: ['diarrea', 'gastroenteritis', 'salmonella', 'tifoidea', 'intestinal', 'colera', 'a00', 'a01', 'a02', 'a03', 'a04', 'a05', 'a06', 'a07', 'a08', 'a09'] },
+    { id: 'DM', label: 'Diabetes Mellitus (E10-E14)', keywords: ['diabetes', 'mellitus', 'dm2', 'dm1', 'e10', 'e11', 'e12', 'e13', 'e14'] },
+    { id: 'HAS', label: 'Hipertensión Arterial (I10-I15)', keywords: ['hipertension', 'arterial', 'has', 'presion alta', 'i10', 'i11', 'i12', 'i13', 'i14', 'i15'] },
+    { id: 'COVID', label: 'COVID-19 (U07)', keywords: ['covid', 'sars-cov-2', 'coronavirus', 'u07'] },
+    { id: 'URIN', label: 'Infección de Vías Urinarias (N30, N39)', keywords: ['urinaria', 'cistitis', 'ivu', 'n30', 'n39'] },
+    { id: 'EMB', label: 'Supervisión de Embarazo (Z34-Z35)', keywords: ['embarazo', 'prenatal', 'gestacion', 'z34', 'z35'] },
+    { id: 'OBE', label: 'Obesidad (E66)', keywords: ['obesidad', 'sobrepeso', 'e66'] },
+];
+
+const MANDATORY_NOTIFICATION = ['DENGUE', 'ZIKA', 'CHIKUNGUNYA', 'SARAMPION', 'RUBEOLA', 'TOSFERINA', 'COLERA', 'RABIA', 'MENINGITIS', 'MORDEDURA', 'VIOLENCIA'];
+
 const DailyReport: React.FC<DailyReportProps> = ({ patients, notes }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [doctorFilter, setDoctorFilter] = useState('TODOS');
+  const [programFilter, setProgramFilter] = useState('TODOS');
   const [viewMode, setViewMode] = useState<'daily' | 'suive1'>('daily');
   const [showPrintPreview, setShowPrintPreview] = useState(false);
   
-  const [reportDate, setReportDate] = useState(new Date().toISOString().split('T')[0]);
+  // Usar fecha local para evitar que salga "mañana" por UTC
+  const [reportDate, setReportDate] = useState(getLocalToday());
   
+  // FILTRADO PRINCIPAL: Basado en NOTAS, no en Pacientes, para permitir múltiples visitas
+  const dailyRecords = useMemo(() => {
+    // Filtrar notas tipo SUIVE generadas en la fecha seleccionada
+    // Formato de fecha en notas es usually LocaleString (dd/mm/yyyy...), así que comparamos substring o parseamos
+    // Para simplificar, asumimos que 'date' en nota es 'YYYY-MM-DD' o DD/MM/YYYY
+    
+    return notes.filter(n => {
+        // Normalizar fecha de la nota
+        let noteDateStr = '';
+        if (n.date.includes('/')) {
+             const parts = n.date.split(',')[0].split('/');
+             // Asumiendo DD/MM/YYYY
+             if (parts.length === 3) {
+                 noteDateStr = `${parts[2]}-${parts[1].padStart(2,'0')}-${parts[0].padStart(2,'0')}`; // YYYY-MM-DD
+             }
+        } else {
+             noteDateStr = n.date.split('T')[0];
+        }
+        
+        return n.type === 'Cierre de Consulta (SUIVE)' && noteDateStr === reportDate;
+    }).map(note => {
+        // Enriquecer nota con datos del paciente
+        const patient = patients.find(p => p.id === note.patientId);
+        return {
+            noteId: note.id,
+            patientId: note.patientId,
+            patientName: patient?.name || 'Desconocido',
+            curp: patient?.curp || '',
+            age: patient?.age || 0,
+            sex: patient?.sex || '',
+            dischargeData: note.content // El contenido de la nota SUIVE es el dischargeData
+        };
+    });
+  }, [notes, patients, reportDate]);
+
   const doctorsList = useMemo(() => {
     const doctors = new Set<string>();
-    // Collect doctors from notes and discharge data
-    notes.forEach(n => { if(n.author) doctors.add(n.author); });
-    patients.forEach(p => { if(p.history?.dischargeData?.medico) doctors.add(p.history.dischargeData.medico) });
+    dailyRecords.forEach(r => { if(r.dischargeData?.medico) doctors.add(r.dischargeData.medico) });
     return ['TODOS', ...Array.from(doctors)];
-  }, [notes, patients]);
+  }, [dailyRecords]);
 
-  const attendedByDate = useMemo(() => {
-    return patients.filter(p => p.status === PatientStatus.ATTENDED && p.lastVisit === reportDate);
-  }, [patients, reportDate]);
+  const programsList = useMemo(() => {
+      const progs = new Set<string>();
+      dailyRecords.forEach(r => { if(r.dischargeData?.program) progs.add(r.dischargeData.program) });
+      return ['TODOS', ...Array.from(progs)];
+  }, [dailyRecords]);
 
-  const filtered = useMemo(() => {
-    return attendedByDate.filter(p => {
-      const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                          p.curp.toLowerCase().includes(searchTerm.toLowerCase());
+  // Filtrado Avanzado sobre los registros diarios
+  const filteredData = useMemo(() => {
+    return dailyRecords.filter(r => {
+      const discharge = r.dischargeData;
+      const search = searchTerm.toLowerCase();
       
-      let matchesDoctor = true;
-      if (doctorFilter !== 'TODOS') {
-        const dischargeDoc = p.history?.dischargeData?.medico;
-        const noteDoc = notes.some(n => n.patientId === p.id && n.author === doctorFilter);
-        matchesDoctor = dischargeDoc === doctorFilter || noteDoc;
-      }
+      const matchesSearch = r.patientName.toLowerCase().includes(search) || 
+                          r.curp.toLowerCase().includes(search) ||
+                          (discharge?.diagnosticos?.[0]?.name || '').toLowerCase().includes(search);
+      
+      const matchesDoctor = doctorFilter === 'TODOS' || discharge?.medico === doctorFilter;
+      const matchesProgram = programFilter === 'TODOS' || discharge?.program === programFilter;
 
-      return matchesSearch && matchesDoctor;
+      return matchesSearch && matchesDoctor && matchesProgram;
     });
-  }, [attendedByDate, searchTerm, doctorFilter, notes]);
+  }, [dailyRecords, searchTerm, doctorFilter, programFilter]);
 
-  const getHojaDiariaData = (patient: Patient) => {
-    return patient.history?.dischargeData;
+  // Estadísticas Rápidas
+  const stats = useMemo(() => {
+      let firstTime = 0;
+      let subsequent = 0;
+      let referrals = 0;
+      let indigenous = 0;
+
+      filteredData.forEach(r => {
+          const details = r.dischargeData?.programDetails;
+          if (details?.consultationType === '1a Vez') firstTime++; else subsequent++;
+          if (details?.referral && details.referral !== 'Ninguna') referrals++;
+          if (details?.isIndigenous) indigenous++;
+      });
+
+      return { firstTime, subsequent, referrals, indigenous, total: filteredData.length };
+  }, [filteredData]);
+
+  // Lógica SUIVE-1 Dinámica (Basada en registros diarios)
+  const suiveStats = useMemo(() => {
+      // Inicializar contadores por grupo
+      const matrix = SUIVE_GROUPS.map(g => ({ ...g, m: 0, f: 0, total: 0 }));
+      const others = { id: 'OTROS', label: 'Otras Causas (No SUIVE)', m: 0, f: 0, total: 0 };
+      
+      // Procesar solo casos marcados como 1a Vez en la nota
+      const newCases = dailyRecords.filter(r => 
+          r.dischargeData?.programDetails?.consultationType === '1a Vez'
+      );
+
+      newCases.forEach(r => {
+          const dx = (r.dischargeData?.diagnosticos?.[0]?.name || '').toLowerCase();
+          let matched = false;
+
+          for (const group of matrix) {
+              if (group.keywords.some(k => dx.includes(k))) {
+                  if (r.sex === 'M') group.m++; else group.f++;
+                  group.total++;
+                  matched = true;
+                  break;
+              }
+          }
+          if (!matched) {
+              if (r.sex === 'M') others.m++; else others.f++;
+              others.total++;
+          }
+      });
+
+      return [...matrix, others].filter(g => g.total > 0);
+  }, [dailyRecords]);
+
+  const isMandatoryNotification = (dx: string) => {
+      if(!dx) return false;
+      return MANDATORY_NOTIFICATION.some(k => dx.toUpperCase().includes(k));
   };
 
-  const suiveData = useMemo(() => {
-    return [
-      { code: 'A00.0', disease: 'Cólera', m_under1: 0, f_under1: 0, m_1_4: 0, f_1_4: 0, total: 0 },
-      { code: 'A09', disease: 'Infecciones Intestinales', m_under1: 2, f_under1: 1, m_1_4: 3, f_1_4: 2, total: 8 },
-      { code: 'J00-J06', disease: 'Infecciones Respiratorias Agudas', m_under1: 5, f_under1: 4, m_1_4: 10, f_1_4: 12, total: 31 },
-      { code: 'E10-E14', disease: 'Diabetes Mellitus', m_under1: 0, f_under1: 0, m_1_4: 0, f_1_4: 0, total: 12 }, 
-      { code: 'I10-I15', disease: 'Hipertensión Arterial', m_under1: 0, f_under1: 0, m_1_4: 0, f_1_4: 0, total: 15 },
-    ];
-  }, []);
-
-  const displayDate = new Date(reportDate + 'T12:00:00').toLocaleDateString('es-MX', {day:'2-digit', month:'long', year:'numeric'});
+  const renderSpecifics = (specifics: any) => {
+      if (!specifics || Object.keys(specifics).length === 0) return '-';
+      const entries = Object.entries(specifics);
+      return (
+          <div className="text-[8px] uppercase text-slate-500 leading-tight">
+              {entries.map(([key, val]) => {
+                  if (typeof val === 'boolean') {
+                      return val ? <span key={key} className="block">• {key}</span> : null;
+                  }
+                  return <span key={key} className="block">• {key}: <b>{String(val)}</b></span>;
+              })}
+          </div>
+      );
+  };
 
   return (
-    <div className="max-w-7xl mx-auto space-y-6 animate-in fade-in duration-500 pb-20">
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 no-print">
-        <div>
-          <div className="flex items-center space-x-2 text-slate-400 uppercase text-[10px] font-bold tracking-[0.2em] mb-1">
-            <FileSpreadsheet className="w-3.5 h-3.5" />
-            <span>Control Administrativo y Epidemiológico</span>
+    <div className="max-w-7xl mx-auto space-y-8 animate-in fade-in duration-500 pb-20">
+      
+      {/* HEADER & CONTROLS */}
+      <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 no-print">
+        <div className="space-y-1">
+          <div className="flex items-center space-x-2 text-blue-600 uppercase text-[10px] font-black tracking-[0.3em]">
+            <FileSpreadsheet className="w-4 h-4" />
+            <span>Sistema de Información en Salud (SIS)</span>
           </div>
-          <h1 className="text-3xl font-black text-slate-900 tracking-tight uppercase">
-             {viewMode === 'daily' ? 'Hoja Diaria de Atenciones' : 'Informe Semanal SUIVE-1'}
+          <h1 className="text-4xl font-black text-slate-900 tracking-tight uppercase">
+             {viewMode === 'daily' ? 'Hoja Diaria de Consulta' : 'Concentrado SUIVE-1'}
           </h1>
-          <p className="text-slate-500 text-sm font-medium">Resumen consolidado para validación <span className="text-blue-600 font-bold uppercase">SUIVE / SINAVE</span>.</p>
+          <p className="text-slate-500 text-sm font-medium">
+              Reporte estadístico y epidemiológico correspondiente al <span className="text-slate-900 font-bold">{new Date(reportDate + 'T12:00:00').toLocaleDateString('es-MX', {dateStyle: 'full'})}</span>.
+          </p>
         </div>
-        <div className="flex gap-3">
-          <div className="flex bg-white border border-slate-200 p-1 rounded-2xl shadow-sm mr-4">
-             <button onClick={() => setViewMode('daily')} className={`px-5 py-2 text-[9px] font-black rounded-xl uppercase transition-all ${viewMode === 'daily' ? 'bg-slate-900 text-white shadow-lg' : 'text-slate-500 hover:bg-slate-50'}`}>Diario</button>
-             <button onClick={() => setViewMode('suive1')} className={`px-5 py-2 text-[9px] font-black rounded-xl uppercase transition-all ${viewMode === 'suive1' ? 'bg-slate-900 text-white shadow-lg' : 'text-slate-500 hover:bg-slate-50'}`}>SUIVE-1</button>
-          </div>
-          <button onClick={() => setShowPrintPreview(true)} className="flex items-center px-5 py-3 bg-white border border-slate-200 text-slate-600 rounded-2xl font-bold shadow-sm hover:bg-slate-50 transition-all text-xs">
-            <Eye className="w-4 h-4 mr-2.5 text-blue-600" /> Previsualizar Hoja
-          </button>
-          <button className="flex items-center px-5 py-3 bg-slate-900 text-white rounded-2xl font-bold shadow-lg hover:bg-slate-800 transition-all text-xs">
-            <Download className="w-4 h-4 mr-2.5 text-blue-400" /> Exportar SINAVE
-          </button>
+
+        <div className="flex flex-wrap gap-3 items-center">
+            {/* DATE PICKER */}
+            <div className="flex items-center bg-white border border-slate-200 p-1.5 rounded-2xl shadow-sm">
+                <Calendar className="text-slate-400 ml-2 mr-2" size={16}/>
+                <input 
+                    type="date" 
+                    className="bg-transparent text-xs font-black uppercase outline-none text-slate-700"
+                    value={reportDate}
+                    onChange={(e) => setReportDate(e.target.value)}
+                />
+            </div>
+
+            {/* VIEW SWITCHER */}
+            <div className="flex bg-slate-100 p-1 rounded-2xl border border-slate-200">
+                <button onClick={() => setViewMode('daily')} className={`px-4 py-2 text-[10px] font-black rounded-xl uppercase transition-all ${viewMode === 'daily' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500'}`}>Hoja Diaria</button>
+                <button onClick={() => setViewMode('suive1')} className={`px-4 py-2 text-[10px] font-black rounded-xl uppercase transition-all ${viewMode === 'suive1' ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-500'}`}>SUIVE-1</button>
+            </div>
+
+            <button onClick={() => setShowPrintPreview(true)} className="px-6 py-3 bg-slate-900 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl hover:bg-blue-600 transition-all flex items-center gap-2">
+                <Printer size={16} /> Imprimir Informe
+            </button>
         </div>
       </div>
 
       {viewMode === 'daily' ? (
         <>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 no-print">
-            <div className="bg-white border border-slate-200 rounded-3xl p-8 shadow-sm relative overflow-hidden group">
-               <div className="absolute right-0 top-0 p-6 text-slate-100 pointer-events-none group-hover:scale-110 transition-transform">
-                  <Users className="w-24 h-24" />
-               </div>
-               <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Altas del Día</p>
-               <p className="text-4xl font-black text-slate-900 mb-4">{attendedByDate.length}</p>
-               <div className="flex items-center text-xs font-bold text-slate-500">
-                  <span className="text-emerald-600 font-black mr-2">PRODUCTIVIDAD</span> Hospitalaria Activa
-               </div>
-            </div>
-            
-            <div className="bg-white border border-slate-200 rounded-3xl p-8 shadow-sm no-print">
-               <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Filtro por Médico Tratante</p>
-               <div className="relative">
-                  <UserCheck className="absolute left-4 top-1/2 -translate-y-1/2 text-blue-600 w-4 h-4" />
-                  <select 
-                    className="w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-[10px] font-black uppercase outline-none focus:ring-4 focus:ring-blue-100"
-                    value={doctorFilter}
-                    onChange={(e) => setDoctorFilter(e.target.value)}
-                  >
-                     {doctorsList.map(doc => <option key={doc} value={doc}>{doc}</option>)}
-                  </select>
-               </div>
-            </div>
-
-            <div className="bg-blue-600 rounded-3xl p-8 text-white shadow-xl shadow-blue-100 relative overflow-hidden no-print">
-               <TrendingUp className="absolute -right-6 -bottom-6 w-32 h-32 opacity-10" />
-               <p className="text-[10px] font-black text-blue-200 uppercase tracking-widest mb-1">Consolidado Histórico</p>
-               <p className="text-xl font-bold">REGISTRO INTEGRAL</p>
-               <p className="text-xs text-blue-100 opacity-80 mt-1">Conforme a NOM-004-SSA3-2012</p>
-            </div>
+          {/* KPI CARDS */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 no-print">
+             <div className="bg-white p-5 rounded-[2rem] border border-slate-100 shadow-sm">
+                 <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Total Consultas</p>
+                 <p className="text-3xl font-black text-slate-900">{stats.total}</p>
+             </div>
+             <div className="bg-white p-5 rounded-[2rem] border border-slate-100 shadow-sm">
+                 <p className="text-[9px] font-black text-blue-400 uppercase tracking-widest mb-1">Primera Vez</p>
+                 <p className="text-3xl font-black text-blue-600">{stats.firstTime}</p>
+             </div>
+             <div className="bg-white p-5 rounded-[2rem] border border-slate-100 shadow-sm">
+                 <p className="text-[9px] font-black text-emerald-400 uppercase tracking-widest mb-1">Subsecuentes</p>
+                 <p className="text-3xl font-black text-emerald-600">{stats.subsequent}</p>
+             </div>
+             <div className="bg-white p-5 rounded-[2rem] border border-slate-100 shadow-sm">
+                 <p className="text-[9px] font-black text-rose-400 uppercase tracking-widest mb-1">Referencias</p>
+                 <p className="text-3xl font-black text-rose-600">{stats.referrals}</p>
+             </div>
           </div>
 
-          <div className="bg-white border border-slate-200 rounded-3xl shadow-sm overflow-hidden">
-            <div className="p-6 border-b border-slate-100 bg-slate-50/50 flex flex-wrap items-center justify-between gap-4 no-print">
-              <div className="flex items-center space-x-2">
-                <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] flex items-center gap-2">
-                   <Calendar size={14} className="text-blue-600" /> Fecha de Reporte:
-                </span>
-                <input 
-                  type="date"
-                  value={reportDate}
-                  onChange={(e) => setReportDate(e.target.value)}
-                  className="px-4 py-2 bg-white border border-slate-200 rounded-xl text-xs font-black uppercase outline-none focus:border-blue-500 transition-all cursor-pointer shadow-sm hover:border-blue-300"
-                />
-              </div>
-              <div className="relative flex-1 max-w-md">
-                <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                <input 
-                  type="text" 
-                  placeholder="Filtrar por Paciente o CURP..." 
-                  className="w-full pl-11 pr-4 py-3 bg-white border border-slate-200 rounded-2xl text-xs outline-none focus:ring-4 focus:ring-blue-100 transition-all font-medium" 
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                />
-              </div>
-            </div>
-            
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="bg-slate-50 border-b border-slate-200 text-slate-400 uppercase text-[9px] font-black tracking-widest">
-                    <th className="px-6 py-5">Identificación</th>
-                    <th className="px-6 py-5 text-center">S/E</th>
-                    <th className="px-6 py-5">Diagnósticos (CIE-10)</th>
-                    <th className="px-6 py-5">Programa / Detalles</th>
-                    <th className="px-6 py-5 text-right">Estatus</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {filtered.length > 0 ? (
-                    filtered.map((p) => {
-                      const hojaData = getHojaDiariaData(p);
-                      return (
-                        <tr key={p.id} className="hover:bg-blue-50/20 transition-all group">
-                          <td className="px-6 py-5">
-                            <p className="text-xs font-black text-slate-900 uppercase group-hover:text-blue-700 transition-all">{p.name}</p>
-                            <p className="text-[9px] text-slate-400 font-mono tracking-tighter mt-0.5">{p.curp}</p>
-                          </td>
-                          <td className="px-6 py-5 text-center">
-                            <span className="text-[10px] font-black text-slate-600 bg-slate-100 px-2 py-1 rounded-lg border border-slate-200">
-                              {p.sex} / {p.age}
-                            </span>
-                          </td>
-                          <td className="px-6 py-5">
-                            {hojaData?.diagnosticos && hojaData.diagnosticos.length > 0 ? (
-                                <div className="space-y-1">
-                                    {hojaData.diagnosticos.map((d: any, i: number) => (
-                                        <div key={i} className="flex gap-2 text-[9px]">
-                                            <span className="font-bold text-slate-900 uppercase">• {d.name}</span>
-                                            <span className="text-slate-400 italic">({d.status})</span>
-                                        </div>
-                                    ))}
-                                </div>
-                            ) : (
-                                <span className="text-[10px] text-slate-400 italic uppercase">{p.reason}</span>
-                            )}
-                          </td>
-                          <td className="px-6 py-5">
-                            <p className="text-[10px] font-black text-blue-600 uppercase">{hojaData?.program || 'NO REGISTRADO'}</p>
-                            {hojaData?.programDetails && (
-                                <div className="text-[8px] text-slate-500 uppercase mt-1">
-                                    {Object.entries(hojaData.programDetails).map(([k, v]) => (
-                                        <span key={k} className="mr-2 block">{k}: <b>{v as any}</b></span>
-                                    ))}
-                                </div>
-                            )}
-                          </td>
-                          <td className="px-6 py-5 text-right">
-                            <div className="inline-flex items-center px-3 py-1.5 bg-emerald-50 text-emerald-700 rounded-xl border border-emerald-200 text-[9px] font-black uppercase tracking-widest shadow-sm">
-                              <ShieldCheck className="w-3.5 h-3.5 mr-2" /> Validado
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })
-                  ) : (
-                    <tr>
-                      <td colSpan={6} className="px-6 py-32 text-center">
-                        <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-6 border-2 border-dashed border-slate-200">
-                          <FileSpreadsheet className="w-10 h-10 text-slate-200" />
-                        </div>
-                        <p className="text-slate-900 font-black uppercase tracking-tight">No hay altas para la fecha: {reportDate}</p>
-                        <p className="text-[10px] text-slate-400 mt-2 uppercase">Seleccione otra fecha en el calendario superior.</p>
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
+          {/* MAIN TABLE */}
+          <div className="bg-white border border-slate-200 rounded-[3rem] shadow-sm overflow-hidden flex flex-col min-h-[600px]">
+             {/* FILTERS TOOLBAR */}
+             <div className="p-6 border-b border-slate-100 bg-slate-50/50 flex flex-wrap gap-4 items-center justify-between no-print">
+                 <div className="relative flex-1 min-w-[200px]">
+                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={16}/>
+                    <input 
+                        className="w-full pl-10 pr-4 py-3 bg-white border border-slate-200 rounded-2xl text-xs font-bold outline-none focus:ring-2 focus:ring-blue-100 uppercase"
+                        placeholder="Filtrar por paciente, diagnóstico o folio..."
+                        value={searchTerm}
+                        onChange={e => setSearchTerm(e.target.value)}
+                    />
+                 </div>
+                 <select 
+                    className="p-3 bg-white border border-slate-200 rounded-2xl text-xs font-bold text-slate-600 outline-none uppercase"
+                    value={programFilter}
+                    onChange={e => setProgramFilter(e.target.value)}
+                 >
+                    <option value="TODOS">Todos los Programas</option>
+                    {programsList.filter(p => p !== 'TODOS').map(p => <option key={p} value={p}>{p}</option>)}
+                 </select>
+                 <select 
+                    className="p-3 bg-white border border-slate-200 rounded-2xl text-xs font-bold text-slate-600 outline-none uppercase"
+                    value={doctorFilter}
+                    onChange={e => setDoctorFilter(e.target.value)}
+                 >
+                    <option value="TODOS">Todos los Médicos</option>
+                    {doctorsList.filter(d => d !== 'TODOS').map(d => <option key={d} value={d}>{d}</option>)}
+                 </select>
+             </div>
+
+             {/* TABLE */}
+             <div className="flex-1 overflow-auto">
+                 <table className="w-full text-left border-collapse">
+                     <thead className="bg-white sticky top-0 z-10 shadow-sm text-[9px] font-black uppercase text-slate-400 tracking-widest">
+                         <tr>
+                             <th className="p-6 border-b border-slate-100">Paciente / CURP</th>
+                             <th className="p-6 border-b border-slate-100 text-center">Edad / Sexo</th>
+                             <th className="p-6 border-b border-slate-100">Diagnóstico (CIE-10)</th>
+                             <th className="p-6 border-b border-slate-100 text-center">Tipo</th>
+                             <th className="p-6 border-b border-slate-100">Programa / Detalles</th>
+                             <th className="p-6 border-b border-slate-100 text-center">Referencia</th>
+                         </tr>
+                     </thead>
+                     <tbody className="divide-y divide-slate-50 text-xs font-bold text-slate-700">
+                         {filteredData.map(r => {
+                             const data = r.dischargeData;
+                             const dxName = data?.diagnosticos?.[0]?.name || 'Sin Diagnóstico';
+                             const isNotifiable = isMandatoryNotification(dxName);
+                             
+                             return (
+                                 <tr key={r.noteId} className={`hover:bg-slate-50 transition-colors ${isNotifiable ? 'bg-rose-50/30' : ''}`}>
+                                     <td className="p-6">
+                                         <p className="text-slate-900 font-black uppercase">{r.patientName}</p>
+                                         <p className="text-[9px] font-mono text-slate-400 mt-1">{r.curp}</p>
+                                         <div className="flex gap-2 mt-1">
+                                             {data?.programDetails?.isIndigenous && <span className="px-2 py-0.5 bg-amber-100 text-amber-700 rounded text-[7px] font-black uppercase">Indígena</span>}
+                                             {data?.programDetails?.isDisability && <span className="px-2 py-0.5 bg-purple-100 text-purple-700 rounded text-[7px] font-black uppercase">Discapacidad</span>}
+                                             {data?.programDetails?.isMigrant && <span className="px-2 py-0.5 bg-cyan-100 text-cyan-700 rounded text-[7px] font-black uppercase">Migrante</span>}
+                                         </div>
+                                     </td>
+                                     <td className="p-6 text-center">
+                                         <span className="px-3 py-1 bg-slate-100 rounded-lg text-[10px] font-black text-slate-500 border border-slate-200">
+                                             {r.age} A / {r.sex}
+                                         </span>
+                                     </td>
+                                     <td className="p-6 max-w-xs">
+                                         <div className="flex items-start gap-2">
+                                             {isNotifiable && <AlertTriangle size={14} className="text-rose-500 flex-shrink-0 animate-pulse" title="Notificación Obligatoria" />}
+                                             <p className={`uppercase leading-tight ${isNotifiable ? 'text-rose-700 font-black' : ''}`}>{dxName}</p>
+                                         </div>
+                                     </td>
+                                     <td className="p-6 text-center">
+                                         <span className={`px-3 py-1 rounded-lg text-[9px] font-black uppercase border ${data?.programDetails?.consultationType === '1a Vez' ? 'bg-blue-50 text-blue-600 border-blue-200' : 'bg-slate-50 text-slate-500 border-slate-200'}`}>
+                                             {data?.programDetails?.consultationType || 'Subs.'}
+                                         </span>
+                                     </td>
+                                     <td className="p-6">
+                                         <p className="text-[10px] font-black text-indigo-600 uppercase mb-1">{data?.program}</p>
+                                         {renderSpecifics(data?.programDetails?.specifics)}
+                                     </td>
+                                     <td className="p-6 text-center text-[10px] uppercase font-bold text-slate-500">
+                                         {data?.programDetails?.referral !== 'Ninguna' ? (
+                                             <span className="text-rose-600 flex items-center justify-center gap-1"><ExternalLink size={12}/> {data?.programDetails?.referral}</span>
+                                         ) : '-'}
+                                     </td>
+                                 </tr>
+                             );
+                         })}
+                         {filteredData.length === 0 && (
+                             <tr><td colSpan={6} className="p-20 text-center text-slate-300 font-black uppercase text-xs tracking-widest">Sin registros para la fecha seleccionada</td></tr>
+                         )}
+                     </tbody>
+                 </table>
+             </div>
           </div>
         </>
       ) : (
-        <div className="bg-white border border-slate-200 rounded-[3rem] shadow-xl overflow-hidden animate-in slide-in-from-bottom-4">
-           {/* ... (SUIVE Section remains same structure, just re-rendered) */}
-           <div className="p-10 bg-slate-900 text-white flex justify-between items-center relative overflow-hidden">
-              <div className="absolute right-0 top-0 h-full w-64 bg-blue-600/10 -skew-x-12 translate-x-32"></div>
-              <div className="relative z-10">
-                 <h3 className="text-2xl font-black uppercase tracking-tight">Semana Epidemiológica #43</h3>
-                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Conteo consolidado de morbilidad por NOM-017</p>
-              </div>
-              <div className="flex gap-4 relative z-10">
-                 <div className="px-6 py-3 bg-white/5 border border-white/10 rounded-2xl text-center">
-                    <p className="text-[8px] font-black uppercase text-slate-400">Padecimientos Activos</p>
-                    <p className="text-xl font-black">156</p>
-                 </div>
-                 <div className="px-6 py-3 bg-emerald-600 rounded-2xl text-center shadow-lg">
-                    <p className="text-[8px] font-black uppercase text-emerald-100">Estado Notificación</p>
-                    <p className="text-xl font-black">LISTO</p>
-                 </div>
-              </div>
-           </div>
+        /* VISTA SUIVE-1 (ESTADÍSTICA) */
+        <div className="bg-white border border-slate-200 rounded-[3rem] shadow-xl overflow-hidden animate-in slide-in-from-right-4">
+            <div className="bg-slate-900 text-white p-10 flex flex-col md:flex-row justify-between items-center gap-8 relative overflow-hidden">
+                <div className="absolute right-0 top-0 h-full w-64 bg-emerald-600/10 -skew-x-12 translate-x-32"></div>
+                <div className="relative z-10">
+                    <h3 className="text-3xl font-black uppercase tracking-tight">Informe Semanal de Casos Nuevos</h3>
+                    <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-2 flex items-center gap-2">
+                        <Activity size={14} className="text-emerald-500"/> SUIVE-1 • Vigilancia Epidemiológica
+                    </p>
+                </div>
+                <div className="flex gap-4 relative z-10">
+                    <div className="bg-white/10 px-6 py-3 rounded-2xl border border-white/10 text-center">
+                        <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">Total Casos Nuevos</p>
+                        <p className="text-2xl font-black">{suiveStats.reduce((a,b)=>a+b.total,0)}</p>
+                    </div>
+                </div>
+            </div>
 
-           <div className="overflow-x-auto">
-              <table className="w-full text-left border-separate border-spacing-0">
-                 <thead>
-                    <tr className="bg-slate-50 text-[9px] font-black uppercase text-slate-500 tracking-widest">
-                       <th className="px-8 py-6 border-b border-slate-100 sticky left-0 bg-slate-50 z-10">Enfermedad (Grupo)</th>
-                       <th className="px-4 py-6 border-b border-slate-100 text-center">CIE-10</th>
-                       <th className="px-4 py-6 border-b border-slate-100 text-center bg-blue-50/30">&lt;1 M</th>
-                       <th className="px-4 py-6 border-b border-slate-100 text-center bg-blue-50/30">&lt;1 F</th>
-                       <th className="px-4 py-6 border-b border-slate-100 text-center">1-4 M</th>
-                       <th className="px-4 py-6 border-b border-slate-100 text-center">1-4 F</th>
-                       <th className="px-4 py-6 border-b border-slate-100 text-center bg-slate-100">TOTAL</th>
-                    </tr>
-                 </thead>
-                 <tbody className="divide-y divide-slate-50">
-                    {suiveData.map((s, idx) => (
-                       <tr key={idx} className="hover:bg-slate-50 group">
-                          <td className="px-8 py-5 text-xs font-black text-slate-800 uppercase tracking-tight sticky left-0 bg-white group-hover:bg-slate-50 z-10">{s.disease}</td>
-                          <td className="px-4 py-5 text-center"><span className="px-2 py-1 bg-slate-100 rounded-lg font-mono text-[10px] font-bold">{s.code}</span></td>
-                          <td className="px-4 py-5 text-center font-bold text-slate-400">{s.m_under1 || '-'}</td>
-                          <td className="px-4 py-5 text-center font-bold text-slate-400">{s.f_under1 || '-'}</td>
-                          <td className="px-4 py-5 text-center font-bold text-slate-900">{s.m_1_4 || '-'}</td>
-                          <td className="px-4 py-5 text-center font-bold text-slate-900">{s.f_1_4 || '-'}</td>
-                          <td className="px-4 py-5 text-center bg-slate-50/50 font-black text-blue-600">{s.total || '-'}</td>
-                       </tr>
-                    ))}
-                 </tbody>
-              </table>
-           </div>
-           
-           <div className="p-8 bg-blue-50/30 border-t border-slate-100 flex items-center gap-6">
-              <Info className="text-blue-600 w-8 h-8 shrink-0" />
-              <p className="text-[10px] text-blue-900 font-medium leading-relaxed uppercase">
-                 "El SUIVE-1 consolida los casos nuevos detectados durante la consulta. Las enfermedades de notificación obligatoria marcadas con asterisco (*) en el manual de procedimientos requieren adicionalmente el llenado del Estudio Epidemiológico de Caso."
-              </p>
-           </div>
+            <div className="p-10">
+                <div className="overflow-x-auto rounded-[2rem] border border-slate-200">
+                    <table className="w-full text-left">
+                        <thead className="bg-slate-50 text-[9px] font-black uppercase text-slate-400 tracking-widest border-b border-slate-200">
+                            <tr>
+                                <th className="p-5">Grupo Epidemiológico (CIE-10)</th>
+                                <th className="p-5 text-center bg-blue-50/50 text-blue-600">Masculino</th>
+                                <th className="p-5 text-center bg-pink-50/50 text-pink-600">Femenino</th>
+                                <th className="p-5 text-center bg-slate-100 text-slate-600">Total</th>
+                                <th className="p-5 text-center">Estatus</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 text-xs font-bold text-slate-700">
+                            {suiveStats.map(stat => (
+                                <tr key={stat.id} className="hover:bg-slate-50 transition-colors">
+                                    <td className="p-5">
+                                        <p className="uppercase font-black text-slate-900">{stat.label}</p>
+                                    </td>
+                                    <td className="p-5 text-center bg-blue-50/20 font-mono text-slate-500">{stat.m}</td>
+                                    <td className="p-5 text-center bg-pink-50/20 font-mono text-slate-500">{stat.f}</td>
+                                    <td className="p-5 text-center bg-slate-50 font-black text-slate-900">{stat.total}</td>
+                                    <td className="p-5 text-center">
+                                        <span className="px-3 py-1 bg-emerald-100 text-emerald-700 rounded-full text-[8px] font-black uppercase">Validado</span>
+                                    </td>
+                                </tr>
+                            ))}
+                            {suiveStats.length === 0 && (
+                                <tr><td colSpan={5} className="p-20 text-center text-slate-300 font-black uppercase text-xs tracking-widest">No hay casos de 1a vez registrados hoy</td></tr>
+                            )}
+                        </tbody>
+                    </table>
+                </div>
+                
+                <div className="mt-8 flex gap-4 p-6 bg-amber-50 border border-amber-100 rounded-3xl">
+                     <Info className="text-amber-600 flex-shrink-0" />
+                     <p className="text-xs text-amber-900 font-medium leading-relaxed">
+                         <strong>Nota:</strong> Este concentrado se genera automáticamente basándose en los diagnósticos de los pacientes marcados como "1a Vez" en el cierre de la nota médica. Los padecimientos marcados como de notificación inmediata deben reportarse adicionalmente por los canales de Jurisdicción Sanitaria.
+                     </p>
+                </div>
+            </div>
         </div>
       )}
 
+      {/* PRINT PREVIEW MODAL */}
       {showPrintPreview && (
-        <div className="fixed inset-0 z-[200] bg-slate-950 flex flex-col items-center p-10 overflow-y-auto animate-in fade-in no-print">
-           <div className="bg-slate-800 p-4 rounded-full shadow-2xl flex gap-6 mb-8 border border-white/10 sticky top-4 z-[210]">
-              <button 
-                onClick={() => window.print()} 
-                className="flex items-center gap-3 px-8 py-3 bg-blue-600 text-white rounded-full font-black text-xs uppercase tracking-widest hover:bg-blue-500 shadow-lg"
-              >
-                <Printer size={18}/> Imprimir Hoja Diaria
-              </button>
-              <button 
-                onClick={() => setShowPrintPreview(false)} 
-                className="flex items-center gap-3 px-8 py-3 bg-slate-700 text-white rounded-full font-black text-xs uppercase tracking-widest hover:bg-rose-600 shadow-lg"
-              >
-                <X size={18}/> Salir
-              </button>
-           </div>
+          <div className="fixed inset-0 z-[200] bg-slate-900/95 backdrop-blur flex items-center justify-center p-8 animate-in fade-in no-print">
+              <div className="bg-white w-full max-w-[215mm] h-full overflow-y-auto rounded-none shadow-none print:w-full print:h-auto print:overflow-visible">
+                  
+                  {/* PRINT TOOLBAR */}
+                  <div className="sticky top-0 left-0 right-0 bg-slate-800 p-4 flex justify-between items-center no-print z-50 shadow-md">
+                      <p className="text-white text-xs font-black uppercase tracking-widest">Vista Previa de Impresión (Hoja Oficial)</p>
+                      <div className="flex gap-4">
+                          <button onClick={() => window.print()} className="px-6 py-2 bg-blue-600 text-white rounded-lg text-xs font-bold uppercase hover:bg-blue-500 flex items-center gap-2"><Printer size={14}/> Imprimir</button>
+                          <button onClick={() => setShowPrintPreview(false)} className="px-6 py-2 bg-slate-700 text-white rounded-lg text-xs font-bold uppercase hover:bg-rose-600">Cerrar</button>
+                      </div>
+                  </div>
 
-           <div className="bg-white w-full max-w-[215.9mm] min-h-[279.4mm] shadow-2xl p-[20mm] text-slate-900 print:shadow-none print:m-0">
-              <div className="flex justify-between items-start border-b-4 border-slate-900 pb-10 mb-10">
-                 <div className="space-y-4">
-                    <h1 className="text-3xl font-black uppercase tracking-tighter text-slate-900">Hospital San Francisco</h1>
-                    <p className="text-xs font-bold text-slate-500 uppercase tracking-[0.2em]">Hoja Diaria de Productividad Médica</p>
-                    <p className="text-[10px] font-black text-blue-600 uppercase">Filtro Médico: {doctorFilter}</p>
-                 </div>
-                 <div className="text-right">
-                    <FileBadge size={60} className="ml-auto mb-4 text-slate-900" />
-                    <p className="text-[11px] font-black uppercase tracking-widest text-slate-900">{displayDate}</p>
-                 </div>
+                  {/* PRINT CONTENT - SIS-01-P LAYOUT REPLICA */}
+                  <div className="p-[10mm] text-black">
+                      {/* Header Institucional */}
+                      <div className="flex justify-between items-end border-b-2 border-black pb-2 mb-4">
+                          <div>
+                              <h1 className="text-lg font-bold uppercase">Secretaría de Salud</h1>
+                              <h2 className="text-sm font-bold uppercase">Hoja Diaria de Consulta Externa (SIS-SS-01-P)</h2>
+                          </div>
+                          <div className="text-right text-xs">
+                              <p><span className="font-bold">CLUES:</span> DFSSA001234</p>
+                              <p><span className="font-bold">FECHA:</span> {new Date(reportDate + 'T12:00:00').toLocaleDateString('es-MX')}</p>
+                              <p><span className="font-bold">HOJA:</span> 1 DE 1</p>
+                          </div>
+                      </div>
+
+                      {/* Tabla Compacta para Impresión */}
+                      <table className="w-full border-collapse border border-black text-[9px] uppercase">
+                          <thead>
+                              <tr className="bg-gray-100">
+                                  <th className="border border-black p-1 w-8">No.</th>
+                                  <th className="border border-black p-1">Nombre del Paciente / CURP</th>
+                                  <th className="border border-black p-1 w-10 text-center">Edad</th>
+                                  <th className="border border-black p-1 w-8 text-center">Sex</th>
+                                  <th className="border border-black p-1 w-12 text-center">Seguro</th>
+                                  <th className="border border-black p-1">Diagnóstico Principal (CIE-10)</th>
+                                  <th className="border border-black p-1 w-12 text-center">1a Vez</th>
+                                  <th className="border border-black p-1 w-12 text-center">Subs.</th>
+                                  <th className="border border-black p-1">Programa / Acciones</th>
+                              </tr>
+                          </thead>
+                          <tbody>
+                              {filteredData.map((r, i) => {
+                                  const d = r.dischargeData;
+                                  const isFirst = d?.programDetails?.consultationType === '1a Vez';
+                                  return (
+                                      <tr key={r.noteId}>
+                                          <td className="border border-black p-1 text-center">{i + 1}</td>
+                                          <td className="border border-black p-1">
+                                              <div className="font-bold">{r.patientName}</div>
+                                              <div>{r.curp}</div>
+                                          </td>
+                                          <td className="border border-black p-1 text-center">{r.age}</td>
+                                          <td className="border border-black p-1 text-center">{r.sex}</td>
+                                          <td className="border border-black p-1 text-center">Ninguno</td> {/* Campo placeholder */}
+                                          <td className="border border-black p-1 font-bold">{d?.diagnosticos?.[0]?.name || 'Sin Dx'}</td>
+                                          <td className="border border-black p-1 text-center">{isFirst ? 'X' : ''}</td>
+                                          <td className="border border-black p-1 text-center">{!isFirst ? 'X' : ''}</td>
+                                          <td className="border border-black p-1">
+                                              {d?.program}<br/>
+                                              <span className="italic">{d?.programDetails?.referral !== 'Ninguna' ? `Ref: ${d?.programDetails?.referral}` : ''}</span>
+                                          </td>
+                                      </tr>
+                                  );
+                              })}
+                              {/* Rellenar filas vacías para completar hoja si es necesario */}
+                              {Array.from({ length: Math.max(0, 15 - filteredData.length) }).map((_, i) => (
+                                  <tr key={`empty-${i}`} className="h-8">
+                                      <td className="border border-black p-1 text-center">{filteredData.length + i + 1}</td>
+                                      <td className="border border-black"></td>
+                                      <td className="border border-black"></td>
+                                      <td className="border border-black"></td>
+                                      <td className="border border-black"></td>
+                                      <td className="border border-black"></td>
+                                      <td className="border border-black"></td>
+                                      <td className="border border-black"></td>
+                                      <td className="border border-black"></td>
+                                  </tr>
+                              ))}
+                          </tbody>
+                      </table>
+
+                      {/* Footer Firmas */}
+                      <div className="flex justify-between mt-12 pt-8">
+                          <div className="text-center w-1/3">
+                              <div className="border-b border-black mb-1 h-1"></div>
+                              <p className="font-bold text-[10px]">NOMBRE Y FIRMA DEL MÉDICO</p>
+                          </div>
+                          <div className="text-center w-1/3">
+                              <div className="border-b border-black mb-1 h-1"></div>
+                              <p className="font-bold text-[10px]">SELLO DE LA UNIDAD</p>
+                          </div>
+                      </div>
+                  </div>
               </div>
-
-              <table className="w-full border-collapse border-2 border-slate-900">
-                 <thead>
-                    <tr className="bg-slate-100 border-2 border-slate-900">
-                       <th className="p-3 text-[10px] font-black uppercase border-2 border-slate-900 text-left">Folio</th>
-                       <th className="p-3 text-[10px] font-black uppercase border-2 border-slate-900 text-left">Paciente</th>
-                       <th className="p-3 text-[10px] font-black uppercase border-2 border-slate-900 text-center">Edad/Sexo</th>
-                       <th className="p-3 text-[10px] font-black uppercase border-2 border-slate-900 text-left">Diagnósticos</th>
-                       <th className="p-3 text-[10px] font-black uppercase border-2 border-slate-900 text-center">Programa</th>
-                    </tr>
-                 </thead>
-                 <tbody>
-                    {filtered.map(p => {
-                       const hojaData = getHojaDiariaData(p);
-                       return (
-                       <tr key={p.id} className="border-2 border-slate-900">
-                          <td className="p-3 text-[11px] font-bold border-2 border-slate-900 text-slate-900">{p.id}</td>
-                          <td className="p-3 text-[11px] font-black uppercase border-2 border-slate-900 text-slate-900">{p.name}</td>
-                          <td className="p-3 text-[11px] font-bold text-center border-2 border-slate-900 text-slate-900">{p.sex} / {p.age}</td>
-                          <td className="p-3 text-[10px] font-bold border-2 border-slate-900 text-slate-900">
-                             {hojaData?.diagnosticos?.map((d: any) => d.name).join(', ') || p.reason}
-                          </td>
-                          <td className="p-3 text-[10px] font-bold text-center border-2 border-slate-900 text-slate-900">{hojaData?.program || '-'}</td>
-                       </tr>
-                       );
-                    })}
-                 </tbody>
-              </table>
-
-              <div className="mt-16 border-t-2 border-slate-900 pt-8 grid grid-cols-2 gap-20">
-                 <div className="text-center space-y-2">
-                    <div className="w-full border-b-2 border-slate-900 h-1"></div>
-                    <p className="text-[10px] font-black uppercase">Firma del Responsable de Estadística</p>
-                 </div>
-                 <div className="text-center space-y-2">
-                    <div className="w-full border-b-2 border-slate-900 h-1"></div>
-                    <p className="text-[10px] font-black uppercase">Visto Bueno Dirección Médica</p>
-                 </div>
-              </div>
-           </div>
-        </div>
+          </div>
       )}
 
       <style>{`
         @media print {
-          .no-print, nav, aside, button, select { display: none !important; }
-          body { background: white !important; margin: 0 !important; }
-          main { margin: 0 !important; padding: 0 !important; width: 100% !important; left: 0 !important; top: 0 !important; }
-          .max-w-[215.9mm] { max-width: 100% !important; margin: 0 !important; }
-          .bg-slate-900 { background: #000 !important; color: #fff !important; -webkit-print-color-adjust: exact; }
-          .border-slate-900 { border-color: #000 !important; }
-          @page { margin: 1cm; size: letter; }
+          .no-print, nav, aside, button, select, input[type="date"], input[type="text"] { display: none !important; }
+          body { background: white !important; margin: 0 !important; -webkit-print-color-adjust: exact; }
+          main { margin: 0 !important; padding: 0 !important; width: 100% !important; max-width: 100% !important; left: 0 !important; top: 0 !important; }
+          .max-w-7xl { max-width: 100% !important; padding: 0 !important; margin: 0 !important; }
+          /* Ocultar elementos de UI no deseados */
+          .shadow-xl, .shadow-2xl, .shadow-sm { box-shadow: none !important; }
+          .rounded-\[3rem\] { border-radius: 0 !important; }
+          /* Forzar estilos de tabla para impresión nítida */
+          table { width: 100% !important; border-collapse: collapse !important; font-size: 9pt !important; }
+          th, td { border: 1px solid #000 !important; padding: 4px !important; color: #000 !important; }
+          @page { margin: 1cm; size: letter landscape; }
         }
       `}</style>
     </div>

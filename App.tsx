@@ -39,7 +39,10 @@ import CounterReferralNote from './views/notes/CounterReferralNote';
 import ClinicalSummaryNote from './views/notes/ClinicalSummaryNote';
 import ESAVINote from './views/notes/ESAVINote';
 import EpiDeathReport from './views/notes/EpiDeathReport';
-import MedicalCertificate from './views/notes/MedicalCertificate'; // NEW IMPORT
+import MedicalCertificate from './views/notes/MedicalCertificate'; 
+import PerinatalCard from './views/PerinatalCard'; 
+import ChronicDiseaseControl from './views/ChronicDiseaseControl'; 
+import ComprehensiveHealthControl from './views/ComprehensiveHealthControl'; // NEW IMPORT
 import InformedConsent from './views/InformedConsent';
 import VoluntaryDischarge from './views/VoluntaryDischarge';
 import MPNotification from './views/MPNotification';
@@ -311,23 +314,28 @@ const App: React.FC = () => {
           <Route path="/patient/:id/note/counter-referral/:noteId" element={<CounterReferralNote patients={patients} notes={notes} onSaveNote={handleSaveNote} doctorInfo={doctorInfo} />} />
           <Route path="/patient/:id/note/summary" element={<ClinicalSummaryNote patients={patients} notes={notes} onSaveNote={handleSaveNote} doctorInfo={doctorInfo} />} />
           <Route path="/patient/:id/note/summary/:noteId" element={<ClinicalSummaryNote patients={patients} notes={notes} onSaveNote={handleSaveNote} doctorInfo={doctorInfo} />} />
-          <Route path="/patient/:id/note/esavi" element={<ESAVINote patients={patients} notes={notes} onSaveNote={handleSaveNote} doctorInfo={doctorInfo} />} />
+          <Route path="/patient/:id/note/esavi" element={<ESAVINote patients={patients} notes={notes} onSaveNote={handleSaveNote} />} />
           <Route path="/patient/:id/note/epi-death" element={<EpiDeathReport patients={patients} notes={notes} onSaveNote={handleSaveNote} doctorInfo={doctorInfo} />} />
           <Route path="/patient/:id/note/medical-certificate" element={<MedicalCertificate patients={patients} onSaveNote={handleSaveNote} doctorInfo={doctorInfo} />} />
+          <Route path="/patient/:id/perinatal-card" element={<PerinatalCard patients={patients} onSaveNote={handleSaveNote} onUpdatePatient={handleUpdatePatient} />} />
+          <Route path="/patient/:id/chronic-card" element={<ChronicDiseaseControl patients={patients} onSaveNote={handleSaveNote} onUpdatePatient={handleUpdatePatient} />} />
+          
+          {/* New Route for Comprehensive Health Control */}
+          <Route path="/patient/:id/health-control" element={<ComprehensiveHealthControl patients={patients} onSaveNote={handleSaveNote} onUpdatePatient={handleUpdatePatient} />} />
 
           {/* Other Documents */}
           <Route path="/patient/:id/nursing-sheet" element={<NursingSheet patients={patients} onSaveNote={handleSaveNote} onUpdatePatient={handleUpdatePatient} />} />
           <Route path="/patient/:id/auxiliary-order" element={<AuxiliaryOrder patients={patients} onSaveNote={handleSaveNote} doctorInfo={doctorInfo} />} />
-          <Route path="/patient/:id/auxiliary-report" element={<AuxiliaryReport patients={patients} onSaveNote={handleSaveNote} onUpdatePatient={handleUpdatePatient} doctorInfo={doctorInfo} />} />
+          <Route path="/patient/:id/auxiliary-report" element={<AuxiliaryReport patients={patients} onSaveNote={handleSaveNote} onUpdatePatient={handleUpdatePatient} />} />
           <Route path="/auxiliary-intake" element={<AuxiliaryIntake patients={patients} onSaveNote={handleSaveNote} onUpdatePatient={handleUpdatePatient} onAddPatient={handleAddPatient} />} />
           <Route path="/patient/:id/consent" element={<InformedConsent patients={patients} onSaveNote={handleSaveNote} doctorInfo={doctorInfo} />} />
           <Route path="/patient/:id/voluntary-discharge" element={<VoluntaryDischarge patients={patients} onSaveNote={handleSaveNote} doctorInfo={doctorInfo} />} />
-          <Route path="/patient/:id/mp-notification" element={<MPNotification patients={patients} onSaveNote={handleSaveNote} doctorInfo={doctorInfo} />} />
-          <Route path="/patient/:id/death-certificate" element={<DeathCertificate patients={patients} onSaveNote={handleSaveNote} doctorInfo={doctorInfo} />} />
-          <Route path="/patient/:id/transfusion" element={<TransfusionRegistry patients={patients} onSaveNote={handleSaveNote} doctorInfo={doctorInfo} />} />
-          <Route path="/patient/:id/social-work" element={<SocialWorkSheet patients={patients} onSaveNote={handleSaveNote} doctorInfo={doctorInfo} />} />
-          <Route path="/patient/:id/stomatology" element={<StomatologyExpedient patients={patients} onSaveNote={handleSaveNote} doctorInfo={doctorInfo} />} />
-          <Route path="/patient/:id/epidemiology" element={<EpidemiologyStudy patients={patients} onSaveNote={handleSaveNote} doctorInfo={doctorInfo} />} />
+          <Route path="/patient/:id/mp-notification" element={<MPNotification patients={patients} onSaveNote={handleSaveNote} />} />
+          <Route path="/patient/:id/death-certificate" element={<DeathCertificate patients={patients} onSaveNote={handleSaveNote} />} />
+          <Route path="/patient/:id/transfusion" element={<TransfusionRegistry patients={patients} onSaveNote={handleSaveNote} />} />
+          <Route path="/patient/:id/social-work" element={<SocialWorkSheet patients={patients} onSaveNote={handleSaveNote} />} />
+          <Route path="/patient/:id/stomatology" element={<StomatologyExpedient patients={patients} onSaveNote={handleSaveNote} />} />
+          <Route path="/patient/:id/epidemiology" element={<EpidemiologyStudy patients={patients} onSaveNote={handleSaveNote} />} />
           <Route path="/patient/:id/telemedicine-consent" element={<TelemedicineConsent patients={patients} onSaveNote={handleSaveNote} onUpdatePatient={handleUpdatePatient} doctorInfo={doctorInfo} />} />
           
           <Route path="/history-registry" element={<HistoryRegistries patients={patients} notes={notes} />} />

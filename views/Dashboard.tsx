@@ -173,13 +173,13 @@ const Dashboard: React.FC<DashboardProps> = (props) => {
   };
 
   const handleManualPayment = (p: Patient) => {
-      if(window.confirm("¿Confirmar que el pago ha sido realizado manualmente? Esto actualizará el estado y habilitará el paso a toma de muestras.")) {
+      if(window.confirm("¿Confirmar que el pago ha sido realizado manualmente? Esto actualizará el estado.")) {
           if(onUpdatePatient) {
               onUpdatePatient({ 
                   ...p, 
                   paymentStatus: 'Pagado', 
                   pendingCharges: [],
-                  status: PatientStatus.WAITING_FOR_SAMPLES // Automáticamente lo pone disponible para toma
+                  // status: PatientStatus.WAITING_FOR_SAMPLES // Ya no es necesario cambiar status aquí, el flujo es libre
               });
           }
       }
@@ -319,16 +319,15 @@ const Dashboard: React.FC<DashboardProps> = (props) => {
                            )}
 
                            <button 
-                             disabled={isPendingPayment}
                              onClick={() => onUpdateStatus(p.id, PatientStatus.TAKING_SAMPLES)}
                              className={`w-full py-4 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-lg transition-all flex items-center justify-center gap-2 ${
                                  isPendingPayment 
-                                 ? 'bg-slate-300 cursor-not-allowed text-slate-500 shadow-none' 
+                                 ? 'bg-amber-500 hover:bg-amber-600 shadow-amber-200' 
                                  : 'bg-indigo-600 hover:bg-slate-900'
                              }`}
                            >
                              {isPendingPayment ? (
-                                 <><Lock size={14} /> Requiere Pago</>
+                                 <><AlertTriangle size={14} /> Pasar (Pago Pendiente)</>
                              ) : (
                                  <>Llamar a Toma <ArrowRight size={14} /></>
                              )}

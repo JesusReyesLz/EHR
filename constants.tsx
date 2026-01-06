@@ -431,7 +431,10 @@ export const NOTE_CATEGORIES = [
       'Nota Post-anestésica',
       'Nota de Alta de Recuperación',
       'Nota Post-operatoria',
-      'Nota de Egreso / Alta'
+      'Nota de Egreso / Alta',
+      'Carnet Perinatal / Control Prenatal',
+      'Tarjeta de Control de Enfermedades Crónicas',
+      'Carnet de Salud Integral / Niño Sano'
     ]
   },
   {
@@ -441,7 +444,8 @@ export const NOTE_CATEGORIES = [
       'Hoja de Egreso Voluntario',
       'Notificación al Ministerio Público',
       'Certificado de Defunción',
-      'Consentimiento Telemedicina'
+      'Consentimiento Telemedicina',
+      'Certificado Médico'
     ]
   },
   {

@@ -179,9 +179,10 @@ const NewPatient: React.FC<NewPatientProps> = ({ onAdd, patients }) => {
 
   const selectPatientFromDb = (p: Patient) => {
     // Precargar datos del paciente existente PERO preparar para nueva visita
+    // IMPORTANTE: MANTENEMOS EL ID ORIGINAL PARA HISTORIAL CONTINUO
     setForm({
       ...p, // Copia todos los datos demográficos (Nombre, CURP, Alergias, ID original...)
-      // Reseteamos datos de la visita actual
+      // Reseteamos datos de la visita actual para reactivar
       status: PatientStatus.SCHEDULED,
       priority: PriorityLevel.NONE,
       scheduledDate: getLocalDateString(),
@@ -190,7 +191,9 @@ const NewPatient: React.FC<NewPatientProps> = ({ onAdd, patients }) => {
       agendaStatus: AgendaStatus.PENDING,
       transitTargetBed: undefined,
       transitTargetModule: undefined,
-      bedNumber: undefined // Quitamos cama si tenía una asignada antes
+      bedNumber: undefined, // Quitamos cama si tenía una asignada antes
+      paymentStatus: 'Pendiente', // Resetear pago
+      pendingCharges: []
     });
     setIsDbMode(false); // Cerrar buscador
     setDbSearchTerm('');
@@ -280,13 +283,14 @@ const NewPatient: React.FC<NewPatientProps> = ({ onAdd, patients }) => {
     const dateChanged = isEditing && existingPatient && existingPatient.scheduledDate !== form.scheduledDate;
 
     if (dateChanged && existingPatient) {
+        // En caso de reagenda, SÍ creamos un registro fantasma para dejar rastro de la cita original cancelada/movida
         const ghostRecord: Patient = {
             ...existingPatient,
             id: `OLD-${existingPatient.id}-${Date.now()}`,
             scheduledDate: existingPatient.scheduledDate,
             appointmentTime: existingPatient.appointmentTime,
             agendaStatus: AgendaStatus.RESCHEDULED,
-            status: PatientStatus.ATTENDED,
+            status: PatientStatus.ATTENDED, // Lo marcamos como atendido/histórico
             modifiedBy: "SISTEMA_REAGENDA_HISTORICO"
         };
         onAdd(ghostRecord);
@@ -310,12 +314,13 @@ const NewPatient: React.FC<NewPatientProps> = ({ onAdd, patients }) => {
     }
 
     // Construcción final del objeto con datos de agenda actualizados
+    // NOTA: Si era un paciente recuperado de DB, usamos su mismo ID para mantener historial
     const patientData: Patient = {
       ...form as Patient,
       id: form.id || Math.random().toString(36).substr(2, 7).toUpperCase(),
       name: form.name?.toUpperCase() || '',
       curp: form.curp?.toUpperCase() || '',
-      lastVisit: lastVisitDate,
+      lastVisit: lastVisitDate, // Actualizamos última visita a hoy
       reason: finalReason || 'Ingreso a sistema',
       priority: form.priority || PriorityLevel.NONE,
       status: finalStatus,
@@ -426,7 +431,7 @@ const NewPatient: React.FC<NewPatientProps> = ({ onAdd, patients }) => {
             {isEditing ? <ChevronLeft className="w-6 h-6 text-slate-600" /> : <Search className="w-6 h-6 text-blue-600" />}
           </button>
           <div>
-            <h1 className="text-3xl font-black text-slate-900 tracking-tight uppercase leading-none flex items-center gap-3">
+            <h1 className="text-3xl font-black text-slate-900 uppercase tracking-tight leading-none flex items-center gap-3">
               {isEditing ? <Edit className="text-blue-600" /> : <User className="text-emerald-600" />}
               {isEditing ? 'Modificar Datos' : form.id ? 'Reingreso de Paciente' : 'Nuevo Registro'}
             </h1>
