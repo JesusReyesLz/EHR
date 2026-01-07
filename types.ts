@@ -651,6 +651,28 @@ export interface PromotionTopic {
     notes?: string;
 }
 
+// Geriatric Assessment Interface
+export interface GeriatricAssessment {
+    date: string;
+    katzScore: number; // /6 ABVD
+    lawtonScore: number; // /8 AIVD
+    minimentalScore: number; // /30 Cognitivo
+    depressionScale: number; // /15 Yesavage
+    nutritionalScore: number; // MNA
+    mobility: 'Normal' | 'Riesgo Caídas' | 'Frágil';
+    notes: string;
+}
+
+// NEW: Adolescent Assessment
+export interface AdolescentAssessment {
+    date: string;
+    tannerStage: string; // I, II, III, IV, V
+    headssSummary: string; // Resumen psicosocial
+    phq9Score: number; // Depresión
+    gad7Score: number; // Ansiedad
+    notes: string;
+}
+
 export interface HealthControlRecord {
     id: string;
     patientId: string;
@@ -660,13 +682,14 @@ export interface HealthControlRecord {
     screenings: ScreeningRecord[];
     visits: PreventiveVisit[];
     
-    // Specific Trackers based on age
-    deworming?: { lastDate: string }; // Desparasitación (niños)
-    vitaminA?: { lastDate: string }; // Vitamina A (niños)
-    sexualHealth?: { method: string, counselingDate: string }; // Adolescentes/Adultos
-    
     // NEW FIELD: Health Promotion Topics
     healthPromotion?: PromotionTopic[]; // Array of topics covered
+    
+    // NEW FIELD: Geriatric specific records
+    geriatricAssessments?: GeriatricAssessment[];
+
+    // NEW FIELD: Adolescent specific records
+    adolescentAssessments?: AdolescentAssessment[];
 }
 
 // --- SUIVE / DISCHARGE DATA ---
