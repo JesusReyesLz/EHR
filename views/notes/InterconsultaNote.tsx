@@ -7,9 +7,11 @@ import {
   HeartPulse, Thermometer, Wind, FileText, ClipboardList,
   Brain, Microscope, Clock, Calendar
 } from 'lucide-react';
-import { Patient, ClinicalNote, Vitals } from '../../types';
+/* Added DoctorInfo to imports */
+import { Patient, ClinicalNote, Vitals, DoctorInfo } from '../../types';
 
-const InterconsultaNote: React.FC<{ patients: Patient[], notes: ClinicalNote[], onSaveNote: (n: ClinicalNote) => void }> = ({ patients, notes, onSaveNote }) => {
+/* Added doctorInfo to props interface */
+const InterconsultaNote: React.FC<{ patients: Patient[], notes: ClinicalNote[], onSaveNote: (n: ClinicalNote) => void, doctorInfo?: DoctorInfo }> = ({ patients, notes, onSaveNote, doctorInfo }) => {
   const { id, noteId } = useParams();
   const navigate = useNavigate();
   const patient = patients.find(p => p.id === id);
@@ -97,7 +99,8 @@ const InterconsultaNote: React.FC<{ patients: Patient[], notes: ClinicalNote[], 
       patientId: patient.id,
       type: 'Nota de Interconsulta',
       date: new Date().toLocaleString('es-MX'),
-      author: 'Dr. Alejandro Méndez (Especialista)',
+      /* Changed author to use doctorInfo name if available */
+      author: doctorInfo?.name || 'Dr. Alejandro Méndez (Especialista)',
       content: { ...form, vitals }, // Guardamos snapshot de vitales
       isSigned: finalize,
       hash: finalize ? `CERT-INT-${Math.random().toString(36).substr(2, 9).toUpperCase()}` : undefined
@@ -320,6 +323,28 @@ const InterconsultaNote: React.FC<{ patients: Patient[], notes: ClinicalNote[], 
             </div>
         </div>
       </div>
+        
+        {/* Footer Acciones y Firma Digital */}
+        <div className="p-12 bg-slate-900 text-white flex justify-between items-center no-print overflow-hidden relative">
+           <div className="absolute right-0 top-0 h-full w-64 bg-indigo-600/20 -skew-x-12 translate-x-32"></div>
+           <div className="flex items-center gap-6 relative z-10">
+              <Lock size={24} className="text-indigo-400" />
+              <div>
+                 /* Updated footer label and used doctorInfo from props */
+                 <p className="text-[10px] font-black uppercase tracking-widest text-indigo-400">Certificación de Interconsulta Especializada</p>
+                 <p className="text-xs font-bold text-slate-400 mt-1 uppercase tracking-tighter">{doctorInfo?.name} • Ced. {doctorInfo?.cedula}</p>
+              </div>
+           </div>
+           <div className="flex gap-4 relative z-10">
+              <button onClick={() => navigate(-1)} className="px-8 py-4 text-slate-400 font-black uppercase text-[10px] hover:text-white transition-colors">Descartar</button>
+              <button 
+                onClick={() => handleSave(true)}
+                className="px-12 py-5 bg-indigo-600 text-white rounded-[2rem] font-black text-[11px] uppercase tracking-[0.2em] shadow-2xl hover:bg-emerald-600 transition-all flex items-center gap-4"
+              >
+                 <Save size={20} /> Certificar Dictamen Final
+              </button>
+           </div>
+        </div>
     </div>
   );
 };

@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { 
@@ -6,10 +5,11 @@ import {
   Save, User, AlertTriangle, CheckCircle2, FlaskConical,
   X, Search, Info, Plus, Trash2, ClipboardList, Zap, ArrowLeft, Eye, FileText
 } from 'lucide-react';
-import { Patient, ClinicalNote, PriceItem } from '../types';
+import { Patient, ClinicalNote, PriceItem, DoctorInfo } from '../types';
 import { LAB_CATALOG, IMAGING_CATALOG, INITIAL_PRICES } from '../constants';
 
-const AuxiliaryOrder: React.FC<{ patients: Patient[], onSaveNote: (n: ClinicalNote) => void }> = ({ patients, onSaveNote }) => {
+// Added doctorInfo to the props interface
+const AuxiliaryOrder: React.FC<{ patients: Patient[], onSaveNote: (n: ClinicalNote) => void, doctorInfo: DoctorInfo }> = ({ patients, onSaveNote, doctorInfo }) => {
   const { id } = useParams();
   const navigate = useNavigate();
   const patient = patients.find(p => p.id === id);
@@ -83,7 +83,8 @@ const AuxiliaryOrder: React.FC<{ patients: Patient[], onSaveNote: (n: ClinicalNo
       patientId: patient.id,
       type: 'Solicitud de Estudios Auxiliares',
       date: new Date().toLocaleString('es-MX'),
-      author: 'Dr. Alejandro Méndez',
+      // Use doctorInfo for the author
+      author: doctorInfo.name,
       content: { ...form, metadata: selectedMetadata },
       isSigned: true,
       hash: `ORDER-SHA-${Math.random().toString(36).substr(2, 8).toUpperCase()}`
@@ -205,7 +206,7 @@ const AuxiliaryOrder: React.FC<{ patients: Patient[], onSaveNote: (n: ClinicalNo
                 <button 
                   onClick={handleSave}
                   disabled={form.labStudies.length === 0 && form.imagingStudies.length === 0}
-                  className="w-full py-6 bg-blue-600 text-white rounded-[2rem] font-black text-xs uppercase tracking-[0.2em] shadow-xl hover:bg-emerald-600 transition-all flex items-center justify-center gap-4 disabled:opacity-20"
+                  className="w-full py-6 bg-blue-600 text-white rounded-[2rem] font-black text-xs uppercase tracking-[0.2em] shadow-xl hover:bg-emerald-600 transition-all flex items-center justify-center gap-4 disabled:opacity-20 active:scale-95"
                 >
                    <Save size={20} /> Guardar y Sellar Orden
                 </button>
@@ -217,10 +218,10 @@ const AuxiliaryOrder: React.FC<{ patients: Patient[], onSaveNote: (n: ClinicalNo
         <div className="bg-white p-16 rounded-[4rem] shadow-2xl border border-slate-100 space-y-12 animate-in zoom-in-95 print:shadow-none print:border-none print:p-0">
            <div className="flex justify-between border-b-2 border-slate-900 pb-10">
               <div className="space-y-4">
-                 <h2 className="text-2xl font-black text-slate-900 uppercase tracking-tighter">Hospital General San Rafael</h2>
+                 <h2 className="text-2xl font-black text-slate-900 uppercase tracking-tighter">{doctorInfo.hospital}</h2>
                  <div className="space-y-1">
-                    <p className="text-sm font-black uppercase tracking-tight">Dr. Alejandro Méndez</p>
-                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Cédula Profesional: 12345678</p>
+                    <p className="text-sm font-black uppercase tracking-tight">{doctorInfo.name}</p>
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Cédula Profesional: {doctorInfo.cedula}</p>
                  </div>
               </div>
               <div className="text-right">

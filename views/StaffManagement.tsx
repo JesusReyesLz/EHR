@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Briefcase, UserPlus, Calendar, Clock, CheckCircle2, XCircle, Search, 
@@ -96,8 +97,8 @@ const StaffManagement: React.FC<StaffManagementProps> = ({ staffList, onUpdateSt
   // --- HELPERS ---
   const generateId = () => `STF-${Date.now()}-${Math.floor(Math.random()*1000)}`;
   
-  const roles: StaffRole[] = ['Médico Especialista', 'Médico General', 'Enfermería', 'Químico / Laboratorio', 'Radiólogo / Imagen', 'Camillero', 'Limpieza / Intendencia', 'Caja / Admisión', 'Administrativo / RRHH', 'Farmacia'];
-  const areas = ['Urgencias', 'Hospitalización', 'UCI', 'Quirófano', 'Consulta Externa', 'Laboratorio', 'Imagenología', 'Farmacia', 'Caja', 'Recepción', 'Limpieza General'];
+  const roles: StaffRole[] = ['Médico Especialista', 'Médico General', 'Enfermería', 'Químico / Laboratorio', 'Radiólogo / Imagen', 'Camillero', 'Limpieza / Intendencia', 'Caja / Admisión', 'Administrativo / RRHH', 'Farmacia', 'Repartidor / Chofer'];
+  const areas = ['Urgencias', 'Hospitalización', 'UCI', 'Quirófano', 'Consulta Externa', 'Laboratorio', 'Imagenología', 'Farmacia', 'Caja', 'Recepción', 'Limpieza General', 'Logística'];
   const shiftTypes: ShiftType[] = ['Matutino', 'Vespertino', 'Nocturno A', 'Nocturno B', 'Guardia', 'Jornada Acumulada', 'Personalizado'];
   const allModulesList = Object.values(ModuleType);
 
@@ -674,7 +675,7 @@ const StaffManagement: React.FC<StaffManagementProps> = ({ staffList, onUpdateSt
                     
                     <div className="border-t border-slate-50 pt-4 mt-2 space-y-2">
                         {/* Status Badges for Integration */}
-                        <div className="flex gap-2">
+                        <div className="flex gap-2 flex-wrap">
                             {s.isTelemedicineEnabled && (
                                 <span className="bg-violet-100 text-violet-700 text-[8px] font-black uppercase px-2 py-1 rounded flex items-center gap-1 border border-violet-200">
                                     <Wifi size={8} /> Telemedicina
@@ -990,6 +991,50 @@ const StaffManagement: React.FC<StaffManagementProps> = ({ staffList, onUpdateSt
                             );
                         })}
                      </div>
+                  </div>
+                  
+                  {/* Expanded Integration Settings */}
+                  <div className="col-span-2 p-6 bg-slate-50 rounded-3xl border border-slate-100 space-y-4">
+                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                          <Zap size={14}/> Permisos de Plataforma e Integración
+                      </p>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                          <button 
+                              onClick={() => setStaffForm(prev => ({...prev, isTelemedicineEnabled: !prev.isTelemedicineEnabled}))}
+                              className={`p-4 rounded-2xl border-2 text-left transition-all ${staffForm.isTelemedicineEnabled ? 'bg-violet-50 border-violet-200 text-violet-700' : 'bg-white border-slate-200 text-slate-400'}`}
+                          >
+                              <div className="flex items-center justify-between mb-2">
+                                  <Wifi size={20}/>
+                                  {staffForm.isTelemedicineEnabled && <CheckCircle2 size={16}/>}
+                              </div>
+                              <span className="text-[10px] font-black uppercase">Telemedicina</span>
+                              <p className="text-[8px] opacity-70 mt-1">Habilita agenda digital y videoconsultas</p>
+                          </button>
+
+                          <button 
+                              onClick={() => setStaffForm(prev => ({...prev, isHomeServiceEnabled: !prev.isHomeServiceEnabled}))}
+                              className={`p-4 rounded-2xl border-2 text-left transition-all ${staffForm.isHomeServiceEnabled ? 'bg-amber-50 border-amber-200 text-amber-700' : 'bg-white border-slate-200 text-slate-400'}`}
+                          >
+                              <div className="flex items-center justify-between mb-2">
+                                  <Ambulance size={20}/>
+                                  {staffForm.isHomeServiceEnabled && <CheckCircle2 size={16}/>}
+                              </div>
+                              <span className="text-[10px] font-black uppercase">Asignable a Rutas/Domicilio</span>
+                              <p className="text-[8px] opacity-70 mt-1">Permite asignación en Centro de Comando Logístico</p>
+                          </button>
+
+                          <button 
+                              onClick={() => setStaffForm(prev => ({...prev, mobileAppAccess: !prev.mobileAppAccess}))}
+                              className={`p-4 rounded-2xl border-2 text-left transition-all ${staffForm.mobileAppAccess ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-white border-slate-200 text-slate-400'}`}
+                          >
+                              <div className="flex items-center justify-between mb-2">
+                                  <Smartphone size={20}/>
+                                  {staffForm.mobileAppAccess && <CheckCircle2 size={16}/>}
+                              </div>
+                              <span className="text-[10px] font-black uppercase">App Móvil</span>
+                              <p className="text-[8px] opacity-70 mt-1">Acceso a expediente desde dispositivos móviles</p>
+                          </button>
+                      </div>
                   </div>
                </div>
 

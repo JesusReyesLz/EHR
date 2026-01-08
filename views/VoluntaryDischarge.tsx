@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { 
@@ -13,6 +12,7 @@ interface VoluntaryDischargeProps {
   patients: Patient[];
   onSaveNote: (note: ClinicalNote) => void;
   doctorInfo?: DoctorInfo;
+  notes?: ClinicalNote[];
 }
 
 const VoluntaryDischarge: React.FC<VoluntaryDischargeProps> = ({ patients, onSaveNote, doctorInfo }) => {

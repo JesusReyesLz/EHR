@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { 
@@ -7,15 +6,16 @@ import {
   Lock, PenTool, Info, Wifi, Camera, ShieldAlert,
   FileSignature, FlaskConical, FileText
 } from 'lucide-react';
-import { Patient, ClinicalNote } from '../types';
+import { Patient, ClinicalNote, DoctorInfo } from '../types';
 
 interface TelemedicineConsentProps {
   patients: Patient[];
   onSaveNote: (note: ClinicalNote) => void;
   onUpdatePatient?: (patient: Patient) => void; 
+  doctorInfo?: DoctorInfo;
 }
 
-const TelemedicineConsent: React.FC<TelemedicineConsentProps> = ({ patients, onSaveNote, onUpdatePatient }) => {
+const TelemedicineConsent: React.FC<TelemedicineConsentProps> = ({ patients, onSaveNote, onUpdatePatient, doctorInfo }) => {
   const { id } = useParams();
   const navigate = useNavigate();
   const patient = patients.find(p => p.id === id);
@@ -47,7 +47,7 @@ const TelemedicineConsent: React.FC<TelemedicineConsentProps> = ({ patients, onS
       patientId: patient.id,
       type: 'Consentimiento para Telemedicina y Servicios Digitales',
       date: new Date().toLocaleString('es-MX'),
-      author: 'Dr. Alejandro Méndez',
+      author: doctorInfo?.name || 'Dr. Alejandro Méndez',
       content: { ...acceptedTerms, location: 'Teleconsulta remota' },
       isSigned: true,
       hash: `CERT-TELE-${Math.random().toString(36).substr(2, 9).toUpperCase()}`,
@@ -185,7 +185,7 @@ const TelemedicineConsent: React.FC<TelemedicineConsentProps> = ({ patients, onS
               <div className="space-y-16 text-center">
                  <div className="w-full border-b border-slate-900 h-1"></div>
                  <div>
-                    <p className="text-sm font-black uppercase">Dr. Alejandro Méndez</p>
+                    <p className="text-sm font-black uppercase">{doctorInfo?.name || 'Dr. Alejandro Méndez'}</p>
                     <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Nombre y Firma del Médico</p>
                  </div>
               </div>

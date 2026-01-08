@@ -30,8 +30,11 @@ export enum PatientStatus {
   READY_RESULTS = 'Resultados Listos',
   TRANSIT = 'En camino a sala',
   SCHEDULED = 'Programado',
-  ONLINE_WAITING = 'En Sala Virtual', // Esperando a su médico específico
+  
+  // TELEMEDICINE STATES
+  ONLINE_WAITING = 'En Sala Virtual', // Esperando a su médico específico (Cita)
   ONLINE_QUEUE = 'En Bolsa General', // Espera rápida (Cualquier médico)
+  ONLINE_REVIEWING = 'Médico Revisando Historial', // Médico aceptó y lee antes de llamar
   ONLINE_IN_CALL = 'En Videoconsulta'
 }
 
@@ -79,7 +82,8 @@ export type StaffRole =
   | 'Limpieza / Intendencia' 
   | 'Caja / Admisión' 
   | 'Administrativo / RRHH'
-  | 'Farmacia';
+  | 'Farmacia'
+  | 'Repartidor / Chofer'; // Added for Home Delivery
 
 export type ShiftType = 'Matutino' | 'Vespertino' | 'Nocturno A' | 'Nocturno B' | 'Guardia' | 'Jornada Acumulada' | 'Personalizado';
 
@@ -97,7 +101,7 @@ export interface StaffMember {
   
   // Platform Integration Flags (Vínculos)
   isTelemedicineEnabled?: boolean; // Puede dar consulta online
-  isHomeServiceEnabled?: boolean; // Puede ser asignado a rutas (Enfermería/Labs)
+  isHomeServiceEnabled?: boolean; // Puede ser asignado a rutas (Enfermería/Labs/Chofer)
   mobileAppAccess?: boolean; // Tiene acceso a la App ECE Móvil
   
   // Payroll Data
@@ -358,6 +362,13 @@ export interface ClinicDocument {
   uploadDate: string;
 }
 
+export interface DoctorSchedule {
+    days: number[]; // 0=Sunday, 1=Monday, etc.
+    startHour: string; // "09:00"
+    endHour: string; // "17:00"
+    slotDuration: number; // minutes
+}
+
 export interface DoctorInfo {
   // Clinic / Multi-Tenant Data
   id?: string; // Added ID for matching
@@ -366,7 +377,8 @@ export interface DoctorInfo {
   // Personal Data
   name: string;
   cedula: string;
-  institution: string;
+  university?: string; // NEW
+  institution: string; // Hospital de egreso/especialidad
   specialty: string;
   email: string;
   address: string;
@@ -376,6 +388,7 @@ export interface DoctorInfo {
   cedulaUrl?: string;
   // SaaS Features
   isPremium?: boolean;
+  isVerified?: boolean; // NEW: Sello de validación
   rating?: number;
   reviewCount?: number;
   price?: number;
@@ -388,10 +401,14 @@ export interface DoctorInfo {
   coverUrl?: string;
   gallery?: string[];
   allowReviews?: boolean; // Toggle para habilitar/deshabilitar comentarios
+  reviews?: { user: string; date: string; rating: number; text: string }[]; // Added Reviews
   
   // Real-time Status
   isOnline?: boolean; // Available for Telemedicine
   walletBalance?: number; // Saldo acumulado por consultas
+
+  // Scheduling
+  schedule?: DoctorSchedule;
 
   // Clinic Documents
   clinicDocuments?: ClinicDocument[];
@@ -407,6 +424,10 @@ export interface Vitals {
   height: number;
   bmi: number;
   date: string;
+  
+  // IoT Extensions
+  source?: 'Manual' | 'Apple Health' | 'Google Fit' | 'IoT Device';
+  glucose?: number;
 }
 
 export interface MedicationPrescription {
@@ -469,6 +490,11 @@ export interface HomeServiceRequest {
     acceptedAt?: string; // Timestamp de cuando el enfermero aceptó el trabajo
     completedAt?: string; // Timestamp de finalización
     commission?: number; // Monto ganado por el servicio
+    
+    // Mixed Service Flags
+    hasDoctorVisit?: boolean;
+    hasLabCollection?: boolean;
+    hasPharmacyDelivery?: boolean;
 }
 
 // --- PERINATAL & PREGNANCY TYPES ---

@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { 
@@ -6,9 +5,15 @@ import {
   History, Home, Award, Save, Eye, Microscope, ClipboardList, Thermometer, Wind, Scale, Ruler, HeartPulse,
   RefreshCw, CalendarCheck, AlertCircle
 } from 'lucide-react';
-import { Patient, ClinicalNote } from '../types';
+import { Patient, ClinicalNote, DoctorInfo } from '../types';
 
-const MedicalHistory: React.FC<{ patients: Patient[], notes: ClinicalNote[], onUpdatePatient: (p: Patient) => void, onSaveNote: (n: ClinicalNote) => void }> = ({ patients, notes, onUpdatePatient, onSaveNote }) => {
+const MedicalHistory: React.FC<{ 
+  patients: Patient[], 
+  notes: ClinicalNote[], 
+  onUpdatePatient: (p: Patient) => void, 
+  onSaveNote: (n: ClinicalNote) => void,
+  doctorInfo?: DoctorInfo 
+}> = ({ patients, notes, onUpdatePatient, onSaveNote, doctorInfo }) => {
   const { id } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
@@ -131,7 +136,7 @@ const MedicalHistory: React.FC<{ patients: Patient[], notes: ClinicalNote[], onU
       patientId: patient.id,
       type: 'Historia Clínica Medica',
       date: new Date().toLocaleString('es-MX'),
-      author: 'Dr. Alejandro Méndez', // Debería venir de doctorInfo context
+      author: doctorInfo?.name || 'Dr. Alejandro Méndez', 
       content: { ...form, isDraft: true },
       isSigned: false,
       hash: 'REVISIÓN-EN-PROCESO'
@@ -149,7 +154,7 @@ const MedicalHistory: React.FC<{ patients: Patient[], notes: ClinicalNote[], onU
         patientId: patient.id,
         type: 'Historia Clínica Medica',
         date: new Date().toLocaleString('es-MX'),
-        author: 'Dr. Alejandro Méndez',
+        author: doctorInfo?.name || 'Dr. Alejandro Méndez',
         content: { ...form, isDraft: false },
         isSigned: true,
         hash: `CERT-HC-${Math.random().toString(36).substr(2, 9).toUpperCase()}`
@@ -430,8 +435,8 @@ const MedicalHistory: React.FC<{ patients: Patient[], notes: ClinicalNote[], onU
                 <p className="text-slate-500 max-w-md mx-auto text-sm font-medium uppercase leading-relaxed italic">"Al certificar, el documento quedará sellado digitalmente con Nombre, Cédula y Firma del Médico."</p>
                 <div className="bg-slate-50 p-6 rounded-2xl inline-block text-left mt-4 border border-slate-100">
                     <p className="text-[10px] font-black uppercase text-slate-400 mb-1">Médico Responsable</p>
-                    <p className="text-lg font-black text-slate-900">Dr. Alejandro Méndez</p>
-                    <p className="text-xs font-mono text-slate-500">Cédula Prof: 12345678</p>
+                    <p className="text-lg font-black text-slate-900">{doctorInfo?.name}</p>
+                    <p className="text-xs font-mono text-slate-500">Cédula Prof: {doctorInfo?.cedula}</p>
                 </div>
              </div>
           </div>

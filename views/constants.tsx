@@ -417,6 +417,7 @@ export const NOTE_CATEGORIES = [
   {
     title: 'Evaluación y Seguimiento',
     notes: [
+      'Nota de Ingreso a Hospitalización',
       'Historia Clínica Medica',
       'Nota de Evolución',
       'Nota Inicial de Urgencias',
@@ -433,7 +434,8 @@ export const NOTE_CATEGORIES = [
       'Nota Post-operatoria',
       'Nota de Egreso / Alta',
       'Carnet Perinatal / Control Prenatal',
-      'Tarjeta de Control de Enfermedades Crónicas'
+      'Tarjeta de Control de Enfermedades Crónicas',
+      'Carnet de Salud Integral / Niño Sano'
     ]
   },
   {

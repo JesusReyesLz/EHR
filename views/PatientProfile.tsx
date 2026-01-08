@@ -1,370 +1,157 @@
-
 import React, { useState, useMemo, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { 
-  Activity, ChevronLeft, Printer, ShieldCheck, User, Plus, FileText, ClipboardList, 
-  Thermometer, Heart, Wind, Droplet, Edit3, Trash2, Save, HeartPulse, 
-  TrendingUp, ChevronRight, FilePlus2, Flame, Droplets, X, QrCode, BadgeCheck, Scale, Ruler,
-  Calendar, CheckCircle2, Lock, Search, AlertOctagon, Fingerprint, LogOut, Stethoscope,
-  Globe, Accessibility, HelpCircle, Archive, Baby, Pill, AlertTriangle, Brain
+  User, Activity, FileText, ChevronRight, HeartPulse, Plus, X, 
+  Search, Printer, Lock, CheckCircle2, Edit3, AlertOctagon, 
+  Thermometer, Droplet, Scale, Ruler, FilePlus2, ClipboardList,
+  LogOut, Globe, Accessibility, QrCode
 } from 'lucide-react';
 import { 
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
+  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer 
 } from 'recharts';
-import { Patient, ClinicalNote, Vitals, DoctorInfo, PatientStatus } from '../types';
+import { Patient, ClinicalNote, DoctorInfo, PatientStatus, Vitals } from '../types';
 import { NOTE_CATEGORIES } from '../constants';
 
-// Helper para parsear fechas híbridas
-const parseDateSafe = (dateStr: string): Date => {
-  if (!dateStr) return new Date();
-  const d = new Date(dateStr);
-  if (!isNaN(d.getTime())) return d;
-  try {
-    const cleanStr = dateStr.trim();
-    const parts = cleanStr.split(/[\s,]+/); 
-    const datePart = parts[0];
-    const timePart = parts.length > 1 ? parts[1] : '00:00';
-    if (datePart.includes('/')) {
-        const [day, month, year] = datePart.split('/').map(Number);
-        let [hour, minute] = timePart.split(':').map(Number);
-        if (isNaN(hour)) hour = 0;
-        if (isNaN(minute)) minute = 0;
-        if (day && month && year) {
-             const composed = new Date(year, month - 1, day, hour, minute);
-             if (!isNaN(composed.getTime())) return composed;
-        }
-    }
-  } catch (e) {}
-  return new Date(0); 
-};
+interface PatientProfileProps {
+  patients: Patient[];
+  notes: ClinicalNote[];
+  onUpdatePatient: (p: Patient) => void;
+  onSaveNote: (n: ClinicalNote) => void;
+  doctorInfo: DoctorInfo;
+}
 
-const PatientProfile: React.FC<{ patients: Patient[], notes: ClinicalNote[], onUpdatePatient: (p: Patient) => void, onSaveNote: (n: ClinicalNote) => void, doctorInfo: DoctorInfo }> = ({ patients, notes, onUpdatePatient, onSaveNote, doctorInfo }) => {
+const PatientProfile: React.FC<PatientProfileProps> = ({ patients, notes, onUpdatePatient, onSaveNote, doctorInfo }) => {
   const { id } = useParams();
   const navigate = useNavigate();
   const patient = patients.find(p => p.id === id);
+
   const [showMenu, setShowMenu] = useState(false);
   const [menuSearchTerm, setMenuSearchTerm] = useState('');
   const [selectedNote, setSelectedNote] = useState<ClinicalNote | null>(null);
-  const [showVitalsModal, setShowVitalsModal] = useState(false);
   
-  // MODAL FINALIZAR ATENCIÓN (HOJA DIARIA / SUIVE)
+  const [showVitalsModal, setShowVitalsModal] = useState(false);
+  const [vitalsForm, setVitalsForm] = useState<Partial<Vitals>>({});
+
   const [showFinalizeModal, setShowFinalizeModal] = useState(false);
   const [finalizeData, setFinalizeData] = useState({
       diagnosis: '',
+      consultationType: 'Subsecuente',
       program: 'Consulta Externa',
-      notes: '',
-      // Campos SUIVE / Hoja Diaria
-      consultationType: 'Subsecuente', // 1a Vez, Subsecuente
+      specifics: {},
       isIndigenous: false,
       isDisability: false,
       isMigrant: false,
-      referral: 'Ninguna', // Enviado a, Recibido de
-      // Datos Específicos por Programa (SIS)
-      specifics: {} as Record<string, any>
-  });
-  
-  const [vitalsForm, setVitalsForm] = useState<Vitals>({
-    bp: '120/80', temp: 36.6, hr: 72, rr: 18, o2: 98, weight: 82, height: 175, bmi: 26.8, date: ''
+      referral: 'Ninguna',
+      notes: ''
   });
 
-  const isAttended = useMemo(() => patient?.status === PatientStatus.ATTENDED, [patient]);
-
   useEffect(() => {
-     if (!showMenu) setMenuSearchTerm('');
-  }, [showMenu]);
+    if (patient?.currentVitals) {
+        setVitalsForm(patient.currentVitals);
+    }
+  }, [patient]);
 
-  // Pre-fill form when modal opens
-  useEffect(() => {
-     if(showVitalsModal && patient?.currentVitals) {
-         setVitalsForm(patient.currentVitals);
-     }
-  }, [showVitalsModal, patient]);
-  
-  // Pre-fill finalize form
-  useEffect(() => {
-      if (showFinalizeModal && patient) {
-          setFinalizeData(prev => ({ 
-              ...prev, 
-              diagnosis: patient.reason || '',
-              // Intentar inferir si es 1a vez si no tiene historial previo o es nuevo
-              consultationType: (!patient.history || Object.keys(patient.history).length === 0) ? '1a Vez' : 'Subsecuente',
-              specifics: {}
-          }));
-      }
-  }, [showFinalizeModal, patient]);
+  if (!patient) return <div className="p-20 text-center">Paciente no encontrado</div>;
 
-  if (!patient) return <div className="p-20 text-center uppercase font-black text-slate-300">Paciente no encontrado</div>;
+  const isAttended = patient.status === PatientStatus.ATTENDED;
 
-  const patientNotes = useMemo(() => notes.filter(n => n.patientId === id).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()), [notes, id]);
-
-  const renderDynamicChart = (data: Vitals[] | null) => {
-    if (!data || data.length === 0) return (
-      <div className="bg-white border border-slate-200 rounded-[2rem] p-6 shadow-sm h-[300px] flex flex-col items-center justify-center opacity-40">
-        <TrendingUp size={32} className="mb-2 text-slate-300" />
-        <p className="font-black uppercase text-[10px] tracking-widest text-slate-400">Sin historial de signos vitales</p>
-      </div>
-    );
-    const chartData = [...data]
-        .map(v => ({ ...v, parsedDate: parseDateSafe(v.date) }))
-        .sort((a, b) => a.parsedDate.getTime() - b.parsedDate.getTime())
-        .slice(-15)
-        .map(v => {
-             const timeLabel = v.parsedDate.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
-             const [sys, dia] = (v.bp && v.bp.includes('/')) ? v.bp.split('/').map(n => parseInt(n) || 0) : [0, 0];
-             return { name: timeLabel, sys, dia, hr: Number(v.hr) || 0, temp: Number(v.temp) || 0 };
-        });
-
-    return (
-        <div className="bg-white border border-slate-200 rounded-[2.5rem] p-8 shadow-sm h-[320px] w-full relative overflow-hidden">
-            <h3 className="text-xs font-black uppercase tracking-widest text-slate-400 mb-4 ml-2">Tendencia de Signos Vitales</h3>
-            <ResponsiveContainer width="100%" height="85%">
-                <LineChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fontSize: 9, fill: '#94a3b8'}} />
-                    <YAxis axisLine={false} tickLine={false} tick={{fontSize: 9, fill: '#94a3b8'}} />
-                    <Tooltip contentStyle={{borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)'}} />
-                    <Line type="monotone" dataKey="sys" stroke="#3b82f6" strokeWidth={3} name="T.A. Sistólica" dot={{r: 4}} />
-                    <Line type="monotone" dataKey="hr" stroke="#f43f5e" strokeWidth={3} name="Frec. Cardiaca" dot={{r: 4}} />
-                </LineChart>
-            </ResponsiveContainer>
-        </div>
-    );
-  };
+  const patientNotes = useMemo(() => {
+      return notes.filter(n => n.patientId === id).sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  }, [notes, id]);
 
   const handleUpdateVitals = () => {
-     // Calculate BMI
-     let bmi = 0;
-     if (vitalsForm.weight > 0 && vitalsForm.height > 0) {
-         const h = vitalsForm.height / 100;
-         bmi = parseFloat((vitalsForm.weight / (h * h)).toFixed(1));
-     }
-     
-     const newVitals = { ...vitalsForm, bmi, date: new Date().toLocaleString('es-MX') };
-     const history = [...(patient.vitalsHistory || []), newVitals];
-     
-     onUpdatePatient({
-         ...patient,
-         currentVitals: newVitals,
-         vitalsHistory: history
-     });
-     setShowVitalsModal(false);
+      if (!vitalsForm.bp || !vitalsForm.temp) return alert("Complete al menos T/A y Temperatura");
+      const newVitals: Vitals = {
+          bp: vitalsForm.bp || '',
+          temp: Number(vitalsForm.temp),
+          hr: Number(vitalsForm.hr),
+          rr: Number(vitalsForm.rr),
+          o2: Number(vitalsForm.o2),
+          weight: Number(vitalsForm.weight),
+          height: Number(vitalsForm.height),
+          bmi: Number(vitalsForm.bmi),
+          date: new Date().toLocaleString('es-MX')
+      };
+      
+      // Calculate BMI if missing but weight/height present
+      if (!newVitals.bmi && newVitals.weight && newVitals.height) {
+          const h = newVitals.height / 100;
+          newVitals.bmi = parseFloat((newVitals.weight / (h * h)).toFixed(1));
+      }
+
+      onUpdatePatient({
+          ...patient,
+          currentVitals: newVitals,
+          vitalsHistory: [newVitals, ...(patient.vitalsHistory || [])]
+      });
+      setShowVitalsModal(false);
   };
 
   const handleConfirmFinalize = () => {
-      if (!finalizeData.diagnosis) return alert("El diagnóstico es obligatorio para el reporte diario.");
-      
-      const dischargeInfo = {
-          diagnosticos: [{ name: finalizeData.diagnosis.toUpperCase(), status: 'Definitivo' }],
-          program: finalizeData.program,
-          programDetails: {
-              consultationType: finalizeData.consultationType as any,
-              isIndigenous: finalizeData.isIndigenous,
-              isDisability: finalizeData.isDisability,
-              isMigrant: finalizeData.isMigrant,
-              referral: finalizeData.referral,
-              specifics: finalizeData.specifics
-          },
-          notes: finalizeData.notes,
-          medico: doctorInfo.name,
-          timestamp: new Date().toISOString()
-      };
+     if (!finalizeData.diagnosis) return alert("El diagnóstico es obligatorio");
+     
+     // 1. Create Discharge Note/Record (SUIVE compatible)
+     const dischargeNote: ClinicalNote = {
+         id: `SUIVE-${Date.now()}`,
+         patientId: patient.id,
+         type: 'Cierre de Consulta (SUIVE)',
+         date: new Date().toLocaleString('es-MX'),
+         author: doctorInfo.name,
+         content: { ...finalizeData, medico: doctorInfo.name, timestamp: new Date().toISOString() },
+         isSigned: true,
+         hash: `SUIVE-${Math.random().toString(36).substr(2,8)}`
+     };
+     onSaveNote(dischargeNote);
 
-      // 1. GENERAR NOTA DE CIERRE/SUIVE (Para reporte diario múltiple)
-      // Esto permite que si el paciente viene 2 veces en un día, haya 2 registros en la hoja diaria
-      const suiveNote: ClinicalNote = {
-          id: `SUIVE-${Date.now()}`,
-          patientId: patient.id,
-          type: 'Cierre de Consulta (SUIVE)',
-          date: new Date().toLocaleString('es-MX'),
-          author: doctorInfo.name,
-          content: dischargeInfo,
-          isSigned: true,
-          hash: `SUIVE-HASH-${Math.random().toString(36).substr(2, 8).toUpperCase()}`
-      };
-      onSaveNote(suiveNote);
+     // 2. Update Patient Status
+     onUpdatePatient({
+         ...patient,
+         status: PatientStatus.ATTENDED,
+         history: {
+             ...patient.history,
+             dischargeData: { ...finalizeData, medico: doctorInfo.name, timestamp: new Date().toISOString() }
+         }
+     });
 
-      // 2. ACTUALIZAR ESTADO DEL PACIENTE
-      const updatedPatient: Patient = {
-          ...patient,
-          status: PatientStatus.ATTENDED,
-          // Guardamos también en historial del paciente para referencia rápida
-          history: {
-              ...patient.history,
-              dischargeData: dischargeInfo
-          }
-      };
-
-      onUpdatePatient(updatedPatient);
-      setShowFinalizeModal(false);
-      
-      alert("Atención finalizada. Registro generado en Hoja Diaria.");
-      navigate('/');
+     setShowFinalizeModal(false);
+     navigate('/');
   };
 
   const renderProgramSpecificFields = () => {
-      switch (finalizeData.program) {
-          case 'Planificación Familiar':
-              return (
-                  <div className="bg-indigo-50 p-4 rounded-2xl border border-indigo-100 space-y-3 animate-in slide-in-from-top-2">
-                      <h4 className="text-[9px] font-black text-indigo-700 uppercase tracking-widest flex items-center gap-2"><Pill size={12}/> Datos Planificación Familiar (SIS)</h4>
-                      <div className="grid grid-cols-2 gap-4">
-                          <div className="space-y-1">
-                              <label className="text-[8px] font-bold text-slate-500 uppercase">Método Otorgado</label>
-                              <select className="w-full p-2 rounded-xl text-xs font-bold bg-white border border-slate-200 outline-none" 
-                                  onChange={e => setFinalizeData(p => ({...p, specifics: {...p.specifics, method: e.target.value}}))}>
-                                  <option value="">Ninguno / Consejería</option>
-                                  <option value="Oral">Hormonal Oral</option>
-                                  <option value="Inyectable Men">Inyectable Mensual</option>
-                                  <option value="Implante">Implante Subdérmico</option>
-                                  <option value="DIU">DIU T Cobre / Medicado</option>
-                                  <option value="Preservativo">Preservativos</option>
-                              </select>
-                          </div>
-                          <div className="space-y-1">
-                              <label className="text-[8px] font-bold text-slate-500 uppercase">Estatus Usuaria</label>
-                              <select className="w-full p-2 rounded-xl text-xs font-bold bg-white border border-slate-200 outline-none"
-                                  onChange={e => setFinalizeData(p => ({...p, specifics: {...p.specifics, userStatus: e.target.value}}))}>
-                                  <option value="Subsecuente">Usuaria Activa (Subsecuente)</option>
-                                  <option value="Nueva Aceptante">Nueva Aceptante</option>
-                                  <option value="Reingreso">Reingreso</option>
-                              </select>
-                          </div>
-                      </div>
-                  </div>
-              );
-          case 'Control Prenatal':
-              return (
-                  <div className="bg-pink-50 p-4 rounded-2xl border border-pink-100 space-y-3 animate-in slide-in-from-top-2">
-                      <h4 className="text-[9px] font-black text-pink-700 uppercase tracking-widest flex items-center gap-2"><Baby size={12}/> Datos Embarazo (SIS)</h4>
-                      <div className="grid grid-cols-2 gap-4">
-                          <div className="space-y-1">
-                              <label className="text-[8px] font-bold text-slate-500 uppercase">Trimestre Gestacional</label>
-                              <select className="w-full p-2 rounded-xl text-xs font-bold bg-white border border-slate-200 outline-none"
-                                  onChange={e => setFinalizeData(p => ({...p, specifics: {...p.specifics, trimester: e.target.value}}))}>
-                                  <option value="1">1er Trimestre</option>
-                                  <option value="2">2o Trimestre</option>
-                                  <option value="3">3er Trimestre</option>
-                                  <option value="Puerperio">Puerperio</option>
-                              </select>
-                          </div>
-                          <div className="space-y-1">
-                              <label className="text-[8px] font-bold text-slate-500 uppercase">Riesgo Obstétrico</label>
-                              <select className="w-full p-2 rounded-xl text-xs font-bold bg-white border border-slate-200 outline-none"
-                                  onChange={e => setFinalizeData(p => ({...p, specifics: {...p.specifics, risk: e.target.value}}))}>
-                                  <option value="Bajo">Bajo Riesgo</option>
-                                  <option value="Alto">Alto Riesgo</option>
-                              </select>
-                          </div>
-                      </div>
-                      <label className="flex items-center gap-2 text-[9px] font-bold text-pink-800">
-                          <input type="checkbox" onChange={e => setFinalizeData(p => ({...p, specifics: {...p.specifics, folicAcid: e.target.checked}}))} />
-                          Se otorgó Ácido Fólico / Multivitamínico
-                      </label>
-                  </div>
-              );
-          case 'Crónico-Degenerativas':
-              return (
-                  <div className="bg-amber-50 p-4 rounded-2xl border border-amber-100 space-y-3 animate-in slide-in-from-top-2">
-                      <h4 className="text-[9px] font-black text-amber-700 uppercase tracking-widest flex items-center gap-2"><Activity size={12}/> Datos Crónicos (SIS)</h4>
-                      <div className="grid grid-cols-2 gap-4">
-                          <div className="space-y-1">
-                              <label className="text-[8px] font-bold text-slate-500 uppercase">Estatus Control</label>
-                              <select className="w-full p-2 rounded-xl text-xs font-bold bg-white border border-slate-200 outline-none"
-                                  onChange={e => setFinalizeData(p => ({...p, specifics: {...p.specifics, controlStatus: e.target.value}}))}>
-                                  <option value="Controlado">Controlado</option>
-                                  <option value="No Controlado">No Controlado</option>
-                              </select>
-                          </div>
-                          <div className="space-y-1">
-                              <label className="text-[8px] font-bold text-slate-500 uppercase">Tratamiento</label>
-                              <select className="w-full p-2 rounded-xl text-xs font-bold bg-white border border-slate-200 outline-none"
-                                  onChange={e => setFinalizeData(p => ({...p, specifics: {...p.specifics, treatmentType: e.target.value}}))}>
-                                  <option value="Oral">Oral</option>
-                                  <option value="Insulina">Insulina</option>
-                                  <option value="Mixto">Mixto</option>
-                              </select>
-                          </div>
-                      </div>
-                  </div>
-              );
-          case 'Control Niño Sano':
-              return (
-                  <div className="bg-sky-50 p-4 rounded-2xl border border-sky-100 space-y-3 animate-in slide-in-from-top-2">
-                      <h4 className="text-[9px] font-black text-sky-700 uppercase tracking-widest flex items-center gap-2"><Baby size={12}/> Datos Niño Sano (PASIA)</h4>
-                      <div className="space-y-1">
-                          <label className="text-[8px] font-bold text-slate-500 uppercase">Estado Nutricional</label>
-                          <select className="w-full p-2 rounded-xl text-xs font-bold bg-white border border-slate-200 outline-none"
-                              onChange={e => setFinalizeData(p => ({...p, specifics: {...p.specifics, nutritionStatus: e.target.value}}))}>
-                              <option value="Normal">Peso Normal</option>
-                              <option value="Desnutrición Leve">Desnutrición Leve</option>
-                              <option value="Desnutrición Mod/Sev">Desnutrición Mod/Severa</option>
-                              <option value="Sobrepeso/Obesidad">Sobrepeso / Obesidad</option>
-                          </select>
-                      </div>
-                      <div className="flex gap-4 pt-2">
-                         <label className="flex items-center gap-2 text-[9px] font-bold text-sky-800">
-                             <input type="checkbox" onChange={e => setFinalizeData(p => ({...p, specifics: {...p.specifics, vaccination: e.target.checked}}))} />
-                             Vacunación Completa
-                         </label>
-                         <label className="flex items-center gap-2 text-[9px] font-bold text-sky-800">
-                             <input type="checkbox" onChange={e => setFinalizeData(p => ({...p, specifics: {...p.specifics, stimulation: e.target.checked}}))} />
-                             Estimulación Temprana
-                         </label>
-                      </div>
-                  </div>
-              );
-            case 'Salud Mental':
-                return (
-                    <div className="bg-violet-50 p-4 rounded-2xl border border-violet-100 space-y-3 animate-in slide-in-from-top-2">
-                        <h4 className="text-[9px] font-black text-violet-700 uppercase tracking-widest flex items-center gap-2"><Brain size={12}/> Salud Mental</h4>
-                        <div className="grid grid-cols-2 gap-4">
-                            <div className="space-y-1">
-                                <label className="text-[8px] font-bold text-slate-500 uppercase">Tipo Atención</label>
-                                <select className="w-full p-2 rounded-xl text-xs font-bold bg-white border border-slate-200 outline-none"
-                                    onChange={e => setFinalizeData(p => ({...p, specifics: {...p.specifics, mentalType: e.target.value}}))}>
-                                    <option value="Psicológica">Psicológica</option>
-                                    <option value="Psiquiátrica">Psiquiátrica</option>
-                                    <option value="Adicciones">Adicciones</option>
-                                </select>
-                            </div>
-                            <div className="space-y-1">
-                                <label className="text-[8px] font-bold text-slate-500 uppercase">¿Primera Vez en el año?</label>
-                                <select className="w-full p-2 rounded-xl text-xs font-bold bg-white border border-slate-200 outline-none"
-                                    onChange={e => setFinalizeData(p => ({...p, specifics: {...p.specifics, firstTimeYear: e.target.value}}))}>
-                                    <option value="Sí">Sí</option>
-                                    <option value="No">No (Subsecuente)</option>
-                                </select>
-                            </div>
-                        </div>
-                        <label className="flex items-center gap-2 text-[9px] font-bold text-rose-700 bg-white p-2 rounded-lg border border-violet-100">
-                            <input type="checkbox" onChange={e => setFinalizeData(p => ({...p, specifics: {...p.specifics, violenceDetected: e.target.checked}}))} />
-                            <AlertTriangle size={12} className="text-rose-500"/> Detección de Violencia Familiar/Género
-                        </label>
-                    </div>
-                );
-            case 'Detección Cáncer':
-                return (
-                    <div className="bg-pink-50 p-4 rounded-2xl border border-pink-100 space-y-3 animate-in slide-in-from-top-2">
-                        <h4 className="text-[9px] font-black text-pink-700 uppercase tracking-widest flex items-center gap-2"><Activity size={12}/> Tamizaje Cáncer Mujer</h4>
-                        <div className="space-y-2">
-                            <label className="flex items-center gap-2 text-[9px] font-bold text-slate-600">
-                                <input type="radio" name="cancerScreen" value="DOC" onChange={e => setFinalizeData(p => ({...p, specifics: {...p.specifics, screenType: e.target.value}}))} />
-                                Detección Oportuna Cáncer Cervicouterino (Papanicolau/PCR)
-                            </label>
-                            <label className="flex items-center gap-2 text-[9px] font-bold text-slate-600">
-                                <input type="radio" name="cancerScreen" value="MAMA_CLINICA" onChange={e => setFinalizeData(p => ({...p, specifics: {...p.specifics, screenType: e.target.value}}))} />
-                                Exploración Clínica de Mama
-                            </label>
-                            <label className="flex items-center gap-2 text-[9px] font-bold text-slate-600">
-                                <input type="radio" name="cancerScreen" value="MAMA_MASTO" onChange={e => setFinalizeData(p => ({...p, specifics: {...p.specifics, screenType: e.target.value}}))} />
-                                Mastografía (Referencia)
-                            </label>
-                        </div>
-                    </div>
-                );
-          default:
-              return null;
-      }
+     // Optional logic to render specific fields based on program selection
+     return null; 
+  };
+
+  const renderDynamicChart = (history: Vitals[] | null) => {
+    if (!history || history.length < 2) return null;
+    const data = [...history].reverse().map(v => ({
+        date: v.date.split(' ')[0], // Just date part
+        systolic: parseInt(v.bp.split('/')[0]),
+        diastolic: parseInt(v.bp.split('/')[1]),
+        weight: v.weight
+    }));
+
+    return (
+        <div className="bg-white p-6 rounded-[2.5rem] border border-slate-200 shadow-sm h-64">
+            <h4 className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-4">Tendencia de Tensión Arterial</h4>
+            <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={data}>
+                    <defs>
+                        <linearGradient id="colorBp" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.1}/>
+                            <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
+                        </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9"/>
+                    <XAxis dataKey="date" fontSize={10} axisLine={false} tickLine={false} />
+                    <YAxis fontSize={10} axisLine={false} tickLine={false} domain={['auto', 'auto']}/>
+                    <Tooltip contentStyle={{borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'}}/>
+                    <Area type="monotone" dataKey="systolic" stroke="#3b82f6" fillOpacity={1} fill="url(#colorBp)" strokeWidth={2} />
+                    <Area type="monotone" dataKey="diastolic" stroke="#93c5fd" fillOpacity={1} fill="url(#colorBp)" strokeWidth={2} />
+                </AreaChart>
+            </ResponsiveContainer>
+        </div>
+    );
   };
 
   const getNoteRoute = (type: string, noteId?: string) => {
@@ -402,7 +189,7 @@ const PatientProfile: React.FC<{ patients: Patient[], notes: ClinicalNote[], onU
       'Certificado Médico': `/patient/${id}/note/medical-certificate`,
       'Carnet Perinatal / Control Prenatal': `/patient/${id}/perinatal-card`,
       'Tarjeta de Control de Enfermedades Crónicas': `/patient/${id}/chronic-card`,
-      'Carnet de Salud Integral / Niño Sano': `/patient/${id}/health-control` // NEW ROUTE ADDED
+      'Carnet de Salud Integral / Niño Sano': `/patient/${id}/health-control`
     };
     
     let path = '';
@@ -413,6 +200,9 @@ const PatientProfile: React.FC<{ patients: Patient[], notes: ClinicalNote[], onU
     }
     return noteId ? `${path}/${noteId}` : path;
   };
+
+  const patientAllergies = patient.allergies || [];
+  const patientChronic = patient.chronicDiseases || [];
 
   return (
     <div className="max-w-full mx-auto space-y-6 pb-20 animate-in fade-in">
@@ -430,9 +220,7 @@ const PatientProfile: React.FC<{ patients: Patient[], notes: ClinicalNote[], onU
         </div>
       )}
       
-      {/* ... (Resto del componente permanece igual, solo cambió handleConfirmFinalize) ... */}
-      
-      {/* HEADER DE PACIENTE - REDISEÑADO CON DATOS COMPLETOS */}
+      {/* HEADER DE PACIENTE */}
       <div className="bg-white rounded-[3rem] p-10 shadow-2xl shadow-slate-200/50 border border-slate-100 relative overflow-hidden no-print group">
          <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-8 relative z-10">
             
@@ -440,7 +228,6 @@ const PatientProfile: React.FC<{ patients: Patient[], notes: ClinicalNote[], onU
             <div className="flex items-center gap-8">
                <div className="w-24 h-24 bg-slate-900 rounded-[2.5rem] flex items-center justify-center text-4xl font-black text-white shadow-2xl relative group-hover:scale-105 transition-transform">
                   {patient.name.charAt(0)}
-                  {/* Status Indicator */}
                   <div className={`absolute -bottom-2 -right-2 w-8 h-8 rounded-full border-4 border-white flex items-center justify-center ${patient.priority.includes('Rojo') ? 'bg-rose-500' : 'bg-emerald-500'}`}>
                       <Activity size={14} className="text-white"/>
                   </div>
@@ -468,7 +255,6 @@ const PatientProfile: React.FC<{ patients: Patient[], notes: ClinicalNote[], onU
             </div>
          </div>
 
-         {/* GRID DE DATOS CRÍTICOS RESTAURADO */}
          <div className="grid grid-cols-2 md:grid-cols-4 gap-8 mt-10 pt-10 border-t border-slate-100 relative z-10">
             <div>
                <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">CURP</p>
@@ -479,22 +265,21 @@ const PatientProfile: React.FC<{ patients: Patient[], notes: ClinicalNote[], onU
                <p className="text-sm font-black text-slate-900 bg-slate-100 px-4 py-2 rounded-xl w-fit border border-slate-200">{patient.bloodType || 'N/D'}</p>
             </div>
             <div>
-               <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2 flex items-center gap-2"><AlertOctagon size={12} className={patient.allergies.length > 0 ? "text-rose-500" : "text-slate-300"}/> ALERGIAS</p>
-               <p className={`text-sm font-bold uppercase truncate ${patient.allergies.length > 0 ? 'text-rose-600' : 'text-slate-500'}`}>
-                  {patient.allergies.length > 0 ? patient.allergies.join(', ') : 'NEGADAS'}
+               <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2 flex items-center gap-2"><AlertOctagon size={12} className={patientAllergies.length > 0 ? "text-rose-500" : "text-slate-300"}/> ALERGIAS</p>
+               <p className={`text-sm font-bold uppercase truncate ${patientAllergies.length > 0 ? 'text-rose-600' : 'text-slate-500'}`}>
+                  {patientAllergies.length > 0 ? patientAllergies.join(', ') : 'NEGADAS'}
                </p>
             </div>
             <div>
                <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">ENFERMEDADES CRÓNICAS</p>
                <p className="text-sm font-bold text-slate-700 uppercase truncate">
-                  {patient.chronicDiseases.length > 0 ? patient.chronicDiseases.join(', ') : 'NINGUNA'}
+                  {patientChronic.length > 0 ? patientChronic.join(', ') : 'NINGUNA'}
                </p>
             </div>
          </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-        {/* COLUMNA IZQUIERDA: GRÁFICAS Y NOTAS */}
         <div className="lg:col-span-8 space-y-8">
            {renderDynamicChart(patient.vitalsHistory || null)}
            
@@ -534,7 +319,6 @@ const PatientProfile: React.FC<{ patients: Patient[], notes: ClinicalNote[], onU
            </div>
         </div>
         
-        {/* COLUMNA DERECHA: SIGNOS VITALES (RESTORED BLACK CARD) */}
         <div className="lg:col-span-4 space-y-8">
            <div className={`bg-slate-900 text-white rounded-[3rem] p-8 shadow-2xl relative overflow-hidden flex flex-col justify-between min-h-[400px] ${isAttended ? 'opacity-80 grayscale pointer-events-none' : ''}`}>
               <div className="flex justify-between items-center relative z-10 mb-8">
@@ -547,7 +331,6 @@ const PatientProfile: React.FC<{ patients: Patient[], notes: ClinicalNote[], onU
               </div>
 
               <div className="grid grid-cols-2 gap-4 relative z-10 flex-1">
-                 {/* BLOQUE T.A. (DESTACADO) */}
                  <div className="col-span-2 bg-white/10 p-5 rounded-[2rem] border border-white/5 backdrop-blur-sm flex justify-between items-center">
                     <div>
                         <div className="flex items-center gap-2 mb-1 text-slate-400">
@@ -557,7 +340,6 @@ const PatientProfile: React.FC<{ patients: Patient[], notes: ClinicalNote[], onU
                         <p className="text-4xl font-black leading-none">{patient.currentVitals?.bp || '--/--'}</p>
                         <span className="text-[8px] text-slate-500 font-bold uppercase mt-1 block">MMHG</span>
                     </div>
-                    {/* MINI CHART PLACEHOLDER or STATUS ICON */}
                     <div className="h-10 w-10 rounded-full border-2 border-emerald-500/30 flex items-center justify-center">
                         <Activity size={16} className="text-emerald-500"/>
                     </div>
@@ -583,19 +365,18 @@ const PatientProfile: React.FC<{ patients: Patient[], notes: ClinicalNote[], onU
                  ))}
               </div>
               
-              {/* Background Decoration */}
               <div className="absolute -bottom-20 -right-20 w-64 h-64 bg-emerald-600 rounded-full blur-[100px] opacity-30 pointer-events-none"></div>
               <div className="absolute top-10 -left-10 w-32 h-32 bg-blue-600 rounded-full blur-[60px] opacity-20 pointer-events-none"></div>
            </div>
         </div>
       </div>
 
-      {/* MODAL NUEVA NOTA (MENU) */}
+      {/* MODAL NUEVA NOTA (MENU) - UNIFICADO Y ESTILIZADO */}
       {showMenu && !isAttended && (
         <div className="fixed inset-0 z-[250] flex items-center justify-center p-8 bg-slate-900/90 backdrop-blur-xl animate-in fade-in">
           <div className="bg-white w-full max-w-5xl max-h-[90vh] rounded-[3rem] shadow-2xl flex flex-col overflow-hidden border border-white/20">
             <div className="p-8 bg-slate-50 border-b border-slate-200 flex justify-between items-center">
-              <h4 className="text-2xl font-black uppercase tracking-tighter">Orden de Intervención</h4>
+              <h4 className="text-2xl font-black uppercase tracking-tighter text-slate-900">Orden de Intervención</h4>
               <button onClick={() => setShowMenu(false)} className="p-3 hover:bg-rose-50 rounded-2xl transition-all"><X size={32} className="text-slate-400" /></button>
             </div>
             
@@ -607,14 +388,14 @@ const PatientProfile: React.FC<{ patients: Patient[], notes: ClinicalNote[], onU
                     type="text"
                     autoFocus
                     placeholder="BUSCAR TIPO DE NOTA O DOCUMENTO..."
-                    className="w-full pl-12 pr-4 py-4 bg-white border border-slate-200 rounded-2xl text-sm font-black uppercase outline-none focus:ring-4 focus:ring-blue-100 transition-all placeholder:text-slate-300"
+                    className="w-full pl-12 pr-4 py-4 bg-white border border-slate-200 rounded-2xl text-base font-black uppercase outline-none focus:ring-4 focus:ring-blue-100 transition-all placeholder:text-slate-300"
                     value={menuSearchTerm}
                     onChange={(e) => setMenuSearchTerm(e.target.value)}
                   />
                </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-10 grid grid-cols-1 md:grid-cols-3 gap-10">
+            <div className="flex-1 overflow-y-auto p-10 grid grid-cols-1 md:grid-cols-3 gap-10 bg-white">
                 {NOTE_CATEGORIES.map(cat => {
                   const filteredNotes = cat.notes.filter(note => 
                       note.toLowerCase().includes(menuSearchTerm.toLowerCase())
@@ -623,11 +404,10 @@ const PatientProfile: React.FC<{ patients: Patient[], notes: ClinicalNote[], onU
                   if (filteredNotes.length === 0) return null;
 
                   return (
-                    <div key={cat.title} className="space-y-4">
-                      <h5 className="text-[10px] font-black text-blue-600 uppercase tracking-widest border-b-2 border-blue-50 pb-2">{cat.title}</h5>
-                      <div className="grid grid-cols-1 gap-2">
+                    <div key={cat.title} className="space-y-6">
+                      <h5 className="text-[11px] font-black text-blue-600 uppercase tracking-[0.25em] border-b-2 border-blue-50 pb-2">{cat.title}</h5>
+                      <div className="grid grid-cols-1 gap-4">
                         {filteredNotes.map(note => {
-                          const isSpecialCard = note === 'Tarjeta de Control de Enfermedades Crónicas' || note === 'Carnet de Salud Integral / Niño Sano';
                           return (
                             <button 
                               key={note} 
@@ -635,13 +415,10 @@ const PatientProfile: React.FC<{ patients: Patient[], notes: ClinicalNote[], onU
                                    navigate(getNoteRoute(note));
                                    setShowMenu(false);
                               }} 
-                              className={`w-full text-left p-4 rounded-xl text-[10px] uppercase transition-all shadow-sm
-                                ${isSpecialCard
-                                  ? 'bg-white border-2 border-black text-black font-extrabold shadow-md hover:bg-slate-900 hover:text-white'
-                                  : 'bg-white border border-slate-100 text-slate-900 font-black hover:bg-blue-600 hover:text-white'
-                                }`}
+                              className="w-full text-left p-5 rounded-2xl text-xs font-black uppercase transition-all shadow-sm border border-slate-200 bg-slate-50 text-slate-900 hover:bg-blue-600 hover:text-white hover:border-blue-600 hover:shadow-lg flex items-center justify-between group"
                             >
-                              {note}
+                              <span>{note}</span>
+                              <ChevronRight size={16} className="opacity-0 group-hover:opacity-100 transition-opacity" />
                             </button>
                           );
                         })}
@@ -654,7 +431,6 @@ const PatientProfile: React.FC<{ patients: Patient[], notes: ClinicalNote[], onU
         </div>
       )}
       
-      {/* MODAL ACTUALIZAR SIGNOS VITALES */}
       {showVitalsModal && (
         <div className="fixed inset-0 z-[300] bg-slate-900/90 backdrop-blur-md flex items-center justify-center p-6 animate-in fade-in">
            <div className="bg-white w-full max-w-lg rounded-[3rem] p-10 shadow-2xl space-y-8">
@@ -666,7 +442,7 @@ const PatientProfile: React.FC<{ patients: Patient[], notes: ClinicalNote[], onU
               <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-1">
                       <label className="text-[9px] font-black text-slate-400 uppercase ml-2">Tensión Arterial</label>
-                      <input className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-lg font-black text-center" placeholder="120/80" value={vitalsForm.bp} onChange={e => setVitalsForm({...vitalsForm, bp: e.target.value})} />
+                      <input className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-lg font-black text-center" placeholder="120/80" value={vitalsForm.bp || ''} onChange={e => setVitalsForm({...vitalsForm, bp: e.target.value})} />
                   </div>
                   <div className="space-y-1">
                       <label className="text-[9px] font-black text-slate-400 uppercase ml-2">Frecuencia Cardiaca</label>
@@ -701,11 +477,9 @@ const PatientProfile: React.FC<{ patients: Patient[], notes: ClinicalNote[], onU
         </div>
       )}
 
-      {/* MODAL FINALIZAR ATENCIÓN (HOJA DIARIA / SUIVE) - ACTUALIZADO */}
       {showFinalizeModal && (
-          <div className="fixed inset-0 z-[300] bg-slate-900/95 backdrop-blur-sm flex items-center justify-center p-6 animate-in fade-in">
-              <div className="bg-white w-full max-w-2xl rounded-[3rem] p-10 shadow-2xl space-y-8 relative overflow-hidden flex flex-col max-h-[90vh]">
-                  {/* ... (Contenido del modal de finalizar - igual que antes) ... */}
+          <div className="fixed inset-0 z-[300] bg-slate-900/95 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
+              <div className="bg-white w-full max-w-2xl rounded-[3rem] shadow-2xl p-10 flex flex-col max-h-[90vh]">
                   <div className="flex justify-between items-center mb-2">
                       <div className="space-y-1">
                           <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tight">Finalizar Atención</h3>
@@ -753,7 +527,6 @@ const PatientProfile: React.FC<{ patients: Patient[], notes: ClinicalNote[], onU
                            </div>
                       </div>
 
-                      {/* CAMPOS DINÁMICOS POR PROGRAMA (SIS) */}
                       {renderProgramSpecificFields()}
 
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -824,7 +597,6 @@ const PatientProfile: React.FC<{ patients: Patient[], notes: ClinicalNote[], onU
           </div>
       )}
 
-      {/* DOCUMENT PREVIEW MODAL ... (Igual) ... */}
       {selectedNote && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center p-6 bg-slate-900/95 backdrop-blur-xl animate-in fade-in">
            <div className="bg-white w-full max-w-5xl max-h-[95vh] rounded-[3.5rem] shadow-2xl overflow-hidden flex flex-col border-4 border-white/20">
@@ -845,6 +617,7 @@ const PatientProfile: React.FC<{ patients: Patient[], notes: ClinicalNote[], onU
               </div>
               <div className="flex-1 overflow-y-auto p-20 bg-white">
                  <div className="max-w-4xl mx-auto space-y-12 text-slate-900 print:text-black">
+                    {/* Re-render note content structured for printing */}
                     <div className="flex justify-between border-b-4 border-slate-900 pb-10">
                        <div className="space-y-4">
                           <h1 className="text-3xl font-black text-slate-900 uppercase leading-none">{doctorInfo.hospital}</h1>

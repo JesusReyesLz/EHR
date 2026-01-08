@@ -1,5 +1,5 @@
 
-import React, { useState, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   Video, Calendar, Clock, Search, Filter, 
@@ -10,11 +10,13 @@ import {
   ChevronRight, ArrowRight, MapPin, ClipboardList, Thermometer,
   Eye, X, Power, Lock, LogIn, WifiOff, BellOff, LogOut, User,
   ArrowLeft, GraduationCap, MessageSquare, ImageIcon, Ambulance, FlaskConical, Plus, Coffee, Truck, Wallet, DollarSign, Download,
-  History, Navigation, Bot, Send, Headphones, CalendarCheck, FileSignature, AlertOctagon, Check
+  History, Navigation, Bot, Send, Headphones, CalendarCheck, FileSignature, AlertOctagon, Check, Smartphone, Home,
+  Pill, ChevronLeft, TrendingUp, Menu, Info, Heart, ShoppingBag, Package, Watch, Award, BookOpen, ToggleRight, ToggleLeft,
+  MapPinned, Syringe, CalendarDays, Siren, Bike
 } from 'lucide-react';
 import { Patient, PatientStatus, AgendaStatus, PriorityLevel, ModuleType, DoctorInfo, TeleIntakeForm, HomeServiceRequest, ClinicalNote, StaffMember } from '../types';
-import { MOCK_DOCTORS, LAB_CATALOG } from '../constants';
-import HomeServices from './HomeServices'; // Import HomeServices
+import { MOCK_DOCTORS } from '../constants';
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 interface TelemedicineDashboardProps {
   patients: Patient[];
@@ -30,1806 +32,1479 @@ interface TelemedicineDashboardProps {
   staffList?: StaffMember[]; 
 }
 
-// --- TELEMEDICINE LEGAL CONSENT MODAL ---
-const TeleConsentModal: React.FC<{
-    isOpen: boolean;
-    onClose: () => void;
-    onAccept: () => void;
-}> = ({ isOpen, onClose, onAccept }) => {
-    const [checks, setChecks] = useState({
-        c1: false, c2: false, c3: false, c4: false
-    });
+// --- CONSTANTES LOCALES PARA SERVICIOS ---
+const PHARMACY_ITEMS = [
+    { id: 1, name: 'Paracetamol 500mg', price: 50, category: 'Dolor', image: '💊' },
+    { id: 2, name: 'Ibuprofeno 400mg', price: 85, category: 'Dolor', image: '💊' },
+    { id: 3, name: 'Loratadina 10mg', price: 40, category: 'Alergias', image: '🤧' },
+    { id: 4, name: 'Omeprazol 20mg', price: 65, category: 'Gástrico', image: '🤢' },
+    { id: 5, name: 'Kit Primeros Auxilios', price: 250, category: 'Material', image: '⛑️' },
+    { id: 6, name: 'Termómetro Digital', price: 150, category: 'Equipo', image: '🌡️' },
+    { id: 7, name: 'Vitaminas C + Zinc', price: 120, category: 'Suplementos', image: '🍊' },
+    { id: 8, name: 'Jarabe para Tos', price: 95, category: 'Respiratorio', image: '🥣' },
+];
 
-    const allChecked = Object.values(checks).every(Boolean);
+const LAB_PACKAGES = [
+    { id: 1, name: 'Check-up General', includes: 'BH, QS(6), EGO', price: 450, time: '24 hrs' },
+    { id: 2, name: 'Perfil Diabético', includes: 'Glucosa, HbA1c, Microalbúmina', price: 600, time: '24 hrs' },
+    { id: 3, name: 'Perfil Tiroideo', includes: 'TSH, T3, T4', price: 550, time: '48 hrs' },
+    { id: 4, name: 'Prueba COVID-19', includes: 'Antígenos Nasofaríngeo', price: 300, time: '2 hrs' },
+    { id: 5, name: 'Perfil Lipídico', includes: 'Colesterol, Triglicéridos, HDL/LDL', price: 400, time: '24 hrs' },
+];
 
-    if (!isOpen) return null;
+const MOCK_IOT_DATA = [
+    { time: '08:00', hr: 72, o2: 98 },
+    { time: '09:00', hr: 75, o2: 97 },
+    { time: '10:00', hr: 70, o2: 99 },
+    { time: '11:00', hr: 78, o2: 98 },
+    { time: '12:00', hr: 82, o2: 96 },
+    { time: '13:00', hr: 74, o2: 98 },
+    { time: '14:00', hr: 76, o2: 97 },
+];
 
-    return (
-        <div className="fixed inset-0 z-[70] bg-slate-900/95 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in">
-            <div className="bg-white w-full max-w-2xl rounded-[3rem] shadow-2xl overflow-hidden flex flex-col max-h-[90vh] border border-white/20">
-                <div className="p-8 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
-                    <div className="flex items-center gap-4">
-                        <div className="w-14 h-14 bg-blue-600 text-white rounded-2xl flex items-center justify-center shadow-lg"><ShieldCheck size={28}/></div>
-                        <div>
-                            <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">Consentimiento Informado</h3>
-                            <p className="text-[10px] font-bold text-blue-600 uppercase tracking-widest mt-1">Atención Médica a Distancia (Telemedicina)</p>
-                        </div>
-                    </div>
-                    <button onClick={onClose} className="p-3 hover:bg-slate-200 rounded-full transition-colors"><X size={24}/></button>
-                </div>
+// Helper to generate time slots based on schedule
+const generateTimeSlots = (schedule: DoctorInfo['schedule'], date: Date) => {
+    if (!schedule) return [];
+    
+    // Check if day is available
+    const dayOfWeek = date.getDay(); // 0 = Sunday
+    if (!schedule.days.includes(dayOfWeek)) return [];
 
-                <div className="flex-1 overflow-y-auto p-8 space-y-6 custom-scrollbar">
-                    <div className="bg-amber-50 p-6 rounded-3xl border border-amber-100 flex gap-4">
-                        <AlertOctagon className="text-amber-600 flex-shrink-0" size={24}/>
-                        <p className="text-xs text-amber-800 font-medium text-justify leading-relaxed">
-                            <strong>IMPORTANTE:</strong> La telemedicina NO sustituye la atención de urgencias vitales. Si presenta dolor de pecho intenso, dificultad respiratoria severa, pérdida de conciencia o sangrado profuso, acuda inmediatamente a un servicio de Urgencias Hospitalarias o llame al 911.
-                        </p>
-                    </div>
+    const slots = [];
+    const [startH, startM] = schedule.startHour.split(':').map(Number);
+    const [endH, endM] = schedule.endHour.split(':').map(Number);
+    
+    let current = new Date(date);
+    current.setHours(startH, startM, 0, 0);
+    
+    const end = new Date(date);
+    end.setHours(endH, endM, 0, 0);
 
-                    <p className="text-xs text-slate-600 font-medium leading-relaxed text-justify">
-                        De conformidad con la normativa sanitaria vigente y la Ley General de Protección de Datos Personales, por medio de la presente otorgo mi consentimiento para recibir atención médica a través de tecnologías de la información. Entiendo y acepto lo siguiente:
-                    </p>
-
-                    <div className="space-y-4">
-                        <label className={`flex gap-4 p-4 rounded-2xl border-2 cursor-pointer transition-all ${checks.c1 ? 'bg-blue-50 border-blue-500' : 'bg-white border-slate-100 hover:border-slate-300'}`}>
-                            <div className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center flex-shrink-0 ${checks.c1 ? 'bg-blue-600 border-blue-600 text-white' : 'border-slate-300'}`}>
-                                {checks.c1 && <Check size={14}/>}
-                            </div>
-                            <input type="checkbox" className="hidden" checked={checks.c1} onChange={() => setChecks(p => ({...p, c1: !p.c1}))} />
-                            <div>
-                                <p className="text-[10px] font-black uppercase text-slate-900">Limitaciones Técnicas y Clínicas</p>
-                                <p className="text-[10px] text-slate-500 mt-1">Comprendo que la evaluación es remota y carece de exploración física directa, lo que podría limitar la precisión diagnóstica en comparación con una consulta presencial.</p>
-                            </div>
-                        </label>
-
-                        <label className={`flex gap-4 p-4 rounded-2xl border-2 cursor-pointer transition-all ${checks.c2 ? 'bg-blue-50 border-blue-500' : 'bg-white border-slate-100 hover:border-slate-300'}`}>
-                            <div className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center flex-shrink-0 ${checks.c2 ? 'bg-blue-600 border-blue-600 text-white' : 'border-slate-300'}`}>
-                                {checks.c2 && <Check size={14}/>}
-                            </div>
-                            <input type="checkbox" className="hidden" checked={checks.c2} onChange={() => setChecks(p => ({...p, c2: !p.c2}))} />
-                            <div>
-                                <p className="text-[10px] font-black uppercase text-slate-900">Fallas Tecnológicas</p>
-                                <p className="text-[10px] text-slate-500 mt-1">Acepto que pueden ocurrir interrupciones en la conexión, video o audio ajenas al personal médico, y autorizo el cambio a llamada telefónica si fuera necesario.</p>
-                            </div>
-                        </label>
-
-                        <label className={`flex gap-4 p-4 rounded-2xl border-2 cursor-pointer transition-all ${checks.c3 ? 'bg-blue-50 border-blue-500' : 'bg-white border-slate-100 hover:border-slate-300'}`}>
-                            <div className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center flex-shrink-0 ${checks.c3 ? 'bg-blue-600 border-blue-600 text-white' : 'border-slate-300'}`}>
-                                {checks.c3 && <Check size={14}/>}
-                            </div>
-                            <input type="checkbox" className="hidden" checked={checks.c3} onChange={() => setChecks(p => ({...p, c3: !p.c3}))} />
-                            <div>
-                                <p className="text-[10px] font-black uppercase text-slate-900">Privacidad y Protección de Datos</p>
-                                <p className="text-[10px] text-slate-500 mt-1">Autorizo el uso de plataformas encriptadas para la transmisión de mi imagen, voz y datos clínicos sensibles para fines exclusivos de mi atención médica.</p>
-                            </div>
-                        </label>
-
-                        <label className={`flex gap-4 p-4 rounded-2xl border-2 cursor-pointer transition-all ${checks.c4 ? 'bg-blue-50 border-blue-500' : 'bg-white border-slate-100 hover:border-slate-300'}`}>
-                            <div className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center flex-shrink-0 ${checks.c4 ? 'bg-blue-600 border-blue-600 text-white' : 'border-slate-300'}`}>
-                                {checks.c4 && <Check size={14}/>}
-                            </div>
-                            <input type="checkbox" className="hidden" checked={checks.c4} onChange={() => setChecks(p => ({...p, c4: !p.c4}))} />
-                            <div>
-                                <p className="text-[10px] font-black uppercase text-slate-900">Autorización Voluntaria</p>
-                                <p className="text-[10px] text-slate-500 mt-1">Solicito la atención voluntariamente y confirmo que tengo capacidad legal para otorgar este consentimiento o soy el tutor legal del paciente.</p>
-                            </div>
-                        </label>
-                    </div>
-                </div>
-
-                <div className="p-8 border-t border-slate-100 bg-white">
-                    <button 
-                        onClick={onAccept}
-                        disabled={!allChecked}
-                        className={`w-full py-5 rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl flex items-center justify-center gap-3 transition-all ${allChecked ? 'bg-slate-900 text-white hover:bg-blue-600' : 'bg-slate-200 text-slate-400 cursor-not-allowed'}`}
-                    >
-                        <FileSignature size={18}/> Aceptar y Continuar
-                    </button>
-                </div>
-            </div>
-        </div>
-    );
+    while (current < end) {
+        const timeString = current.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        slots.push(timeString);
+        current.setMinutes(current.getMinutes() + schedule.slotDuration);
+    }
+    
+    return slots;
 };
 
-// --- CHAT ASSISTANT COMPONENT (UPDATED WITH SCHEDULING LOGIC) ---
-const ClinicChatAssistant: React.FC<{ 
-    doctorsList: DoctorInfo[];
-    patients: Patient[];
-    onAddPatient?: (p: Patient) => void;
-    onAddHomeRequest?: (req: HomeServiceRequest) => void;
-}> = ({ doctorsList, patients, onAddPatient, onAddHomeRequest }) => {
-    const [isOpen, setIsOpen] = useState(false);
-    const [isTyping, setIsTyping] = useState(false);
-    const [inputValue, setInputValue] = useState('');
+// --- SUB-COMPONENT: PORTAL DEL PACIENTE (RESPONSIVO) ---
+const PatientAppView: React.FC<{
+    currentUser: DoctorInfo;
+    doctors: DoctorInfo[];
+    myAppointments: Patient[];
+    notes: ClinicalNote[]; 
+    onBookAppointment: (doc: DoctorInfo | null, time: string, intake: TeleIntakeForm, date?: string) => void;
+    onRequestHomeService: (type: 'lab' | 'specialist' | 'pharmacy', details?: any) => void;
+    onGoBack: () => void;
+    currentWaitingPatient?: Patient; 
+}> = ({ currentUser, doctors, myAppointments, notes, onBookAppointment, onRequestHomeService, onGoBack, currentWaitingPatient }) => {
+    const [appTab, setAppTab] = useState<'home' | 'doctors' | 'history' | 'vitals'>('home');
+    const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
     
-    // Conversation State Management
-    const [flowState, setFlowState] = useState<'IDLE' | 'BOOKING_TYPE' | 'DOC_SELECT' | 'SLOT_SELECT' | 'LAB_TYPE' | 'LAB_CONFIRM' | 'CONFIRM_APPT'>('IDLE');
-    const [bookingData, setBookingData] = useState<any>({});
+    // Flow States
+    const [flowStep, setFlowStep] = useState<'none' | 'profile' | 'schedule' | 'consent' | 'intake' | 'waiting'>('none');
+    const [selectedDoc, setSelectedDoc] = useState<DoctorInfo | null>(null);
+    const [consentSigned, setConsentSigned] = useState(false);
+    const [intakeForm, setIntakeForm] = useState<TeleIntakeForm>({
+        mainSymptom: '', onsetDuration: '', painLevel: 0, chronicConditions: [], allergies: '', currentMedication: '', notes: '', submittedAt: ''
+    });
 
-    const [messages, setMessages] = useState<{
-        id: string, 
-        text: string, 
-        sender: 'bot' | 'user' | 'agent', 
-        type?: 'text' | 'options' | 'slots',
-        options?: {label: string, value: string, action?: () => void}[],
-        slots?: string[]
-    }[]>([
-        { id: '1', text: '¡Hola! 👋 Soy MediBot. Puedo ayudarte a agendar citas, solicitar laboratorios o resolver dudas de la clínica.', sender: 'bot', type: 'text' }
-    ]);
-    const scrollRef = useRef<HTMLDivElement>(null);
+    // Scheduling State
+    const [selectedDate, setSelectedDate] = useState<Date>(new Date());
+    const [selectedSlot, setSelectedSlot] = useState<string | null>(null);
+
+    // Modales de Servicios
+    const [activeServiceModal, setActiveServiceModal] = useState<'none' | 'pharmacy' | 'lab' | 'home_visit'>('none');
+    
+    // Estados internos de los servicios
+    const [cart, setCart] = useState<any[]>([]);
+    const [pharmacyCategory, setPharmacyCategory] = useState('Todos');
+    const [homeVisitAddress, setHomeVisitAddress] = useState('');
+    const [pharmacyAddress, setPharmacyAddress] = useState('');
+    const [labAddress, setLabAddress] = useState('');
+    const [labSearch, setLabSearch] = useState('');
+
+    // Cross-Selling States
+    const [addLabToVisit, setAddLabToVisit] = useState(false);
+    const [addDoctorToLab, setAddDoctorToLab] = useState(false);
 
     useEffect(() => {
-        if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    }, [messages, isTyping, isOpen]);
+        if (currentWaitingPatient) {
+            setFlowStep('waiting');
+        }
+    }, [currentWaitingPatient]);
 
-    // --- AGENT LOGIC & AVAILABILITY CHECK ---
-    const getAvailableSlots = (doctorCedula: string, date: string) => {
-        const doctor = doctorsList.find(d => d.cedula === doctorCedula);
-        if (!doctor) return [];
-        
-        // Mock Schedule: 09:00 to 18:00
-        const baseSlots = ['09:00', '10:00', '11:00', '12:00', '13:00', '16:00', '17:00', '18:00'];
-        
-        // Filter out existing appointments
-        const takenSlots = patients
-            .filter(p => p.assignedDoctorId === doctorCedula && p.scheduledDate === date && p.status !== PatientStatus.ATTENDED && p.status !== PatientStatus.ONLINE_QUEUE)
-            .map(p => p.appointmentTime);
-            
-        return baseSlots.filter(slot => !takenSlots.includes(slot));
+    const handleStartImmediate = () => {
+        setSelectedDoc(null); 
+        // Immediate assumes today/now
+        setSelectedDate(new Date());
+        setSelectedSlot(new Date().toLocaleTimeString('es-MX', {hour:'2-digit', minute:'2-digit'}));
+        setFlowStep('consent');
     };
 
-    const processMessage = (text: string, payload?: any) => {
-        const lower = text.toLowerCase();
-        let responseMsgs: any[] = [];
-        let nextFlow = flowState;
-
-        // --- GLOBAL COMMANDS ---
-        if (lower.includes('hola') || lower.includes('inicio')) {
-            nextFlow = 'IDLE';
-            responseMsgs.push({ text: "¡Hola de nuevo! ¿En qué puedo ayudarte?", type: 'text' });
-        }
-        else if (lower.includes('agendar') || lower.includes('cita')) {
-            nextFlow = 'BOOKING_TYPE';
-            responseMsgs.push({ 
-                text: "¿Qué tipo de servicio necesitas agendar?", 
-                type: 'options',
-                options: [
-                    { label: "👨‍⚕️ Consulta Médica", value: "consulta", action: () => processMessage("consulta") },
-                    { label: "🧪 Laboratorios", value: "laboratorio", action: () => processMessage("laboratorio") }
-                ]
-            });
-        }
-        // --- BOOKING FLOW: CONSULTA ---
-        else if (flowState === 'BOOKING_TYPE' && lower.includes('consulta')) {
-            nextFlow = 'DOC_SELECT';
-            // Group doctors by specialty
-            const specialties = Array.from(new Set(doctorsList.map(d => d.specialty)));
-            responseMsgs.push({
-                text: "Perfecto. Selecciona una especialidad o médico:",
-                type: 'options',
-                options: doctorsList.map(d => ({
-                    label: `Dr. ${d.name.split(' ')[0]} (${d.specialty})`,
-                    value: d.cedula,
-                    action: () => processMessage("select_doc", d)
-                }))
-            });
-        }
-        else if (flowState === 'DOC_SELECT' && payload) { // Payload is Doctor Object
-            const doc = payload as DoctorInfo;
-            setBookingData({ ...bookingData, doctor: doc, date: new Date().toISOString().split('T')[0] }); // Default today
-            const slots = getAvailableSlots(doc.cedula, new Date().toISOString().split('T')[0]);
-            
-            if (slots.length > 0) {
-                nextFlow = 'SLOT_SELECT';
-                responseMsgs.push({ 
-                    text: `El Dr. ${doc.name} tiene disponibilidad hoy. Selecciona un horario:`,
-                    type: 'options', // Reusing options for slots visual
-                    options: slots.map(s => ({ label: s, value: s, action: () => processMessage("select_slot", s) }))
-                });
-            } else {
-                nextFlow = 'IDLE';
-                responseMsgs.push({ text: "Lo siento, este médico no tiene espacios hoy. Intenta llamar a recepción para fechas futuras.", type: 'text' });
-            }
-        }
-        else if (flowState === 'SLOT_SELECT' && payload) { // Payload is Slot String
-            const slot = payload as string;
-            setBookingData({ ...bookingData, time: slot });
-            nextFlow = 'CONFIRM_APPT';
-            responseMsgs.push({
-                text: `Confirma tu cita:\n\n👨‍⚕️ ${bookingData.doctor.name}\n📅 Hoy\n⏰ ${slot}\n💲 Costo: $${bookingData.doctor.price}`,
-                type: 'options',
-                options: [
-                    { label: "✅ Confirmar Cita", value: "confirm", action: () => processMessage("confirm_appt") },
-                    { label: "❌ Cancelar", value: "cancel", action: () => processMessage("cancel") }
-                ]
-            });
-        }
-        else if (text === 'confirm_appt') {
-            if (onAddPatient) {
-                onAddPatient({
-                    id: `BOT-${Date.now()}`,
-                    name: 'PACIENTE CHAT (TU)', // In real app use logged user
-                    curp: 'XXXX000000XXXXXX00',
-                    age: 30, sex: 'M', bloodType: 'O+', allergies: [],
-                    status: PatientStatus.SCHEDULED,
-                    priority: PriorityLevel.ROUTINE,
-                    assignedModule: ModuleType.OUTPATIENT, // Or Telemedicine depending on context
-                    scheduledDate: bookingData.date,
-                    lastVisit: bookingData.date, // Add lastVisit
-                    appointmentTime: bookingData.time,
-                    assignedDoctorId: bookingData.doctor.cedula,
-                    assignedDoctorName: bookingData.doctor.name,
-                    reason: "Agendado vía Asistente Virtual",
-                    agendaStatus: AgendaStatus.PENDING,
-                    chronicDiseases: []
-                });
-                responseMsgs.push({ text: "¡Listo! Tu cita ha sido agendada exitosamente. Te esperamos.", type: 'text' });
-            }
-            nextFlow = 'IDLE';
-            setBookingData({});
-        }
-
-        // --- BOOKING FLOW: LAB ---
-        else if (flowState === 'BOOKING_TYPE' && lower.includes('laboratorio')) {
-            nextFlow = 'LAB_TYPE';
-            responseMsgs.push({
-                text: "¿Dónde prefieres la toma de muestra?",
-                type: 'options',
-                options: [
-                    { label: "🚑 A Domicilio", value: "home", action: () => processMessage("lab_home") },
-                    { label: "🏥 En Clínica", value: "clinic", action: () => processMessage("lab_clinic") }
-                ]
-            });
-        }
-        else if (text === 'lab_home') {
-             if (onAddHomeRequest) {
-                 onAddHomeRequest({
-                     id: `BOT-LAB-${Date.now()}`,
-                     patientId: 'GUEST',
-                     patientName: 'PACIENTE CHAT',
-                     patientAddress: 'Ubicación Actual (Chat)',
-                     patientPhone: '55-0000-0000',
-                     requestedBy: 'MediBot',
-                     requestedDate: new Date().toISOString(),
-                     status: 'Pendiente',
-                     studies: ['Check-up General (Bot)']
-                 });
-                 responseMsgs.push({ text: "He generado una solicitud de unidad móvil. Una enfermera te contactará en breve para confirmar tu ubicación exacta.", type: 'text' });
-             }
-             nextFlow = 'IDLE';
-        }
-        else if (text === 'lab_clinic') {
-             responseMsgs.push({ text: "Para laboratorio en clínica no necesitas cita, puedes acudir en ayunas de 7:00 AM a 11:00 AM. ¡Te esperamos!", type: 'text' });
-             nextFlow = 'IDLE';
-        }
-
-        // --- INFO QUERIES (FALLBACK) ---
-        else if (lower.includes('precio')) {
-             const minPrice = Math.min(...doctorsList.map(d => d.price));
-             responseMsgs.push({ text: `Nuestras consultas van desde $${minPrice}. ¿Te gustaría agendar?`, type: 'text' });
-        }
-        else if (lower.includes('ubicacion')) {
-             responseMsgs.push({ text: "Estamos en Av. Insurgentes Sur 123. Contamos con Valet Parking.", type: 'text' });
-        }
-        else {
-             responseMsgs.push({ text: "No estoy seguro de entender. ¿Quieres agendar una cita o hablar con un humano?", type: 'options', options: [{ label: "👤 Hablar con Humano", value: "human", action: () => processMessage("human") }] });
-        }
-
-        if (text === 'cancel') {
-            responseMsgs = [{ text: "Operación cancelada. ¿En qué más puedo ayudarte?", type: 'text' }];
-            nextFlow = 'IDLE';
-        }
-        
-        if (text === 'human') {
-             responseMsgs = [{ text: "Conectando con agente... (Simulación)", type: 'text' }];
-             nextFlow = 'IDLE';
-        }
-
-        return { responseMsgs, nextFlow };
+    const handleSelectDoctor = (doc: DoctorInfo) => {
+        setSelectedDoc(doc);
+        setFlowStep('profile');
     };
 
-    const handleSend = (text: string = inputValue, payload?: any) => {
-        if (!text && !payload) return;
+    const handleProceedToSchedule = () => {
+        setFlowStep('schedule');
+    };
 
-        // User Message (only show if typed, not if clicking internal logic buttons sometimes)
-        if (!payload) {
-            setMessages(prev => [...prev, { id: Date.now().toString(), text: text, sender: 'user' }]);
-            setInputValue('');
-        }
+    const handleConfirmSchedule = () => {
+        if (!selectedSlot) return alert("Seleccione una hora");
+        setFlowStep('consent');
+    };
+
+    const handleConsent = () => {
+        if (!consentSigned) return alert("Debe aceptar el consentimiento informado.");
+        setFlowStep('intake');
+    };
+
+    const handleSubmitIntake = () => {
+        if (!intakeForm.mainSymptom) return alert("Describa su síntoma principal.");
         
-        setIsTyping(true);
-        setFlowState(prev => {
-            // Logic execution wrapper to access current state inside timeout if needed, 
-            // but here we use the functional update or separate logic.
-            // For simplicity in this mock, we execute logic immediately but delay display.
-            const result = processMessage(text, payload);
-            
-            setTimeout(() => {
-                const newMsgs = result.responseMsgs.map((m: any, i: number) => ({
-                    id: `bot-${Date.now()}-${i}`,
-                    sender: 'bot',
-                    ...m
-                }));
-                setMessages(prev => [...prev, ...newMsgs]);
-                setIsTyping(false);
-            }, 800);
+        onBookAppointment(
+            selectedDoc, 
+            selectedSlot || new Date().toLocaleTimeString('es-MX', {hour:'2-digit', minute:'2-digit'}), 
+            { ...intakeForm, submittedAt: new Date().toISOString() },
+            selectedDate.toISOString().split('T')[0]
+        );
+        setFlowStep('waiting');
+    };
 
-            return result.nextFlow;
+    // Service Actions
+    const handlePharmacyOrder = () => {
+        if(cart.length === 0) return alert("El carrito está vacío");
+        if(!pharmacyAddress) return alert("Por favor ingrese la dirección de entrega.");
+        
+        onRequestHomeService('pharmacy', { items: cart, address: pharmacyAddress });
+        alert("Pedido de farmacia enviado. Un repartidor se pondrá en contacto.");
+        setCart([]);
+        setPharmacyAddress('');
+        setActiveServiceModal('none');
+    };
+
+    const handleLabOrder = (pkg: any) => {
+        if(!labAddress) return alert("Por favor ingrese la dirección para la toma de muestra.");
+        
+        onRequestHomeService('lab', { 
+            package: pkg, 
+            address: labAddress,
+            includeDoctor: addDoctorToLab // Cross-sell
         });
+        alert(`Solicitud de ${pkg.name} enviada. ${addDoctorToLab ? 'Incluye valoración médica.' : ''}`);
+        setLabAddress('');
+        setAddDoctorToLab(false);
+        setActiveServiceModal('none');
     };
 
-    return (
-        <>
-            <button 
-                onClick={() => setIsOpen(!isOpen)}
-                className={`fixed bottom-6 right-6 p-4 rounded-full shadow-2xl transition-all z-[60] flex items-center justify-center ${isOpen ? 'bg-slate-200 text-slate-600 rotate-90' : 'bg-indigo-600 text-white hover:scale-110 hover:bg-indigo-700'}`}
-            >
-                {isOpen ? <X size={24} /> : <MessageSquare size={24} fill="currentColor" />}
-            </button>
-
-            {isOpen && (
-                <div className="fixed bottom-24 right-6 w-96 h-[600px] bg-white rounded-[2.5rem] shadow-2xl border border-slate-200 z-[60] flex flex-col overflow-hidden animate-in slide-in-from-bottom-10 fade-in duration-300">
-                    <div className="bg-slate-900 p-5 flex items-center justify-between shadow-md z-10">
-                        <div className="flex items-center gap-3">
-                            <div className="relative">
-                                <div className="w-12 h-12 bg-indigo-500 rounded-full flex items-center justify-center text-white border-2 border-slate-800">
-                                    <Bot size={24} />
-                                </div>
-                                <div className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-emerald-500 border-2 border-slate-900 rounded-full animate-pulse"></div>
-                            </div>
-                            <div>
-                                <h4 className="text-white font-black text-sm uppercase tracking-wide">MediBot IA</h4>
-                                <p className="text-indigo-300 text-[9px] font-bold uppercase tracking-widest">Asistente Inteligente</p>
-                            </div>
-                        </div>
-                        <button onClick={() => setIsOpen(false)} className="text-slate-400 hover:text-white transition-colors"><X size={20}/></button>
-                    </div>
-
-                    <div className="flex-1 bg-slate-50 p-4 overflow-y-auto custom-scrollbar space-y-4" ref={scrollRef}>
-                        {messages.map((msg) => (
-                            <div key={msg.id} className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
-                                <div className={`max-w-[85%] space-y-2`}>
-                                    {msg.text && (
-                                        <div className={`p-4 rounded-2xl text-xs font-medium leading-relaxed shadow-sm ${
-                                            msg.sender === 'user' 
-                                            ? 'bg-indigo-600 text-white rounded-br-sm' 
-                                            : 'bg-white text-slate-700 border border-slate-200 rounded-bl-sm'
-                                        }`}>
-                                            {msg.text}
-                                        </div>
-                                    )}
-                                    {msg.type === 'options' && msg.options && (
-                                        <div className="flex flex-wrap gap-2">
-                                            {msg.options.map((opt, idx) => (
-                                                <button 
-                                                    key={idx}
-                                                    onClick={opt.action}
-                                                    className="px-4 py-2 bg-indigo-100 text-indigo-700 rounded-xl text-[10px] font-black uppercase hover:bg-indigo-600 hover:text-white transition-all shadow-sm border border-indigo-200"
-                                                >
-                                                    {opt.label}
-                                                </button>
-                                            ))}
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-                        ))}
-                        {isTyping && (
-                            <div className="flex justify-start">
-                                <div className="bg-white border border-slate-200 p-3 rounded-2xl rounded-bl-sm shadow-sm flex gap-1 items-center">
-                                    <span className="text-[10px] font-bold text-slate-400 mr-2">Escribiendo</span>
-                                    <div className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce"></div>
-                                    <div className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce delay-75"></div>
-                                    <div className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce delay-150"></div>
-                                </div>
-                            </div>
-                        )}
-                    </div>
-
-                    <div className="p-3 bg-white border-t border-slate-100">
-                        <form 
-                            onSubmit={(e) => { e.preventDefault(); handleSend(); }}
-                            className="flex items-center gap-2 bg-slate-100 p-1.5 rounded-2xl border border-slate-200"
-                        >
-                            <input 
-                                className="flex-1 bg-transparent px-4 py-3 text-xs font-medium outline-none text-slate-700 placeholder:text-slate-400"
-                                placeholder="Escribe aquí..."
-                                value={inputValue}
-                                onChange={(e) => setInputValue(e.target.value)}
-                            />
-                            <button type="submit" className="p-3 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-colors shadow-md">
-                                <Send size={16} />
-                            </button>
-                        </form>
-                    </div>
-                </div>
-            )}
-        </>
-    );
-};
-
-
-// ... (DoctorPublicProfile component remains the same) ...
-const DoctorPublicProfile: React.FC<{ 
-    doctor: DoctorInfo; 
-    onBack: () => void; 
-    onSchedule: () => void; 
-}> = ({ doctor, onBack, onSchedule }) => {
-  return (
-    <div className="animate-in slide-in-from-right duration-300 bg-slate-50 min-h-screen pb-20 absolute inset-0 z-50 overflow-y-auto">
-       {/* Navigation */}
-       <div className="sticky top-0 z-20 bg-white/90 backdrop-blur-md border-b border-slate-200 px-6 py-4 flex justify-between items-center shadow-sm">
-          <button onClick={onBack} className="flex items-center gap-2 text-slate-600 hover:text-slate-900 transition-colors p-2 hover:bg-slate-100 rounded-xl">
-             <ArrowLeft size={20} /> <span className="font-black text-xs uppercase tracking-widest">Regresar al Directorio</span>
-          </button>
-          <div className="text-right hidden md:block">
-             <p className="font-black text-slate-900 text-sm uppercase">{doctor.name}</p>
-             <p className="text-[10px] font-bold text-slate-400 uppercase">{doctor.specialty} • {doctor.hospital}</p>
-          </div>
-       </div>
-
-       {/* Cover & Avatar */}
-       <div className="relative">
-          <div className="h-64 w-full bg-slate-200 overflow-hidden">
-             {doctor.coverUrl ? (
-                <img src={doctor.coverUrl} className="w-full h-full object-cover" alt="Cover" />
-             ) : (
-                <div className="w-full h-full bg-gradient-to-r from-blue-600 to-indigo-600 opacity-90 relative overflow-hidden">
-                    <div className="absolute inset-0 opacity-20 bg-[url('https://www.transparenttextures.com/patterns/medical-icons.png')]"></div>
-                </div>
-             )}
-          </div>
-          <div className="max-w-5xl mx-auto px-6 relative -mt-20 flex flex-col md:flex-row items-end md:items-end gap-8">
-             <div className="w-40 h-40 rounded-[2.5rem] bg-white p-2 shadow-2xl">
-                {doctor.avatarUrl ? (
-                   <img src={doctor.avatarUrl} className="w-full h-full object-cover rounded-[2rem]" alt="Avatar" />
-                ) : (
-                   <div className="w-full h-full bg-slate-100 rounded-[2rem] flex items-center justify-center text-5xl font-black text-slate-300 uppercase border-4 border-slate-50">
-                      {doctor.name.charAt(0)}
-                   </div>
-                )}
-             </div>
-             <div className="flex-1 pb-4 w-full">
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
-                   <div>
-                      <h1 className="text-3xl md:text-4xl font-black text-slate-900 uppercase tracking-tight leading-none">{doctor.name}</h1>
-                      <div className="flex flex-wrap items-center gap-3 mt-3">
-                         <span className="px-4 py-1.5 bg-blue-100 text-blue-700 rounded-lg text-[10px] font-black uppercase tracking-wider">{doctor.specialty}</span>
-                         {doctor.isPremium && <span className="px-3 py-1.5 bg-amber-100 text-amber-700 rounded-lg text-[10px] font-black uppercase flex items-center gap-1"><BadgeCheck size={12}/> Verificado</span>}
-                         <div className="flex items-center gap-1 text-amber-500 bg-white px-3 py-1.5 rounded-lg border border-slate-100 shadow-sm">
-                            <Star size={14} fill="currentColor" />
-                            <span className="text-sm font-bold text-slate-700">{doctor.rating}</span>
-                            <span className="text-[10px] text-slate-400 font-medium ml-1">({doctor.reviewCount} Opiniones)</span>
-                         </div>
-                         {doctor.isOnline ? (
-                             <span className="px-3 py-1.5 bg-emerald-100 text-emerald-700 rounded-lg text-[10px] font-black uppercase flex items-center gap-1 border border-emerald-200"><Wifi size={12}/> Disponible</span>
-                         ) : (
-                             <span className="px-3 py-1.5 bg-slate-100 text-slate-500 rounded-lg text-[10px] font-black uppercase flex items-center gap-1 border border-slate-200"><WifiOff size={12}/> Ocupado</span>
-                         )}
-                      </div>
-                   </div>
-                   <button 
-                      onClick={onSchedule}
-                      className="px-8 py-4 bg-slate-900 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl hover:bg-blue-600 transition-all flex items-center justify-center gap-2 active:scale-95"
-                   >
-                      Agendar Cita <ChevronRight size={16}/>
-                   </button>
-                </div>
-             </div>
-          </div>
-       </div>
-
-       {/* Content Grid */}
-       <div className="max-w-6xl mx-auto px-6 mt-12 grid grid-cols-1 lg:grid-cols-3 gap-10">
-          {/* ... (Rest of bio content) ... */}
-          {/* Left Column: Bio & Info */}
-          <div className="lg:col-span-2 space-y-10">
-             
-             {/* About */}
-             <div className="bg-white p-10 rounded-[3rem] shadow-sm border border-slate-200 space-y-6">
-                <h3 className="text-xl font-black text-slate-900 uppercase flex items-center gap-3 border-b border-slate-50 pb-4">
-                   <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center"><User size={20}/></div>
-                   Acerca del Especialista
-                </h3>
-                <p className="text-sm text-slate-600 leading-relaxed font-medium text-justify">
-                   {doctor.biography || `El Dr. ${doctor.name.split(' ')[0]} es un especialista con amplia experiencia en ${doctor.specialty}. Se dedica a proporcionar diagnósticos precisos y planes de tratamiento personalizados, priorizando siempre el bienestar y la comodidad del paciente. Su enfoque combina la evidencia científica más reciente con un trato humano y cercano.`}
-                </p>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
-                   <div className="flex items-center gap-3 p-4 bg-slate-50 rounded-2xl">
-                      <div className="p-2 bg-white rounded-lg shadow-sm text-slate-400"><GraduationCap size={18} /></div>
-                      <div>
-                          <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Egresado de</p>
-                          <p className="text-xs font-bold text-slate-900 uppercase">{doctor.institution}</p>
-                      </div>
-                   </div>
-                   <div className="flex items-center gap-3 p-4 bg-slate-50 rounded-2xl">
-                      <div className="p-2 bg-white rounded-lg shadow-sm text-slate-400"><MapPin size={18} /></div>
-                      <div>
-                          <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Ubicación</p>
-                          <p className="text-xs font-bold text-slate-900 uppercase">{doctor.hospital}</p>
-                      </div>
-                   </div>
-                </div>
-             </div>
-
-             {/* Services */}
-             <div className="space-y-6">
-                <h3 className="text-lg font-black text-slate-900 uppercase ml-4 flex items-center gap-2"><Briefcase size={18} className="text-slate-400"/> Servicios Ofrecidos</h3>
-                <div className="flex flex-wrap gap-3">
-                   {doctor.services?.map((svc, i) => (
-                      <span key={i} className="px-6 py-3 bg-white border border-slate-200 rounded-2xl text-xs font-bold text-slate-700 uppercase shadow-sm flex items-center gap-2">
-                         <div className="w-1.5 h-1.5 rounded-full bg-blue-500"></div> {svc}
-                      </span>
-                   )) || (
-                       <>
-                        <span className="px-6 py-3 bg-white border border-slate-200 rounded-2xl text-xs font-bold text-slate-700 uppercase shadow-sm">Consulta de {doctor.specialty}</span>
-                        <span className="px-6 py-3 bg-white border border-slate-200 rounded-2xl text-xs font-bold text-slate-700 uppercase shadow-sm">Seguimiento y Control</span>
-                        <span className="px-6 py-3 bg-white border border-slate-200 rounded-2xl text-xs font-bold text-slate-700 uppercase shadow-sm">Telemedicina</span>
-                       </>
-                   )}
-                </div>
-             </div>
-
-             {/* Reviews */}
-             {(doctor.allowReviews ?? true) && (
-                <div className="bg-white p-10 rounded-[3rem] shadow-sm border border-slate-200 space-y-8">
-                   <div className="flex items-center justify-between">
-                      <h3 className="text-xl font-black text-slate-900 uppercase flex items-center gap-3">
-                         <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-500 flex items-center justify-center"><MessageSquare size={20}/></div>
-                         Opiniones de Pacientes
-                      </h3>
-                      <div className="text-right bg-slate-50 px-4 py-2 rounded-2xl border border-slate-100">
-                         <p className="text-3xl font-black text-slate-900">{doctor.rating}</p>
-                         <div className="flex text-amber-400 gap-0.5 justify-end">
-                            {[1,2,3,4,5].map(s => <Star key={s} size={10} fill="currentColor" />)}
-                         </div>
-                      </div>
-                   </div>
-                   
-                   <div className="space-y-6">
-                      {[
-                         { user: "María F.", date: "Hace 2 días", text: "Excelente atención del doctor, muy profesional y atento. Resolvió todas mis dudas con paciencia.", rating: 5 },
-                         { user: "Carlos R.", date: "Hace 1 semana", text: "Buena consulta, las instalaciones son muy cómodas y el trato fue amable.", rating: 4 },
-                         { user: "Ana G.", date: "Hace 3 semanas", text: "Muy recomendado, me ayudó mucho con mi tratamiento.", rating: 5 }
-                      ].map((review, idx) => (
-                         <div key={idx} className="bg-slate-50/50 p-6 rounded-3xl border border-slate-100">
-                            <div className="flex items-center justify-between mb-3">
-                               <div className="flex items-center gap-3">
-                                  <div className="w-8 h-8 bg-white border border-slate-200 rounded-full flex items-center justify-center font-black text-xs text-slate-500 shadow-sm">
-                                     {review.user.charAt(0)}
-                                  </div>
-                                  <div>
-                                      <p className="text-xs font-black text-slate-900 uppercase">{review.user}</p>
-                                      <div className="flex text-amber-400 gap-0.5">
-                                        {[...Array(review.rating)].map((_, i) => <Star key={i} size={8} fill="currentColor" />)}
-                                      </div>
-                                  </div>
-                                </div>
-                               <span className="text-[9px] font-bold text-slate-400 uppercase">{review.date}</span>
-                            </div>
-                            <p className="text-xs text-slate-600 font-medium leading-relaxed italic ml-11">"{review.text}"</p>
-                         </div>
-                      ))}
-                   </div>
-                </div>
-             )}
-          </div>
-
-          {/* Right Column: Quick Stats & Gallery */}
-          <div className="space-y-8">
-             <div className="bg-slate-900 text-white p-8 rounded-[3rem] shadow-2xl space-y-8 relative overflow-hidden group">
-                <div className="relative z-10 space-y-6">
-                   <div>
-                       <p className="text-[10px] font-black uppercase tracking-widest text-blue-400 border-b border-white/10 pb-2 mb-2">Costo por Consulta</p>
-                       <p className="text-5xl font-black tracking-tighter">${doctor.price}</p>
-                       <p className="text-[10px] font-bold text-slate-400 uppercase mt-1">Moneda Nacional (MXN)</p>
-                   </div>
-                   
-                   <div className="space-y-3">
-                      <div className="flex items-center gap-3 p-3 bg-white/5 rounded-2xl border border-white/10">
-                         <div className="p-1.5 bg-emerald-500/20 rounded-lg text-emerald-400"><CheckCircle2 size={14} /></div>
-                         <span className="text-xs font-bold text-slate-200 uppercase">Duración aprox. 45 min</span>
-                      </div>
-                      <div className="flex items-center gap-3 p-3 bg-white/5 rounded-2xl border border-white/10">
-                         <div className="p-1.5 bg-blue-500/20 rounded-lg text-blue-400"><Video size={14} /></div>
-                         <span className="text-xs font-bold text-slate-200 uppercase">Disponible Online</span>
-                      </div>
-                      <div className="flex items-center gap-3 p-3 bg-white/5 rounded-2xl border border-white/10">
-                         <div className="p-1.5 bg-indigo-500/20 rounded-lg text-indigo-400"><ShieldCheck size={14} /></div>
-                         <span className="text-xs font-bold text-slate-200 uppercase">Certificado Vigente</span>
-                      </div>
-                   </div>
-                </div>
-                {/* Decoration */}
-                <div className="absolute -right-10 -bottom-10 w-48 h-48 bg-blue-600 rounded-full blur-3xl opacity-20 group-hover:opacity-30 transition-opacity"></div>
-             </div>
-
-             <div className="space-y-4">
-                <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest ml-2 flex items-center gap-2"><ImageIcon size={14}/> Galería / Instalaciones</h4>
-                <div className="grid grid-cols-2 gap-4">
-                   {doctor.gallery && doctor.gallery.length > 0 ? doctor.gallery.map((img, i) => (
-                      <div key={i} className="aspect-square rounded-[2rem] overflow-hidden bg-slate-200 shadow-sm border border-slate-100 group/img relative">
-                         <img src={img} className="w-full h-full object-cover group-hover/img:scale-110 transition-transform duration-500" alt="Gallery" />
-                      </div>
-                   )) : (
-                      <>
-                         <div className="aspect-square rounded-[2rem] bg-white border border-slate-200 flex flex-col items-center justify-center text-slate-300 gap-2">
-                             <ImageIcon size={24}/>
-                             <span className="text-[8px] font-black uppercase">Recepción</span>
-                         </div>
-                         <div className="aspect-square rounded-[2rem] bg-white border border-slate-200 flex flex-col items-center justify-center text-slate-300 gap-2">
-                             <Stethoscope size={24}/>
-                             <span className="text-[8px] font-black uppercase">Consultorio</span>
-                         </div>
-                      </>
-                   )}
-                </div>
-             </div>
-          </div>
-       </div>
-    </div>
-  );
-};
-
-// ... (IntakeModal component remains the same) ...
-const IntakeModal: React.FC<{
-    isOpen: boolean;
-    onClose: () => void;
-    onSubmit: (data: TeleIntakeForm & { specialty?: string }) => void;
-    preSelectedDoctor?: DoctorInfo;
-}> = ({ isOpen, onClose, onSubmit, preSelectedDoctor }) => {
-    // ... same implementation ...
-    const [formData, setFormData] = useState<TeleIntakeForm>({
-        mainSymptom: '',
-        onsetDuration: '',
-        painLevel: 0,
-        chronicConditions: [],
-        allergies: '',
-        currentMedication: '',
-        notes: '',
-        submittedAt: new Date().toISOString()
-    });
-    
-    // Nueva selección de especialidad
-    const [selectedSpecialty, setSelectedSpecialty] = useState('Medicina General');
-
-    const commonConditions = ['Diabetes', 'Hipertensión', 'Asma', 'Cardiopatía', 'Ninguna'];
-    const specialties = ['Medicina General', 'Pediatría', 'Ginecología', 'Medicina Interna', 'Nutrición', 'Psicología', 'Dermatología', 'Cardiología'];
-
-    const handleSubmit = () => {
-        if (!formData.mainSymptom || !formData.onsetDuration) return alert("Por favor complete los síntomas principales.");
-        onSubmit({
-            ...formData, 
-            submittedAt: new Date().toISOString(),
-            specialty: preSelectedDoctor ? preSelectedDoctor.specialty : selectedSpecialty
+    const handleHomeVisitOrder = () => {
+        if(!homeVisitAddress) return alert("Ingrese su dirección");
+        onRequestHomeService('specialist', { 
+            address: homeVisitAddress,
+            includeLab: addLabToVisit // Cross-sell
         });
+        alert(`Solicitud de médico a domicilio enviada. ${addLabToVisit ? 'Incluye toma de muestras.' : ''}`);
+        setHomeVisitAddress('');
+        setAddLabToVisit(false);
+        setActiveServiceModal('none');
     };
 
-    const toggleCondition = (condition: string) => {
-        const current = formData.chronicConditions;
-        if (current.includes(condition)) {
-            setFormData({...formData, chronicConditions: current.filter(c => c !== condition)});
-        } else {
-            setFormData({...formData, chronicConditions: [...current, condition]});
-        }
-    };
-
-    if (!isOpen) return null;
-
-    return (
-        <div className="fixed inset-0 z-[60] bg-slate-900/90 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
-            <div className="bg-white w-full max-w-lg rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
-                <div className="p-8 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
-                    <div>
-                        <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">Historial Preliminar</h3>
-                        <p className="text-xs font-bold text-blue-600 uppercase tracking-widest mt-1">
-                            {preSelectedDoctor ? `Consulta con Dr. ${preSelectedDoctor.name}` : 'Solicitud de Atención Inmediata'}
-                        </p>
-                    </div>
-                    <button onClick={onClose} className="p-2 hover:bg-slate-200 rounded-full transition-colors"><X size={24}/></button>
-                </div>
-                
-                <div className="flex-1 overflow-y-auto p-8 space-y-6 custom-scrollbar">
-                    {/* SELECCIÓN DE ESPECIALIDAD (Solo si no hay doctor pre-seleccionado) */}
-                    {!preSelectedDoctor && (
-                        <div className="space-y-3">
-                            <label className="text-xs font-black text-slate-500 uppercase tracking-widest block ml-1 flex items-center gap-2">
-                                <Stethoscope size={14}/> Especialidad Requerida
-                            </label>
-                            <select 
-                                className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold outline-none focus:border-blue-500 transition-all"
-                                value={selectedSpecialty}
-                                onChange={e => setSelectedSpecialty(e.target.value)}
-                            >
-                                {specialties.map(s => <option key={s} value={s}>{s}</option>)}
-                            </select>
-                        </div>
-                    )}
-
-                    <div className="space-y-3">
-                        <label className="text-xs font-black text-slate-500 uppercase tracking-widest block ml-1">Síntoma Principal</label>
-                        <textarea 
-                            className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-medium outline-none focus:border-blue-500 transition-all h-24"
-                            placeholder="Describa qué siente (ej. Fiebre, dolor de cabeza...)"
-                            value={formData.mainSymptom}
-                            onChange={e => setFormData({...formData, mainSymptom: e.target.value})}
-                        />
-                    </div>
-                    
-                    <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                            <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block ml-1">Inicio de Síntomas</label>
-                            <input 
-                                className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold"
-                                placeholder="Ej: Hace 2 días"
-                                value={formData.onsetDuration}
-                                onChange={e => setFormData({...formData, onsetDuration: e.target.value})}
-                            />
-                        </div>
-                        <div className="space-y-2">
-                            <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block ml-1">Nivel Dolor (0-10)</label>
-                            <input 
-                                type="number" min="0" max="10"
-                                className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold"
-                                value={formData.painLevel}
-                                onChange={e => setFormData({...formData, painLevel: parseInt(e.target.value)})}
-                            />
-                        </div>
-                    </div>
-
-                    <div className="space-y-3">
-                        <label className="text-xs font-black text-slate-500 uppercase tracking-widest block ml-1">Padecimientos Crónicos</label>
-                        <div className="flex flex-wrap gap-2">
-                            {commonConditions.map(c => (
-                                <button 
-                                    key={c}
-                                    onClick={() => toggleCondition(c)}
-                                    className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase border-2 transition-all ${formData.chronicConditions.includes(c) ? 'bg-blue-600 border-blue-600 text-white' : 'bg-white border-slate-200 text-slate-500'}`}
-                                >
-                                    {c}
-                                </button>
-                            ))}
-                        </div>
-                    </div>
-
-                    <div className="space-y-2">
-                        <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block ml-1">Alergias Conocidas</label>
-                        <input 
-                            className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold"
-                            placeholder="Medicamentos, alimentos..."
-                            value={formData.allergies}
-                            onChange={e => setFormData({...formData, allergies: e.target.value})}
-                        />
-                    </div>
-                </div>
-
-                <div className="p-6 border-t border-slate-100 bg-white">
-                    <button 
-                        onClick={handleSubmit}
-                        className="w-full py-4 bg-slate-900 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl hover:bg-blue-600 transition-all flex items-center justify-center gap-2"
-                    >
-                        Enviar y Entrar a Sala <ArrowRight size={16}/>
-                    </button>
-                </div>
-            </div>
-        </div>
-    );
-};
-
-// --- NEW COMPONENT: HOME LAB REQUEST MODAL ---
-const HomeLabRequestModal: React.FC<{
-    isOpen: boolean;
-    onClose: () => void;
-    onSubmit: (req: { name: string, address: string, studies: string[], phone: string, coordinates: { lat: number, lng: number } }) => void;
-}> = ({ isOpen, onClose, onSubmit }) => {
-    // ... same implementation ...
-    const [name, setName] = useState('');
-    const [address, setAddress] = useState('');
-    const [phone, setPhone] = useState('');
-    const [selectedStudies, setSelectedStudies] = useState<string[]>([]);
-    
-    // Simulación de selección de coordenadas
-    const [isMapMode, setIsMapMode] = useState(false);
-    const [selectedCoords, setSelectedCoords] = useState<{lat: number, lng: number} | null>(null);
-
-    const toggleStudy = (studyName: string) => {
-        if (selectedStudies.includes(studyName)) {
-            setSelectedStudies(prev => prev.filter(s => s !== studyName));
-        } else {
-            setSelectedStudies(prev => [...prev, studyName]);
-        }
-    };
-
-    const handleMapClick = (e: React.MouseEvent<HTMLDivElement>) => {
-        // Simulación: Obtener coordenadas relativas al contenedor para el demo
-        // En producción se usaría Google Maps API o Leaflet
-        const rect = e.currentTarget.getBoundingClientRect();
-        const x = e.clientX - rect.left;
-        const y = e.clientY - rect.top;
+    // --- RENDER CONTENT ---
+    const renderContent = () => {
         
-        // Mock coordinates for demo
-        setSelectedCoords({ lat: x / rect.width, lng: y / rect.height });
-    };
-
-    const handleSubmit = () => {
-        if (!name || !address || selectedStudies.length === 0) return alert("Complete los datos obligatorios y seleccione al menos un estudio.");
-        onSubmit({ 
-            name, 
-            address, 
-            studies: selectedStudies, 
-            phone,
-            coordinates: selectedCoords || { lat: 0.5, lng: 0.5 } // Default center if not selected
-        });
-        setName(''); setAddress(''); setPhone(''); setSelectedStudies([]); setSelectedCoords(null);
-    };
-
-    if (!isOpen) return null;
-
-    return (
-        <div className="fixed inset-0 z-[60] bg-slate-900/90 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
-            <div className="bg-white w-full max-w-xl rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
-                <div className="p-8 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
-                    <div className="flex items-center gap-4">
-                        <div className="w-12 h-12 bg-amber-100 text-amber-600 rounded-xl flex items-center justify-center"><Ambulance size={24}/></div>
-                        <div>
-                            <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">Laboratorio a Domicilio</h3>
-                            <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1">Solicitud de Unidad Móvil</p>
-                        </div>
-                    </div>
-                    <button onClick={onClose} className="p-2 hover:bg-slate-200 rounded-full transition-colors"><X size={24}/></button>
-                </div>
-                
-                <div className="flex-1 overflow-y-auto p-8 space-y-6 custom-scrollbar">
-                    {/* VISUAL MAP SELECTOR (MOCK) */}
-                    <div className="space-y-2">
-                        <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block ml-1 flex justify-between">
-                            <span>Ubicación Exacta</span>
-                            <span className="text-rose-500">{selectedCoords ? 'Ubicación Fijada' : 'Toque el mapa para fijar'}</span>
-                        </label>
-                        <div 
-                            className="relative w-full h-40 bg-slate-100 rounded-2xl overflow-hidden border-2 border-slate-200 cursor-crosshair group"
-                            onClick={handleMapClick}
-                        >
-                             <div className="absolute inset-0 bg-[url('https://api.mapbox.com/styles/v1/mapbox/streets-v11/static/-99.1332,19.4326,12,0/600x300?access_token=YOUR_TOKEN')] bg-cover bg-center opacity-50 grayscale group-hover:grayscale-0 transition-all"></div>
-                             {/* Fallback pattern if image fails */}
-                             <div className="absolute inset-0 opacity-10 bg-[radial-gradient(#cbd5e1_1px,transparent_1px)] [background-size:16px_16px]"></div>
+        // --- 1. DOCTOR PROFILE ---
+        if (flowStep === 'profile' && selectedDoc) {
+            return (
+                <div className="space-y-6 animate-in slide-in-from-right-4 max-w-3xl mx-auto">
+                     <button onClick={() => setFlowStep('none')} className="flex items-center text-slate-500 hover:text-slate-800 transition-colors mb-4 font-bold text-xs uppercase">
+                        <ChevronLeft size={16}/> Volver al directorio
+                     </button>
+                     
+                     <div className="bg-white rounded-[3rem] shadow-xl overflow-hidden border border-slate-100">
+                         <div className="h-48 bg-slate-100 relative">
+                             {selectedDoc.coverUrl ? (
+                                 <img src={selectedDoc.coverUrl} className="w-full h-full object-cover" alt="Cover"/>
+                             ) : (
+                                 <div className="w-full h-full bg-gradient-to-r from-[#0057B8] to-blue-600"></div>
+                             )}
+                         </div>
+                         <div className="px-10 pb-10">
+                             <div className="flex justify-between items-end -mt-16 mb-6">
+                                 <div className="w-32 h-32 bg-white rounded-3xl p-1 shadow-2xl relative">
+                                     {selectedDoc.avatarUrl ? (
+                                         <img src={selectedDoc.avatarUrl} className="w-full h-full object-cover rounded-[1.2rem]" alt="Avatar"/>
+                                     ) : (
+                                         <div className="w-full h-full bg-slate-200 rounded-[1.2rem] flex items-center justify-center text-slate-400 font-black text-4xl">{selectedDoc.name.charAt(0)}</div>
+                                     )}
+                                     {selectedDoc.isVerified && (
+                                         <div className="absolute -bottom-2 -right-2 bg-blue-600 text-white p-1 rounded-full border-4 border-white" title="Médico Verificado">
+                                             <BadgeCheck size={20} fill="currentColor"/>
+                                         </div>
+                                     )}
+                                 </div>
+                                 <div className="flex gap-2">
+                                     <div className="bg-white px-4 py-2 rounded-2xl shadow-sm border border-slate-100 flex flex-col items-center">
+                                         <span className="text-xl font-black text-amber-500 flex items-center gap-1">{selectedDoc.rating || 5.0} <Star size={16} fill="currentColor"/></span>
+                                         <span className="text-[9px] font-bold text-slate-400 uppercase">Calificación</span>
+                                     </div>
+                                     <div className="bg-white px-4 py-2 rounded-2xl shadow-sm border border-slate-100 flex flex-col items-center">
+                                         <span className="text-xl font-black text-emerald-600">${selectedDoc.price}</span>
+                                         <span className="text-[9px] font-bold text-slate-400 uppercase">Consulta</span>
+                                     </div>
+                                 </div>
+                             </div>
                              
-                             <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                                <span className="text-[10px] font-black text-slate-400 uppercase bg-white/80 px-2 py-1 rounded shadow-sm">
-                                    {selectedCoords ? '' : 'Click para fijar ubicación'}
-                                </span>
+                             <div className="space-y-6">
+                                 <div>
+                                     <h2 className="text-3xl font-black text-slate-900 uppercase tracking-tight flex items-center gap-2">
+                                         {selectedDoc.name}
+                                     </h2>
+                                     <p className="text-sm font-bold text-[#0057B8] uppercase tracking-widest">{selectedDoc.specialty}</p>
+                                     {selectedDoc.university && <p className="text-[10px] text-slate-400 uppercase font-medium flex items-center gap-1 mt-1"><GraduationCap size={12}/> {selectedDoc.university}</p>}
+                                     <p className="text-[10px] text-slate-400 uppercase font-mono mt-0.5">Cédula Prof: {selectedDoc.cedula}</p>
+                                 </div>
+
+                                 <div className="p-6 bg-slate-50 rounded-3xl border border-slate-100">
+                                     <h3 className="text-xs font-black uppercase text-slate-400 mb-2">Acerca del Especialista</h3>
+                                     <p className="text-sm text-slate-600 font-medium leading-relaxed">
+                                         {selectedDoc.biography || "Especialista certificado con amplia experiencia en el manejo de pacientes. Comprometido con la salud y el bienestar integral."}
+                                     </p>
+                                 </div>
+
+                                 <button onClick={handleProceedToSchedule} className="w-full py-5 bg-[#0057B8] text-white rounded-2xl font-black uppercase text-xs tracking-widest shadow-xl hover:bg-blue-700 transition-all flex items-center justify-center gap-3">
+                                     <CalendarCheck size={18}/> Ver Disponibilidad
+                                 </button>
+                             </div>
+                         </div>
+                     </div>
+                </div>
+            );
+        }
+
+        // --- 1.5. SCHEDULE PICKER ---
+        if (flowStep === 'schedule' && selectedDoc) {
+            const availableSlots = generateTimeSlots(selectedDoc.schedule, selectedDate);
+            return (
+                <div className="max-w-2xl mx-auto space-y-8 animate-in slide-in-from-right-4">
+                     <button onClick={() => setFlowStep('profile')} className="flex items-center text-slate-500 hover:text-slate-800 transition-colors font-bold text-xs uppercase">
+                        <ChevronLeft size={16}/> Volver al perfil
+                     </button>
+                     
+                     <div className="bg-white p-8 rounded-[3rem] shadow-xl border border-slate-200">
+                         <div className="text-center mb-6">
+                             <h2 className="text-2xl font-black text-slate-900 uppercase">Seleccionar Horario</h2>
+                             <p className="text-xs text-slate-400 uppercase font-bold mt-1">{selectedDoc.name}</p>
+                         </div>
+
+                         <div className="mb-8">
+                             <div className="flex items-center justify-between mb-4">
+                                 <button onClick={() => {
+                                     const prev = new Date(selectedDate);
+                                     prev.setDate(prev.getDate() - 1);
+                                     // Prevent past dates
+                                     if(prev >= new Date(new Date().setHours(0,0,0,0))) setSelectedDate(prev);
+                                 }} className="p-2 bg-slate-100 rounded-full hover:bg-slate-200"><ChevronLeft/></button>
+                                 
+                                 <div className="text-center">
+                                     <p className="text-lg font-black uppercase text-slate-800">
+                                         {selectedDate.toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long' })}
+                                     </p>
+                                     <p className="text-[10px] font-bold text-blue-600 uppercase">
+                                         {selectedDate.toDateString() === new Date().toDateString() ? 'Hoy' : ''}
+                                     </p>
+                                 </div>
+
+                                 <button onClick={() => {
+                                     const next = new Date(selectedDate);
+                                     next.setDate(next.getDate() + 1);
+                                     setSelectedDate(next);
+                                 }} className="p-2 bg-slate-100 rounded-full hover:bg-slate-200"><ChevronRight/></button>
                              </div>
 
-                             {selectedCoords && (
-                                 <div 
-                                    className="absolute w-8 h-8 -ml-4 -mt-8 text-rose-600 animate-bounce drop-shadow-xl"
-                                    style={{ left: `${selectedCoords.lat * 100}%`, top: `${selectedCoords.lng * 100}%` }}
-                                 >
-                                     <MapPin size={32} fill="currentColor" className="text-rose-600"/>
+                             {availableSlots.length > 0 ? (
+                                 <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
+                                     {availableSlots.map(slot => (
+                                         <button 
+                                            key={slot}
+                                            onClick={() => setSelectedSlot(slot)}
+                                            className={`py-3 px-2 rounded-xl text-xs font-black transition-all ${selectedSlot === slot ? 'bg-[#0057B8] text-white shadow-lg scale-105' : 'bg-slate-50 text-slate-600 hover:bg-blue-50'}`}
+                                         >
+                                             {slot}
+                                         </button>
+                                     ))}
+                                 </div>
+                             ) : (
+                                 <div className="py-12 text-center text-slate-400 font-bold uppercase text-xs bg-slate-50 rounded-2xl">
+                                     No hay horarios disponibles este día
                                  </div>
                              )}
-                        </div>
-                    </div>
+                         </div>
 
-                    <div className="space-y-4">
-                        <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 pb-2">Datos de Ubicación</h4>
-                        <div className="space-y-2">
-                            <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block ml-1">Nombre del Paciente</label>
-                            <input className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold uppercase outline-none" placeholder="Nombre completo" value={name} onChange={e => setName(e.target.value)} />
-                        </div>
-                        <div className="space-y-2">
-                            <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block ml-1">Dirección Escrita</label>
-                            <textarea className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium outline-none h-20 resize-none" placeholder="Calle, Número, Colonia, Referencias..." value={address} onChange={e => setAddress(e.target.value)} />
-                        </div>
-                        <div className="space-y-2">
-                            <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block ml-1">Teléfono de Contacto</label>
-                            <input className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold" placeholder="Para coordinar llegada..." value={phone} onChange={e => setPhone(e.target.value)} />
-                        </div>
-                    </div>
-
-                    <div className="space-y-4">
-                        <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 pb-2 flex items-center gap-2"><FlaskConical size={14}/> Selección de Estudios</h4>
-                        <div className="grid grid-cols-1 gap-2 max-h-48 overflow-y-auto custom-scrollbar pr-2">
-                            {LAB_CATALOG.map((lab) => {
-                                const isSelected = selectedStudies.includes(lab.name);
-                                return (
-                                    <button 
-                                    key={lab.name}
-                                    onClick={() => toggleStudy(lab.name)}
-                                    className={`flex items-center justify-between p-3 rounded-xl border transition-all text-left ${isSelected ? 'bg-amber-50 border-amber-200 shadow-sm' : 'bg-white border-slate-100 hover:border-slate-300'}`}
-                                    >
-                                        <span className={`text-[10px] font-bold uppercase ${isSelected ? 'text-amber-700' : 'text-slate-600'}`}>{lab.name}</span>
-                                        {isSelected ? <CheckCircle2 size={14} className="text-amber-600"/> : <Plus size={14} className="text-slate-300"/>}
-                                    </button>
-                                );
-                            })}
-                        </div>
-                    </div>
+                         <button 
+                             onClick={handleConfirmSchedule}
+                             disabled={!selectedSlot}
+                             className="w-full py-5 bg-[#0057B8] text-white rounded-2xl font-black uppercase text-xs tracking-widest shadow-xl hover:bg-blue-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                         >
+                             Confirmar Cita
+                         </button>
+                     </div>
                 </div>
+            );
+        }
 
-                <div className="p-6 border-t border-slate-100 bg-white">
-                    <button 
-                        onClick={handleSubmit}
-                        className="w-full py-4 bg-amber-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl hover:bg-slate-900 transition-all flex items-center justify-center gap-2"
-                    >
-                        Solicitar Unidad <ArrowRight size={16}/>
+        // --- 2. CONSENTIMIENTO ---
+        if (flowStep === 'consent') {
+            return (
+                <div className="max-w-2xl mx-auto space-y-8 animate-in fade-in">
+                    <button onClick={() => setFlowStep(selectedDoc ? 'schedule' : 'none')} className="flex items-center text-slate-500 hover:text-slate-800 transition-colors font-bold text-xs uppercase">
+                        <ChevronLeft size={16}/> Cancelar
                     </button>
-                </div>
-            </div>
-        </div>
-    );
-};
-
-// Sub-component: Vista de Paciente / Enfermería
-const PatientView: React.FC<{ 
-    onQuickRequest: () => void; 
-    onDoctorSelect: (doc: DoctorInfo) => void; 
-    onViewProfile: (doc: DoctorInfo) => void;
-    onHomeLabRequest: () => void; // New Handler
-    searchTerm: string;
-    setSearchTerm: (s: string) => void;
-    doctorsList: DoctorInfo[];
-    notes?: ClinicalNote[];
-    homeRequests?: HomeServiceRequest[]; // Receive real-time requests from props
-    onAddPatient?: (p: Patient) => void;
-    onAddHomeRequest?: (req: HomeServiceRequest) => void;
-    patients: Patient[];
-}> = ({ onQuickRequest, onDoctorSelect, onViewProfile, onHomeLabRequest, searchTerm, setSearchTerm, doctorsList, notes, homeRequests = [], onAddPatient, onAddHomeRequest, patients }) => {
-    const [patientTab, setPatientTab] = useState<'services' | 'history'>('services');
-
-    const filteredDoctors = doctorsList.filter(d => 
-        d.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-        d.specialty.toLowerCase().includes(searchTerm.toLowerCase())
-    );
-
-    // Use passed homeRequests prop to display active requests for this patient (filtering by 'Portal Paciente' or matching logic)
-    // In a real app, we would filter by logged-in patient ID. Here we show all generated from this session.
-    const activeRequests = React.useMemo(() => {
-        return (homeRequests || []).filter(r => r.status !== 'Finalizado' && r.requestedBy === 'Portal Paciente');
-    }, [homeRequests]);
-
-    // Filter patient history (Mocked based on local storage)
-    const myHistory = useMemo(() => {
-        return notes?.filter(n => n.patientId.startsWith('TELE-')) || []; // Show demo tele-notes
-    }, [notes]);
-
-    return (
-        <div className="space-y-8 animate-in fade-in relative">
-            
-            {/* INTEGRATE CHAT ASSISTANT HERE */}
-            <ClinicChatAssistant doctorsList={doctorsList} patients={patients} onAddPatient={onAddPatient} onAddHomeRequest={onAddHomeRequest} />
-
-            {/* Navigation Tabs for Patient */}
-            <div className="flex justify-center no-print">
-                <div className="flex bg-white p-1.5 rounded-2xl shadow-sm border border-slate-200">
-                    <button 
-                        onClick={() => setPatientTab('services')}
-                        className={`px-8 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${patientTab === 'services' ? 'bg-slate-900 text-white shadow-lg' : 'text-slate-500 hover:bg-slate-50'}`}
-                    >
-                        <Stethoscope size={14} className="inline mr-2"/> Consultas y Servicios
-                    </button>
-                    <button 
-                        onClick={() => setPatientTab('history')}
-                        className={`px-8 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${patientTab === 'history' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-500 hover:bg-slate-50'}`}
-                    >
-                        <FileText size={14} className="inline mr-2"/> Mi Historial
-                    </button>
-                </div>
-            </div>
-
-            {patientTab === 'services' && (
-                <>
-                {/* ACTIVE REQUESTS TRACKER (PATIENT PORTAL) */}
-                {activeRequests.length > 0 && (
-                    <div className="space-y-4">
-                        <div className="flex items-center gap-2 text-rose-600">
-                            <Truck className="animate-pulse" />
-                            <h3 className="text-sm font-black uppercase tracking-widest">Mis Solicitudes en Curso</h3>
-                        </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            {activeRequests.map(req => (
-                                <div key={req.id} className="bg-white border border-rose-100 rounded-[2rem] p-6 shadow-lg flex justify-between items-center relative overflow-hidden">
-                                    <div className="absolute left-0 top-0 bottom-0 w-2 bg-rose-500"></div>
-                                    <div>
-                                        <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1">Estatus: {req.status}</p>
-                                        <h4 className="text-lg font-black text-slate-900 uppercase">Toma de Muestras</h4>
-                                        {req.assignedStaff ? (
-                                            <p className="text-xs font-bold text-emerald-600 mt-2 flex items-center gap-1">
-                                                <UserCheck size={14}/> Atiende: {req.assignedStaff}
-                                            </p>
-                                        ) : (
-                                            <p className="text-xs font-bold text-amber-500 mt-2 flex items-center gap-1">
-                                                <Clock size={14}/> Esperando asignación...
-                                            </p>
-                                        )}
-                                        <p className="text-[9px] text-slate-400 mt-1 truncate max-w-[200px]">{req.studies.length} estudios solicitados</p>
-                                    </div>
-                                    <div className="w-12 h-12 bg-rose-50 text-rose-600 rounded-full flex items-center justify-center">
-                                        <FlaskConical size={20}/>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                )}
-
-                {/* Hero Section - Selección Rápida */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                    {/* 1. ATENCIÓN INMEDIATA */}
-                    <div 
-                        onClick={onQuickRequest}
-                        className="md:col-span-1 bg-gradient-to-br from-rose-500 to-rose-600 rounded-[3rem] p-8 text-white shadow-2xl shadow-rose-200 cursor-pointer hover:scale-[1.02] transition-transform group relative overflow-hidden flex flex-col justify-between min-h-[300px]"
-                    >
-                        <div className="absolute right-0 top-0 opacity-10 transform translate-x-10 -translate-y-10">
-                            <Zap size={200} />
-                        </div>
-                        <div className="relative z-10 space-y-4">
-                            <div className="w-14 h-14 bg-white/20 rounded-2xl flex items-center justify-center backdrop-blur-sm">
-                                <Activity size={28} />
+                    
+                    <div className="bg-white p-10 rounded-[3rem] shadow-xl border border-slate-200">
+                        <div className="text-center mb-8">
+                            <div className="w-16 h-16 bg-blue-50 text-[#0057B8] rounded-2xl flex items-center justify-center mx-auto mb-4">
+                                <ShieldCheck size={32}/>
                             </div>
-                            <h2 className="text-2xl font-black uppercase tracking-tight leading-none">Atención Inmediata</h2>
-                            <p className="text-[11px] font-medium opacity-90 leading-relaxed">
-                                Conectar con el primer médico disponible. Ideal para consultas rápidas.
-                            </p>
+                            <h2 className="text-2xl font-black text-slate-900 uppercase">Consentimiento Informado</h2>
+                            <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-2">NOM-024-SSA3-2012</p>
                         </div>
-                        <div className="relative z-10 mt-6">
-                            <span className="inline-flex items-center gap-2 px-5 py-2.5 bg-white text-rose-600 rounded-xl font-black text-[10px] uppercase tracking-widest shadow-lg group-hover:bg-rose-50 transition-colors">
-                                Solicitar <ArrowRight size={14}/>
-                            </span>
+                        
+                        <div className="h-64 overflow-y-auto bg-slate-50 p-6 rounded-2xl border border-slate-100 text-xs text-slate-600 font-medium leading-relaxed mb-6 custom-scrollbar text-justify">
+                            <p className="mb-4">1. Entiendo que la telemedicina implica el uso de comunicaciones electrónicas para permitir a los proveedores de atención médica en diferentes ubicaciones compartir información médica individual con el fin de mejorar la atención al paciente.</p>
+                            <p className="mb-4">2. Autorizo la transmisión de mis datos personales, imágenes y audio de forma encriptada (AES-256) para fines de diagnóstico y tratamiento.</p>
+                            <p className="mb-4">3. Reconozco que la consulta remota tiene limitaciones en la exploración física y que, en caso de emergencia real, debo acudir a un hospital.</p>
+                            <p>4. Acepto el uso de firma electrónica simple para la validación de recetas y solicitudes de estudios generadas en esta sesión.</p>
                         </div>
-                    </div>
 
-                    {/* 2. LABORATORIO A DOMICILIO (NUEVO) */}
-                    <div 
-                        onClick={onHomeLabRequest}
-                        className="md:col-span-1 bg-gradient-to-br from-amber-400 to-amber-500 rounded-[3rem] p-8 text-white shadow-2xl shadow-amber-200 cursor-pointer hover:scale-[1.02] transition-transform group relative overflow-hidden flex flex-col justify-between min-h-[300px]"
-                    >
-                        <div className="absolute right-0 top-0 opacity-10 transform translate-x-10 -translate-y-10">
-                            <Ambulance size={200} />
-                        </div>
-                        <div className="relative z-10 space-y-4">
-                            <div className="w-14 h-14 bg-white/20 rounded-2xl flex items-center justify-center backdrop-blur-sm">
-                                <FlaskConical size={28} />
+                        <div 
+                            onClick={() => setConsentSigned(!consentSigned)}
+                            className={`p-4 rounded-2xl border-2 cursor-pointer transition-all flex items-center gap-4 ${consentSigned ? 'bg-emerald-50 border-emerald-500 text-emerald-800' : 'bg-white border-slate-200 hover:border-blue-300'}`}
+                        >
+                            <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${consentSigned ? 'border-emerald-600 bg-emerald-600 text-white' : 'border-slate-300'}`}>
+                                {consentSigned && <Check size={14}/>}
                             </div>
-                            <h2 className="text-2xl font-black uppercase tracking-tight leading-none">Laboratorio a Domicilio</h2>
-                            <p className="text-[11px] font-medium opacity-90 leading-relaxed">
-                                Solicite toma de muestras en la comodidad de su hogar. Unidades móviles listas.
-                            </p>
+                            <span className="text-xs font-black uppercase">He leído y acepto los términos legales</span>
                         </div>
-                        <div className="relative z-10 mt-6">
-                            <span className="inline-flex items-center gap-2 px-5 py-2.5 bg-white text-amber-600 rounded-xl font-black text-[10px] uppercase tracking-widest shadow-lg group-hover:bg-amber-50 transition-colors">
-                                Agendar Unidad <ArrowRight size={14}/>
-                            </span>
-                        </div>
+
+                        <button 
+                            onClick={handleConsent} 
+                            disabled={!consentSigned}
+                            className="w-full mt-8 py-5 bg-[#0057B8] text-white rounded-2xl font-black uppercase text-xs tracking-widest shadow-xl hover:bg-slate-900 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            Continuar
+                        </button>
+                    </div>
+                </div>
+            );
+        }
+
+        // --- 3. INTAKE ---
+        if (flowStep === 'intake') {
+            return (
+                <div className="max-w-2xl mx-auto space-y-8 animate-in slide-in-from-right-4">
+                    <div className="text-center">
+                         <h2 className="text-3xl font-black text-slate-900 uppercase">Cuéntanos qué sientes</h2>
+                         <p className="text-sm font-bold text-slate-400 uppercase tracking-widest mt-2">Esta información será revisada por el médico antes de la llamada</p>
                     </div>
 
-                    {/* 3. DIRECTORIO */}
-                    <div className="md:col-span-1 bg-slate-900 rounded-[3rem] p-8 text-white shadow-2xl cursor-default relative overflow-hidden flex flex-col justify-center text-center space-y-6 min-h-[300px]">
-                        <div className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?auto=format&fit=crop&q=80&w=2070')] opacity-10 bg-cover bg-center"></div>
-                        <div className="relative z-10 space-y-4">
-                            <h2 className="text-xl font-black uppercase tracking-tight">Directorio de Especialistas</h2>
-                            <p className="text-[10px] text-slate-400">Busque por nombre o especialidad.</p>
-                            <div className="relative w-full">
-                                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={16}/>
+                    <div className="bg-white p-8 rounded-[2.5rem] shadow-xl border border-slate-200 space-y-6">
+                        <div className="space-y-2">
+                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Síntoma Principal</label>
+                            <textarea 
+                                className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl text-sm font-bold text-slate-900 outline-none focus:border-[#0057B8] transition-all h-32 resize-none"
+                                placeholder="Ej: Tengo fiebre y dolor de garganta desde ayer..."
+                                value={intakeForm.mainSymptom}
+                                onChange={e => setIntakeForm({...intakeForm, mainSymptom: e.target.value})}
+                            />
+                        </div>
+                        
+                        <div className="grid grid-cols-2 gap-6">
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Nivel de Dolor (1-10)</label>
                                 <input 
-                                    className="w-full pl-10 pr-4 py-3 bg-white/10 border border-white/20 rounded-2xl text-white placeholder-slate-400 outline-none focus:bg-white/20 transition-all font-bold text-xs"
-                                    placeholder="Buscar..."
-                                    value={searchTerm}
-                                    onChange={(e) => setSearchTerm(e.target.value)}
+                                    type="range" min="0" max="10" 
+                                    className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-[#0057B8]"
+                                    value={intakeForm.painLevel}
+                                    onChange={e => setIntakeForm({...intakeForm, painLevel: parseInt(e.target.value)})}
+                                />
+                                <div className="text-center font-black text-xl text-[#0057B8]">{intakeForm.painLevel}</div>
+                            </div>
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Inicio de Síntomas</label>
+                                <input 
+                                    className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl text-sm font-bold text-slate-900 outline-none"
+                                    placeholder="Ej: Hace 2 días"
+                                    value={intakeForm.onsetDuration}
+                                    onChange={e => setIntakeForm({...intakeForm, onsetDuration: e.target.value})}
                                 />
                             </div>
                         </div>
+
+                        <div className="space-y-2">
+                            <label className="text-[10px] font-black text-rose-500 uppercase tracking-widest ml-2 flex items-center gap-1"><AlertOctagon size={12}/> Alergias</label>
+                            <input 
+                                className="w-full p-4 bg-rose-50 border-2 border-rose-100 rounded-2xl text-sm font-bold text-rose-900 outline-none placeholder:text-rose-300"
+                                placeholder="Escriba sus alergias o 'Ninguna'..."
+                                value={intakeForm.allergies}
+                                onChange={e => setIntakeForm({...intakeForm, allergies: e.target.value})}
+                            />
+                        </div>
+
+                        <button onClick={handleSubmitIntake} className="w-full py-5 bg-[#0057B8] text-white rounded-2xl font-black uppercase text-xs tracking-widest shadow-xl hover:bg-emerald-500 transition-all flex items-center justify-center gap-2">
+                            Solicitar Atención <ArrowRight size={18}/>
+                        </button>
                     </div>
                 </div>
+            );
+        }
 
-                {/* Directorio Médico */}
-                <div className="space-y-6">
-                    <div className="flex items-center gap-3">
-                        <Stethoscope className="text-blue-600" />
-                        <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">Médicos Disponibles</h3>
+        // --- 4. WAITING ROOM ---
+        if (flowStep === 'waiting' && currentWaitingPatient) {
+            const status = currentWaitingPatient.status;
+            let message = "Esperando médico...";
+            let subMessage = "Por favor no cierre esta ventana.";
+            let icon = <Clock size={64} className="text-white animate-pulse"/>;
+            let bgClass = "bg-[#0057B8]";
+
+            if (status === PatientStatus.ONLINE_REVIEWING) {
+                message = "El Médico ha aceptado su solicitud";
+                subMessage = "Está leyendo su historial clínico y motivo de consulta.";
+                icon = <FileText size={64} className="text-white animate-bounce"/>;
+                bgClass = "bg-indigo-600";
+            } else if (status === PatientStatus.ONLINE_IN_CALL) {
+                message = "Llamada Entrante";
+                subMessage = "Conectando sala segura...";
+                icon = <Video size={64} className="text-white animate-ping"/>;
+                bgClass = "bg-emerald-600";
+            }
+
+            return (
+                <div className="flex flex-col items-center justify-center h-[60vh] animate-in fade-in">
+                    <div className={`w-32 h-32 rounded-full flex items-center justify-center shadow-2xl mb-8 ${bgClass}`}>
+                        {icon}
+                    </div>
+                    <h2 className="text-3xl font-black text-slate-900 uppercase text-center max-w-md">{message}</h2>
+                    <p className="text-slate-500 font-medium mt-4 text-center max-w-sm">{subMessage}</p>
+                    {status === PatientStatus.ONLINE_IN_CALL && (
+                        <button className="mt-8 px-10 py-4 bg-emerald-500 text-white rounded-full font-black uppercase tracking-widest shadow-xl animate-pulse">
+                            Unirse a la Videollamada
+                        </button>
+                    )}
+                </div>
+            );
+        }
+
+        // --- DEFAULT TABS ---
+        
+        // 1. SIGNOS VITALES (IoT)
+        if (appTab === 'vitals') {
+            return (
+                <div className="space-y-8 animate-in fade-in">
+                    <div className="flex items-center gap-4 mb-2">
+                        <button onClick={() => setAppTab('home')} className="p-2 hover:bg-slate-100 rounded-full"><ChevronLeft size={24}/></button>
+                        <h2 className="text-2xl font-black text-slate-900">Mis Signos Vitales</h2>
+                    </div>
+
+                    <div className="bg-slate-900 text-white rounded-[3rem] p-10 shadow-xl relative overflow-hidden">
+                        <div className="relative z-10 flex justify-between items-center mb-8">
+                            <div>
+                                <p className="text-[10px] font-black uppercase tracking-widest text-emerald-400">Dispositivo Conectado</p>
+                                <h3 className="text-xl font-black uppercase flex items-center gap-2 mt-1"><Watch size={20}/> Apple Watch Series 8</h3>
+                            </div>
+                            <div className="w-3 h-3 bg-emerald-500 rounded-full animate-pulse shadow-[0_0_10px_#10b981]"></div>
+                        </div>
+
+                        <div className="grid grid-cols-2 md:grid-cols-3 gap-6 relative z-10">
+                             <div className="bg-white/10 p-6 rounded-3xl border border-white/10 backdrop-blur-md">
+                                 <p className="text-[9px] font-bold text-slate-400 uppercase mb-2 flex items-center gap-1"><Heart size={12} className="text-rose-500"/> Frecuencia Cardíaca</p>
+                                 <p className="text-4xl font-black">72 <span className="text-xs font-bold text-slate-400">LPM</span></p>
+                             </div>
+                             <div className="bg-white/10 p-6 rounded-3xl border border-white/10 backdrop-blur-md">
+                                 <p className="text-[9px] font-bold text-slate-400 uppercase mb-2 flex items-center gap-1"><Activity size={12} className="text-blue-400"/> Oxigenación</p>
+                                 <p className="text-4xl font-black">98 <span className="text-xs font-bold text-slate-400">%</span></p>
+                             </div>
+                        </div>
+                    </div>
+
+                    <div className="bg-white border border-slate-200 rounded-[3rem] p-8 shadow-sm h-80">
+                        <h4 className="text-xs font-black uppercase text-slate-500 mb-6">Tendencia (Últimas 6 horas)</h4>
+                        <ResponsiveContainer width="100%" height="100%">
+                            <AreaChart data={MOCK_IOT_DATA}>
+                                <defs>
+                                    <linearGradient id="colorHr" x1="0" y1="0" x2="0" y2="1">
+                                        <stop offset="5%" stopColor="#f43f5e" stopOpacity={0.3}/>
+                                        <stop offset="95%" stopColor="#f43f5e" stopOpacity={0}/>
+                                    </linearGradient>
+                                </defs>
+                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9"/>
+                                <XAxis dataKey="time" fontSize={10} axisLine={false} tickLine={false}/>
+                                <YAxis fontSize={10} axisLine={false} tickLine={false} domain={['auto', 'auto']}/>
+                                <Tooltip contentStyle={{borderRadius:'16px', border:'none'}}/>
+                                <Area type="monotone" dataKey="hr" stroke="#f43f5e" strokeWidth={3} fillOpacity={1} fill="url(#colorHr)" />
+                            </AreaChart>
+                        </ResponsiveContainer>
+                    </div>
+                </div>
+            );
+        }
+
+        // 2. DOCTORS DIRECTORY
+        if (appTab === 'doctors') {
+            return (
+                <div className="space-y-6 animate-in fade-in slide-in-from-right-4">
+                    <div className="flex items-center gap-4 mb-6">
+                        <button onClick={() => setAppTab('home')} className="p-2 hover:bg-slate-100 rounded-full transition-all">
+                            <ChevronLeft size={24} className="text-slate-600"/>
+                        </button>
+                        <div>
+                            <h2 className="text-2xl font-black text-slate-900">Directorio de Especialistas</h2>
+                            <p className="text-sm text-slate-500">Seleccione un médico para agendar su teleconsulta.</p>
+                        </div>
                     </div>
                     
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                        {filteredDoctors.map((doc, idx) => (
-                            <div key={idx} className={`bg-white rounded-[2.5rem] p-6 border-2 transition-all hover:shadow-xl group flex flex-col justify-between ${doc.isPremium ? 'border-amber-200 shadow-amber-100/50' : 'border-slate-100 shadow-sm'}`}>
-                                <div className="cursor-pointer" onClick={() => onViewProfile(doc)}>
-                                    <div className="flex justify-between items-start mb-4">
-                                        <div className="w-16 h-16 rounded-2xl bg-slate-100 flex items-center justify-center text-2xl font-black text-slate-400 uppercase overflow-hidden">
-                                            {doc.avatarUrl ? <img src={doc.avatarUrl} alt={doc.name} className="w-full h-full object-cover"/> : doc.name.charAt(0)}
-                                        </div>
-                                        {/* Status Badge */}
-                                        {doc.isOnline ? (
-                                            <span className="px-3 py-1 bg-emerald-100 text-emerald-700 rounded-full text-[9px] font-black uppercase flex items-center gap-1 border border-emerald-200 animate-pulse">
-                                                <Wifi size={12}/> En Línea
-                                            </span>
-                                        ) : (
-                                            <span className="px-3 py-1 bg-slate-100 text-slate-500 rounded-full text-[9px] font-black uppercase flex items-center gap-1 border border-slate-200">
-                                                <WifiOff size={12}/> Ocupado
-                                            </span>
-                                        )}
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        {doctors.map(doc => (
+                            <div key={doc.cedula} onClick={() => handleSelectDoctor(doc)} className="bg-white border border-slate-200 rounded-[2rem] p-6 hover:shadow-xl hover:border-blue-300 transition-all group cursor-pointer relative overflow-hidden">
+                                {doc.isVerified && <div className="absolute top-0 right-0 bg-blue-600 text-white text-[9px] font-black px-3 py-1 rounded-bl-xl uppercase flex items-center gap-1"><BadgeCheck size={12}/> Verificado</div>}
+                                <div className="flex justify-between items-start mb-4 mt-2">
+                                    <div className="w-16 h-16 bg-slate-100 rounded-2xl flex items-center justify-center text-slate-500 font-bold text-2xl group-hover:bg-[#0057B8] group-hover:text-white transition-colors overflow-hidden">
+                                        {doc.avatarUrl ? <img src={doc.avatarUrl} className="w-full h-full object-cover"/> : doc.name.charAt(0)}
                                     </div>
-                                    <h4 className="text-sm font-black text-slate-900 uppercase leading-tight group-hover:text-blue-700 transition-colors">{doc.name}</h4>
-                                    <p className="text-[10px] font-bold text-blue-600 uppercase mt-1">{doc.specialty}</p>
-                                    <p className="text-[9px] text-slate-400 mt-2 line-clamp-2">{doc.institution} • {doc.hospital}</p>
-                                    
-                                    <div className="flex items-center gap-4 mt-4 pt-4 border-t border-slate-50">
-                                        <div className="flex items-center gap-1 text-amber-500">
-                                            <Star size={12} fill="currentColor" />
-                                            <span className="text-xs font-bold text-slate-700">{doc.rating}</span>
-                                            <span className="text-[9px] text-slate-400">({doc.reviewCount})</span>
-                                        </div>
-                                        <div className="text-right flex-1">
-                                            <span className="text-xs font-black text-emerald-600">${doc.price}</span>
-                                        </div>
+                                    <div className="flex items-center gap-1 bg-emerald-50 text-emerald-700 px-3 py-1 rounded-full text-[10px] font-black uppercase">
+                                        <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></div> Disponible
                                     </div>
                                 </div>
+                                <h3 className="text-lg font-black text-slate-900 uppercase leading-tight">{doc.name}</h3>
+                                <p className="text-xs font-bold text-[#0057B8] uppercase tracking-widest mt-1">{doc.specialty}</p>
+                                <div className="flex items-center gap-1 mt-2">
+                                    <Star size={12} className="text-amber-400 fill-current"/>
+                                    <span className="text-xs font-bold text-slate-600">{doc.rating || 5.0}</span>
+                                </div>
                                 
-                                <div className="flex gap-2 mt-6">
-                                    <button 
-                                        onClick={() => onViewProfile(doc)}
-                                        className="flex-1 py-3 bg-white border border-slate-200 text-slate-600 rounded-xl text-[10px] font-black uppercase hover:bg-slate-50 transition-all"
-                                    >
+                                <div className="mt-6 pt-6 border-t border-slate-100 flex items-center justify-between">
+                                    <div className="text-right">
+                                        <p className="text-[10px] font-black text-slate-400 uppercase">Consulta</p>
+                                        <p className="text-lg font-black text-slate-900">${doc.price}</p>
+                                    </div>
+                                    <button className="px-6 py-3 bg-slate-900 text-white rounded-xl text-xs font-black uppercase tracking-widest group-hover:bg-[#0057B8] transition-all shadow-lg">
                                         Ver Perfil
-                                    </button>
-                                    <button 
-                                        onClick={() => onDoctorSelect(doc)}
-                                        disabled={!doc.isOnline}
-                                        className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2 ${doc.isOnline ? 'bg-slate-900 text-white hover:bg-blue-600' : 'bg-slate-100 text-slate-400 cursor-not-allowed'}`}
-                                    >
-                                        Agendar
                                     </button>
                                 </div>
                             </div>
                         ))}
                     </div>
                 </div>
-                </>
-            )}
-
-            {/* HISTORY TAB */}
-            {patientTab === 'history' && (
-                <div className="max-w-4xl mx-auto space-y-6">
-                    <div className="flex items-center gap-3 mb-6">
-                        <History size={24} className="text-blue-600"/>
-                        <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tight">Historial de Atenciones</h3>
-                    </div>
-
-                    {myHistory.length > 0 ? (
-                        <div className="space-y-4">
-                            {myHistory.map(note => (
-                                <div key={note.id} className="bg-white border border-slate-200 rounded-[2.5rem] p-8 shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
-                                    <div className="flex items-center gap-6">
-                                        <div className="w-16 h-16 bg-slate-50 text-blue-600 rounded-2xl flex items-center justify-center shadow-inner">
-                                            {note.type.includes('Lab') ? <FlaskConical size={24}/> : <FileText size={24}/>}
-                                        </div>
-                                        <div>
-                                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">{note.date}</p>
-                                            <h4 className="text-lg font-black text-slate-900 uppercase">{note.type}</h4>
-                                            <p className="text-xs text-blue-600 font-bold uppercase mt-1">Dr. {note.author}</p>
-                                        </div>
-                                    </div>
-                                    <button className="px-6 py-3 bg-slate-900 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-blue-600 transition-all flex items-center gap-2">
-                                        <Download size={14}/> Descargar PDF
-                                    </button>
-                                </div>
-                            ))}
-                        </div>
-                    ) : (
-                        <div className="text-center py-20 bg-slate-50 rounded-[3rem] border-2 border-dashed border-slate-200">
-                            <FileText size={48} className="mx-auto text-slate-300 mb-4"/>
-                            <p className="text-slate-400 font-black uppercase text-xs">Aún no tienes historial registrado</p>
-                        </div>
-                    )}
-                </div>
-            )}
-        </div>
-    );
-};
-
-const TelemedicineDashboard: React.FC<TelemedicineDashboardProps & { 
-    onAddHomeRequest?: (req: HomeServiceRequest) => void,
-    onUpdateHomeRequest?: (req: HomeServiceRequest) => void,
-    doctorsList: DoctorInfo[],
-    onDoctorStatusChange?: (cedula: string, isOnline: boolean) => void,
-    currentUser?: DoctorInfo,
-    notes?: ClinicalNote[],
-    homeRequests?: HomeServiceRequest[],
-    staffList?: StaffMember[]
-}> = ({ 
-    patients, 
-    onUpdateStatus, 
-    onAddPatient, 
-    onAddHomeRequest, 
-    onUpdateHomeRequest,
-    doctorsList = MOCK_DOCTORS, 
-    onDoctorStatusChange, 
-    currentUser, 
-    notes = [],
-    homeRequests = [],
-    staffList = []
-}) => {
-  const navigate = useNavigate();
-  const [viewMode, setViewMode] = useState<'doctor' | 'patient' | 'staff'>('doctor'); // Switcher State
-  const [searchTerm, setSearchTerm] = useState('');
-  const [viewingDoctor, setViewingDoctor] = useState<DoctorInfo | null>(null);
-  
-  // Tab for Doctor View
-  const [doctorTab, setDoctorTab] = useState<'dashboard' | 'finance'>('dashboard');
-
-  // STATES FOR DOCTOR SESSION & AVAILABILITY
-  const [doctorSession, setDoctorSession] = useState({
-      isConnected: false,
-      username: '',
-      isAvailable: false // Default to false (Busy/Offline)
-  });
-
-  // States for Modals
-  const [showConsentModal, setShowConsentModal] = useState(false);
-  const [showIntakeModal, setShowIntakeModal] = useState(false);
-  const [showHomeLabModal, setShowHomeLabModal] = useState(false); // NEW STATE
-  const [showTriagePreview, setShowTriagePreview] = useState<Patient | null>(null);
-  const [selectedDoctorForRequest, setSelectedDoctorForRequest] = useState<DoctorInfo | undefined>(undefined);
-
-  // ... (Existing helper functions remain same) ...
-  const getLocalDateString = () => {
-    const d = new Date();
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-  };
-  const today = getLocalDateString();
-
-  const doctorViewPatients = useMemo(() => {
-    return patients.filter(p => {
-        const isTele = p.assignedModule === ModuleType.TELEMEDICINE;
-        const isToday = p.scheduledDate === today;
-        const isActiveStatus = [PatientStatus.ONLINE_WAITING, PatientStatus.ONLINE_IN_CALL, PatientStatus.ONLINE_QUEUE].includes(p.status);
-        const isPending = p.status !== PatientStatus.ATTENDED;
-        return isTele && (isToday || isActiveStatus) && isPending;
-    });
-  }, [patients, today]);
-
-  const generalQueue = doctorViewPatients.filter(p => p.status === PatientStatus.ONLINE_QUEUE);
-  const myScheduledPatients = doctorViewPatients.filter(p => p.status !== PatientStatus.ONLINE_QUEUE);
-
-  const handleStartCall = (p: Patient) => {
-      if (p.teleIntake && p.status === PatientStatus.ONLINE_QUEUE) {
-          setShowTriagePreview(p);
-      } else {
-        if (window.confirm(`¿Iniciar sesión de telemedicina con ${p.name}?`)) {
-            onUpdateStatus(p.id, PatientStatus.ONLINE_IN_CALL);
-            navigate(`/telemedicine/${p.id}`);
+            );
         }
-      }
-  };
 
-  const confirmTriageAccept = () => {
-      if (!showTriagePreview) return;
-      onUpdateStatus(showTriagePreview.id, PatientStatus.ONLINE_IN_CALL);
-      navigate(`/telemedicine/${showTriagePreview.id}`);
-      setShowTriagePreview(null);
-  };
-
-  const initiatePatientRequest = (type: 'quick' | 'specific', doctor?: DoctorInfo) => {
-      setSelectedDoctorForRequest(doctor);
-      // New Flow: Consent -> Intake
-      setShowConsentModal(true);
-  };
-
-  const handleConsentAccept = () => {
-      setShowConsentModal(false);
-      setShowIntakeModal(true);
-  };
-
-  const handleIntakeSubmit = (intakeData: TeleIntakeForm & { specialty?: string }) => {
-      if (!onAddPatient) return;
-      const isQuick = !selectedDoctorForRequest;
-      const reasonText = isQuick ? `ESPECIALIDAD: ${intakeData.specialty} - SÍNTOMA: ${intakeData.mainSymptom}` : `Teleconsulta con Dr. ${selectedDoctorForRequest?.name}`;
-
-      const newPatient: Patient = {
-          id: `TELE-${Date.now().toString().slice(-6)}`,
-          name: 'PACIENTE DEMOSTRACIÓN', // En app real, vendría del perfil logueado
-          curp: 'DEMO010101HM',
-          age: 30,
-          sex: 'O',
-          bloodType: 'O+',
-          allergies: intakeData.allergies ? [intakeData.allergies] : [],
-          status: isQuick ? PatientStatus.ONLINE_QUEUE : PatientStatus.ONLINE_WAITING,
-          priority: PriorityLevel.MEDIUM,
-          assignedModule: ModuleType.TELEMEDICINE,
-          scheduledDate: today,
-          lastVisit: today, // Add lastVisit
-          appointmentTime: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
-          reason: reasonText,
-          chronicDiseases: intakeData.chronicConditions,
-          agendaStatus: AgendaStatus.ARRIVED_ON_TIME,
-          assignedDoctorId: selectedDoctorForRequest?.cedula,
-          assignedDoctorName: selectedDoctorForRequest?.name,
-          teleIntake: intakeData,
-          hasTelemedicineConsent: true // Mark consent as signed
-      };
-      onAddPatient(newPatient);
-      setShowIntakeModal(false);
-      setSelectedDoctorForRequest(undefined);
-      alert(isQuick ? "Solicitud enviada a la bolsa general de especialistas." : `Cita agendada con Dr. ${selectedDoctorForRequest?.name}.`);
-      setViewMode('doctor'); 
-  };
-
-  const handleHomeLabSubmit = (reqData: { name: string, address: string, studies: string[], phone: string, coordinates: { lat: number, lng: number } }) => {
-      if (!onAddHomeRequest) return;
-      const newRequest: HomeServiceRequest = {
-          id: `HLAB-${Date.now()}`,
-          patientId: `P-${Date.now().toString().slice(-4)}`, // Temp ID
-          patientName: reqData.name,
-          patientAddress: reqData.address,
-          patientPhone: reqData.phone,
-          requestedBy: 'Portal Paciente',
-          requestedDate: new Date().toISOString(),
-          status: 'Pendiente',
-          studies: reqData.studies,
-          coordinates: reqData.coordinates // Save Coordinates
-      };
-      onAddHomeRequest(newRequest);
-      setShowHomeLabModal(false);
-      alert("Solicitud de laboratorio a domicilio enviada. Verifique el estado en 'Mis Solicitudes'.");
-  };
-
-  const getOriginBadge = (p: Patient) => {
-      if (p.assignedDoctorId) {
-          return <span className="bg-violet-100 text-violet-700 px-2 py-0.5 rounded text-[8px] font-black uppercase border border-violet-200">Cita Agendada</span>;
-      }
-      return <span className="bg-rose-100 text-rose-700 px-2 py-0.5 rounded text-[8px] font-black uppercase border border-rose-200">Atención Inmediata</span>;
-  };
-
-  const handleDoctorLogin = () => {
-      if(!doctorSession.username) return alert("Ingrese su ID de Telemedicina");
-      setDoctorSession({ ...doctorSession, isConnected: true, isAvailable: true }); // Auto available on login
-      
-      // Update global availability
-      if (onDoctorStatusChange && currentUser) onDoctorStatusChange(currentUser.cedula, true);
-  };
-
-  const handleDoctorLogout = () => {
-      if(window.confirm("¿Desea cerrar su sesión de la red de telemedicina? (No cerrará sesión en el sistema principal)")) {
-          setDoctorSession({ isConnected: false, username: '', isAvailable: false });
-          // Update global availability
-          if (onDoctorStatusChange && currentUser) onDoctorStatusChange(currentUser.cedula, false);
-      }
-  };
-
-  // Toggle Availability
-  const toggleAvailability = (available: boolean) => {
-      setDoctorSession({...doctorSession, isAvailable: available});
-      if (onDoctorStatusChange && currentUser) onDoctorStatusChange(currentUser.cedula, available);
-  };
-
-  if (viewingDoctor) {
-      return (
-        <DoctorPublicProfile 
-            doctor={viewingDoctor} 
-            onBack={() => setViewingDoctor(null)} 
-            onSchedule={() => { setViewingDoctor(null); initiatePatientRequest('specific', viewingDoctor); }} 
-        />
-      );
-  }
-
-  // --- RENDERIZADO PRINCIPAL SEGÚN MODO ---
-  if (viewMode === 'staff') {
-      return (
-        <div className="max-w-[98%] mx-auto space-y-6 animate-in fade-in pb-20">
-            {/* Header Reducido con botón para volver */}
-            <div className="flex justify-between items-center bg-white p-4 rounded-3xl shadow-sm border border-slate-200 no-print">
-                 <div className="flex items-center gap-4">
-                     <button onClick={() => setViewMode('doctor')} className="p-3 bg-slate-100 rounded-2xl hover:bg-slate-900 hover:text-white transition-all">
-                         <ArrowLeft size={20}/>
-                     </button>
-                     <div>
-                         <h2 className="text-xl font-black text-slate-900 uppercase tracking-tight">Consola de Personal Domiciliario</h2>
-                         <p className="text-xs font-bold text-amber-600 uppercase tracking-widest">Modo Operativo de Campo</p>
-                     </div>
-                 </div>
-            </div>
-            
-            {/* Componente HomeServices Integrado */}
-            <HomeServices 
-                requests={homeRequests || []} 
-                onUpdateRequest={onUpdateHomeRequest || (() => {})} 
-                staffList={staffList || []} 
-                currentUser={currentUser || MOCK_DOCTORS[0]} 
-            />
-        </div>
-      );
-  }
-
-  return (
-    <div className="max-w-7xl mx-auto space-y-8 animate-in fade-in pb-20">
-      
-      {/* Header & Role Switcher */}
-      <div className="flex flex-col md:flex-row justify-between items-end gap-6 no-print">
-        <div className="space-y-1">
-          <div className="flex items-center gap-3 text-violet-600 uppercase text-[10px] font-black tracking-[0.3em]">
-             <Wifi size={16}/>
-             <span>Plataforma e-Health</span>
-          </div>
-          <h1 className="text-5xl font-black text-slate-900 uppercase tracking-tighter leading-none">
-              {viewMode === 'doctor' ? 'Consola Médica' : 'Portal del Paciente'}
-          </h1>
-        </div>
-        
-        <div className="flex items-center gap-4">
-            {/* ... (Existing Doctor Profile Button) ... */}
-            {viewMode === 'doctor' && (
-                <button 
-                    onClick={() => navigate('/settings', { state: { initialTab: 'public_profile' } })}
-                    className="flex items-center gap-3 px-6 py-3 bg-white border border-slate-200 text-slate-600 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 transition-all shadow-sm group"
-                >
-                    <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center group-hover:bg-blue-200 transition-colors">
-                        <User size={14} className="text-slate-500 group-hover:text-blue-700"/>
-                    </div>
-                    <span>Mi Perfil Público</span>
-                </button>
-            )}
-
-            <div className="bg-white p-1.5 rounded-2xl shadow-sm border border-slate-200 flex items-center gap-2">
-                <button 
-                    onClick={() => setViewMode('doctor')}
-                    className={`flex items-center gap-2 px-6 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${viewMode === 'doctor' ? 'bg-slate-900 text-white shadow-lg' : 'text-slate-500 hover:bg-slate-50'}`}
-                >
-                    <Briefcase size={14} /> Vista Médico
-                </button>
-                <button 
-                    onClick={() => setViewMode('patient')}
-                    className={`flex items-center gap-2 px-6 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${viewMode === 'patient' ? 'bg-rose-600 text-white shadow-lg' : 'text-slate-500 hover:bg-slate-50'}`}
-                >
-                    <UserCheck size={14} /> Vista Paciente
-                </button>
-                <button 
-                    onClick={() => setViewMode('staff')}
-                    className={`flex items-center gap-2 px-6 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${viewMode === 'staff' ? 'bg-amber-600 text-white shadow-lg' : 'text-slate-500 hover:bg-slate-50'}`}
-                >
-                    <Ambulance size={14} /> Personal Domiciliario
-                </button>
-            </div>
-        </div>
-      </div>
-
-      {viewMode === 'patient' ? (
-          <PatientView 
-            searchTerm={searchTerm}
-            setSearchTerm={setSearchTerm}
-            onQuickRequest={() => initiatePatientRequest('quick')}
-            onDoctorSelect={(doc) => initiatePatientRequest('specific', doc)}
-            onViewProfile={(doc) => setViewingDoctor(doc)}
-            onHomeLabRequest={() => setShowHomeLabModal(true)} 
-            doctorsList={doctorsList}
-            notes={notes}
-            homeRequests={homeRequests}
-            onAddPatient={onAddPatient} // Pass to PatientView for ClinicChatAssistant
-            onAddHomeRequest={onAddHomeRequest} // Pass to PatientView
-            patients={patients} // Pass patients for conflict check
-          />
-      ) : (
-          /* VISTA MÉDICO ... (Sin cambios aquí) ... */
-          !doctorSession.isConnected ? (
-              /* PANTALLA DE CONEXIÓN DEL MÉDICO */
-              <div className="flex flex-col items-center justify-center py-20 animate-in fade-in">
-                  <div className="bg-white p-12 rounded-[3rem] shadow-2xl border border-slate-200 text-center max-w-lg w-full space-y-8">
-                      <div className="w-20 h-20 bg-slate-900 rounded-3xl flex items-center justify-center mx-auto shadow-xl text-white">
-                          <Lock size={32} />
-                      </div>
-                      <div className="space-y-2">
-                          <h2 className="text-2xl font-black text-slate-900 uppercase tracking-tight">Acceso Telemedicina</h2>
-                          <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Ingrese su ID para conectarse a la red</p>
-                      </div>
-                      <div className="space-y-4">
-                          <div className="relative">
-                             <input 
-                                className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-center text-sm font-black uppercase outline-none focus:ring-4 focus:ring-slate-100 transition-all"
-                                placeholder="ID USUARIO / CÉDULA"
-                                value={doctorSession.username}
-                                onChange={e => setDoctorSession({...doctorSession, username: e.target.value})}
-                             />
-                          </div>
-                          <button 
-                             onClick={handleDoctorLogin}
-                             className="w-full py-4 bg-blue-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl hover:bg-slate-900 transition-all flex items-center justify-center gap-3"
-                          >
-                             <LogIn size={16} /> Conectar a Red
-                          </button>
-                      </div>
-                  </div>
-              </div>
-          ) : (
-            /* DASHBOARD DEL MÉDICO CONECTADO */
-            <>
-                {/* ... (Existing Doctor Dashboard Content) ... */}
-                <div className={`p-4 rounded-3xl border-2 mb-8 flex flex-col md:flex-row justify-between items-center gap-4 transition-all ${doctorSession.isAvailable ? 'bg-emerald-50 border-emerald-200' : 'bg-rose-50 border-rose-200'}`}>
-                    <div className="flex items-center gap-4 pl-2">
-                        <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-white shadow-md transition-colors ${doctorSession.isAvailable ? 'bg-emerald-500' : 'bg-rose-500'}`}>
-                            {doctorSession.isAvailable ? <Wifi size={24}/> : <WifiOff size={24}/>}
-                        </div>
-                        <div>
-                            <p className={`text-[10px] font-black uppercase tracking-widest ${doctorSession.isAvailable ? 'text-emerald-700' : 'text-rose-700'}`}>
-                                Estado de Conexión: {doctorSession.isAvailable ? 'EN LÍNEA' : 'OCUPADO / FUERA DE LÍNEA'}
-                            </p>
-                            <p className="text-sm font-black text-slate-900 uppercase tracking-tight">Dr. {doctorSession.username}</p>
-                        </div>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                        <div className="flex items-center gap-2 bg-white p-2 rounded-2xl shadow-sm border border-slate-100">
-                            <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-2 hidden md:block">
-                                Control:
-                            </span>
-                            <button 
-                            onClick={() => toggleAvailability(true)}
-                            className={`px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 ${doctorSession.isAvailable ? 'bg-emerald-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50'}`}
-                            >
-                            <CheckCircle2 size={14}/> Disponible
+        // --- VISTA PRINCIPAL (HOME) ---
+        return (
+            <div className="space-y-10 animate-in fade-in">
+                {/* Hero Banner */}
+                <div className="relative overflow-hidden bg-gradient-to-r from-[#0057B8] to-blue-700 rounded-[3rem] shadow-2xl text-white p-8 md:p-12">
+                    <div className="relative z-10 max-w-2xl">
+                        <span className="inline-block py-1 px-3 rounded-full bg-white/20 text-white text-[10px] font-black uppercase tracking-widest mb-4 backdrop-blur-sm border border-white/10">
+                            Salud Digital 24/7
+                        </span>
+                        <h2 className="text-3xl md:text-5xl font-black mb-4 leading-tight">¿Cómo te sientes hoy?</h2>
+                        <p className="text-blue-100 text-sm md:text-base font-medium mb-8 max-w-lg leading-relaxed">
+                            Conecta con especialistas certificados, monitorea tus signos vitales y accede a tu historial médico de forma segura.
+                        </p>
+                        <div className="flex flex-wrap gap-4">
+                            <button onClick={handleStartImmediate} className="px-8 py-4 bg-white text-[#0057B8] rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-blue-50 transition-all shadow-xl flex items-center gap-2 animate-pulse">
+                                <Video size={18}/> Atención Inmediata
                             </button>
-                            <button 
-                            onClick={() => toggleAvailability(false)}
-                            className={`px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 ${!doctorSession.isAvailable ? 'bg-rose-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50'}`}
-                            >
-                            <BellOff size={14}/> Ocupado
+                            <button onClick={() => setAppTab('doctors')} className="px-8 py-4 bg-blue-800/50 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-blue-800 transition-all flex items-center gap-2 border border-white/20">
+                                <Calendar size={18}/> Agendar Cita
                             </button>
                         </div>
-                        
-                        <div className="w-px h-8 bg-slate-200 mx-2"></div>
-                        
-                        <button 
-                            onClick={() => setDoctorTab(doctorTab === 'finance' ? 'dashboard' : 'finance')}
-                            className={`p-3 rounded-2xl transition-all shadow-md ${doctorTab === 'finance' ? 'bg-indigo-600 text-white' : 'bg-white text-slate-500 hover:bg-slate-50'}`}
-                            title="Mi Billetera"
-                        >
-                            <Wallet size={18}/>
-                        </button>
-                        
-                        <button 
-                            onClick={handleDoctorLogout}
-                            className="p-3 bg-slate-900 text-white rounded-2xl hover:bg-slate-700 transition-all shadow-md ml-2"
-                            title="Cerrar Sesión de Red"
-                        >
-                            <LogOut size={18}/>
-                        </button>
                     </div>
+                    {/* Decorative Elements */}
+                    <div className="absolute right-0 bottom-0 opacity-10 pointer-events-none transform translate-x-1/4 translate-y-1/4">
+                        <Activity size={400} />
+                    </div>
+                    <div className="absolute top-10 right-10 w-32 h-32 bg-white/10 rounded-full blur-3xl"></div>
                 </div>
 
-                {doctorTab === 'finance' ? (
-                    /* FINANCE TAB */
-                    <div className="max-w-4xl mx-auto space-y-8 animate-in slide-in-from-right-4">
-                        <div className="bg-slate-900 text-white p-12 rounded-[4rem] shadow-2xl text-center space-y-6 relative overflow-hidden">
-                             <div className="absolute top-0 right-0 p-20 bg-indigo-600/20 rounded-full blur-3xl transform translate-x-1/2 -translate-y-1/2"></div>
-                             <p className="text-xs font-black uppercase tracking-[0.2em] text-indigo-400 relative z-10">Saldo Total Acumulado</p>
-                             <p className="text-7xl font-black relative z-10">${currentUser?.walletBalance?.toFixed(2) || '0.00'}</p>
-                             <p className="text-[10px] font-bold text-slate-400 uppercase relative z-10">Disponible para retiro inmediato</p>
-                             
-                             <button className="px-10 py-4 bg-indigo-600 rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-indigo-500 transition-all shadow-lg flex items-center justify-center gap-3 mx-auto relative z-10">
-                                 <DollarSign size={16}/> Retirar Fondos
-                             </button>
-                        </div>
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                    {/* Servicios Rápidos: BOTONES GRANDES Y COLORIDOS */}
+                    <div className="lg:col-span-2 space-y-6">
+                        <h3 className="text-xl font-black text-slate-900 flex items-center gap-2">
+                            <Zap className="text-amber-500" size={24}/> Servicios Disponibles
+                        </h3>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                            
+                            {/* MÉDICO YA (URGENCIA) */}
+                            <button 
+                                onClick={handleStartImmediate} 
+                                className="relative overflow-hidden group p-6 h-48 rounded-[2.5rem] bg-gradient-to-br from-rose-500 to-pink-600 text-white shadow-xl hover:shadow-rose-300/50 transition-all hover:scale-[1.02] text-left"
+                            >
+                                <div className="absolute -right-6 -bottom-6 opacity-20 transform rotate-12 group-hover:scale-110 transition-transform duration-500">
+                                    <Siren size={120} />
+                                </div>
+                                <div className="relative z-10 flex flex-col h-full justify-between">
+                                    <div className="bg-white/20 w-fit p-3 rounded-2xl backdrop-blur-sm border border-white/10">
+                                        <Video size={32} />
+                                    </div>
+                                    <div>
+                                        <h3 className="text-2xl font-black uppercase tracking-tight leading-none mb-1">Médico Ya</h3>
+                                        <p className="text-sm font-medium opacity-90">Atención Inmediata 24/7</p>
+                                    </div>
+                                </div>
+                            </button>
 
-                        <div className="bg-white border border-slate-200 rounded-[3rem] p-10 shadow-sm">
-                            <h3 className="text-lg font-black text-slate-900 uppercase tracking-tight mb-6">Historial de Ingresos</h3>
-                            <div className="space-y-4">
-                                {myScheduledPatients.filter(p => p.status === PatientStatus.ATTENDED).map(p => (
-                                    <div key={p.id} className="flex justify-between items-center p-4 bg-slate-50 rounded-2xl border border-slate-100">
-                                        <div>
-                                            <p className="text-xs font-black uppercase text-slate-900">{p.name}</p>
-                                            <p className="text-[9px] font-bold text-slate-400 uppercase">{p.lastVisit}</p>
-                                        </div>
-                                        <p className="text-sm font-black text-emerald-600">+$800.00</p>
+                            {/* MIS SIGNOS (IoT) */}
+                            <button 
+                                onClick={() => setAppTab('vitals')}
+                                className="relative overflow-hidden group p-6 h-48 rounded-[2.5rem] bg-gradient-to-br from-blue-500 to-cyan-400 text-white shadow-xl hover:shadow-cyan-300/50 transition-all hover:scale-[1.02] text-left"
+                            >
+                                <div className="absolute -right-6 -bottom-6 opacity-20 transform rotate-12 group-hover:scale-110 transition-transform duration-500">
+                                    <Activity size={120} />
+                                </div>
+                                <div className="relative z-10 flex flex-col h-full justify-between">
+                                    <div className="bg-white/20 w-fit p-3 rounded-2xl backdrop-blur-sm border border-white/10">
+                                        <Watch size={32} />
                                     </div>
-                                ))}
-                                {myScheduledPatients.filter(p => p.status === PatientStatus.ATTENDED).length === 0 && (
-                                    <div className="text-center py-10 opacity-30">
-                                        <p className="text-xs font-black uppercase text-slate-400">Sin movimientos recientes</p>
+                                    <div>
+                                        <h3 className="text-2xl font-black uppercase tracking-tight leading-none mb-1">Mis Signos</h3>
+                                        <p className="text-sm font-medium opacity-90">Conectar Wearables</p>
                                     </div>
-                                )}
-                            </div>
+                                </div>
+                            </button>
+
+                            {/* LABORATORIO */}
+                            <button 
+                                onClick={() => setActiveServiceModal('lab')}
+                                className="relative overflow-hidden group p-6 h-48 rounded-[2.5rem] bg-gradient-to-br from-violet-600 to-purple-500 text-white shadow-xl hover:shadow-violet-300/50 transition-all hover:scale-[1.02] text-left"
+                            >
+                                <div className="absolute -right-6 -bottom-6 opacity-20 transform rotate-12 group-hover:scale-110 transition-transform duration-500">
+                                    <FlaskConical size={120} />
+                                </div>
+                                <div className="relative z-10 flex flex-col h-full justify-between">
+                                    <div className="bg-white/20 w-fit p-3 rounded-2xl backdrop-blur-sm border border-white/10">
+                                        <FlaskConical size={32} />
+                                    </div>
+                                    <div>
+                                        <h3 className="text-2xl font-black uppercase tracking-tight leading-none mb-1">Laboratorio</h3>
+                                        <p className="text-sm font-medium opacity-90">Toma a Domicilio</p>
+                                    </div>
+                                </div>
+                            </button>
+
+                            {/* VISITA MÉDICA */}
+                            <button 
+                                onClick={() => setActiveServiceModal('home_visit')}
+                                className="relative overflow-hidden group p-6 h-48 rounded-[2.5rem] bg-gradient-to-br from-emerald-500 to-teal-400 text-white shadow-xl hover:shadow-emerald-300/50 transition-all hover:scale-[1.02] text-left"
+                            >
+                                <div className="absolute -right-6 -bottom-6 opacity-20 transform rotate-12 group-hover:scale-110 transition-transform duration-500">
+                                    <Stethoscope size={120} />
+                                </div>
+                                <div className="relative z-10 flex flex-col h-full justify-between">
+                                    <div className="bg-white/20 w-fit p-3 rounded-2xl backdrop-blur-sm border border-white/10">
+                                        <MapPinned size={32} />
+                                    </div>
+                                    <div>
+                                        <h3 className="text-2xl font-black uppercase tracking-tight leading-none mb-1">Visita Médica</h3>
+                                        <p className="text-sm font-medium opacity-90">Doctor en Casa</p>
+                                    </div>
+                                </div>
+                            </button>
+
+                            {/* FARMACIA */}
+                            <button 
+                                onClick={() => setActiveServiceModal('pharmacy')}
+                                className="relative overflow-hidden group p-6 h-48 rounded-[2.5rem] bg-gradient-to-br from-amber-400 to-orange-500 text-white shadow-xl hover:shadow-orange-300/50 transition-all hover:scale-[1.02] text-left"
+                            >
+                                <div className="absolute -right-6 -bottom-6 opacity-20 transform rotate-12 group-hover:scale-110 transition-transform duration-500">
+                                    <ShoppingBag size={120} />
+                                </div>
+                                <div className="relative z-10 flex flex-col h-full justify-between">
+                                    <div className="bg-white/20 w-fit p-3 rounded-2xl backdrop-blur-sm border border-white/10">
+                                        <Pill size={32} />
+                                    </div>
+                                    <div>
+                                        <h3 className="text-2xl font-black uppercase tracking-tight leading-none mb-1">Farmacia</h3>
+                                        <p className="text-sm font-medium opacity-90">Envío Exprés</p>
+                                    </div>
+                                </div>
+                            </button>
+
+                             {/* AMBULANCIA (Ejemplo adicional o espacio libre) */}
+                             <button 
+                                className="relative overflow-hidden group p-6 h-48 rounded-[2.5rem] bg-slate-100 border-2 border-dashed border-slate-300 text-slate-400 hover:bg-slate-50 transition-all hover:scale-[1.02] text-left flex flex-col items-center justify-center gap-4"
+                            >
+                                <Plus size={48} className="opacity-50"/>
+                                <p className="text-xs font-black uppercase tracking-widest">Más Servicios</p>
+                            </button>
+
                         </div>
                     </div>
-                ) : (
-                    /* DASHBOARD GRID */
-                    <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-                        {/* COLUMNA IZQUIERDA: MIS CITAS (Agenda Digital Personal) */}
-                        <div className="lg:col-span-8 space-y-6">
-                            <div className="bg-white border border-slate-200 rounded-[3rem] shadow-sm overflow-hidden min-h-[600px] flex flex-col">
-                                <div className="p-8 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
-                                    <h3 className="text-sm font-black uppercase tracking-widest text-slate-900 flex items-center gap-3">
-                                        <Calendar size={18} className="text-violet-600"/> Mi Agenda Digital
-                                    </h3>
-                                    <span className="bg-violet-100 text-violet-700 px-3 py-1 rounded-lg text-[10px] font-black">{myScheduledPatients.length}</span>
-                                </div>
-                                <div className="flex-1 overflow-y-auto">
-                                    <table className="w-full text-left">
-                                        <thead>
-                                            <tr className="bg-slate-50 text-[9px] font-black uppercase text-slate-400 tracking-widest border-b border-slate-100">
-                                                <th className="px-8 py-5">Hora</th>
-                                                <th className="px-6 py-5">Paciente</th>
-                                                <th className="px-6 py-5">Motivo</th>
-                                                <th className="px-6 py-5 text-center">Estado</th>
-                                                <th className="px-8 py-5 text-right">Acción</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody className="divide-y divide-slate-100">
-                                            {myScheduledPatients.map(p => (
-                                                <tr key={p.id} className="hover:bg-violet-50/30 transition-all group">
-                                                    <td className="px-8 py-6">
-                                                        <div className="flex items-center gap-2 bg-slate-100 w-fit px-3 py-1.5 rounded-xl border border-slate-200">
-                                                            <Clock size={12} className="text-slate-500"/>
-                                                            <span className="text-xs font-black text-slate-700">{p.appointmentTime}</span>
-                                                        </div>
-                                                    </td>
-                                                    <td className="px-6 py-6">
-                                                        <div className="flex items-center gap-3">
-                                                            <div className="w-8 h-8 rounded-full bg-violet-100 text-violet-600 flex items-center justify-center font-black text-xs">{p.name.charAt(0)}</div>
-                                                            <div>
-                                                                <p className="text-xs font-black text-slate-900 uppercase">{p.name}</p>
-                                                                <div className="flex gap-2 mt-0.5">
-                                                                    <p className="text-[9px] font-bold text-slate-400 uppercase">Exp: {p.id}</p>
-                                                                    {getOriginBadge(p)}
-                                                                </div>
-                                                            </div>
-                                                        </div>
-                                                    </td>
-                                                    <td className="px-6 py-6"><p className="text-[10px] font-medium text-slate-500 uppercase italic truncate max-w-[150px]">{p.reason}</p></td>
-                                                    <td className="px-6 py-6 text-center">
-                                                        {p.status === PatientStatus.ONLINE_WAITING ? (
-                                                            <div className="inline-flex items-center gap-2 px-3 py-1 bg-emerald-100 text-emerald-700 rounded-lg text-[9px] font-black uppercase border border-emerald-200 animate-pulse">
-                                                                <Wifi size={12}/> En Sala
-                                                            </div>
-                                                        ) : (
-                                                            <div className="inline-flex items-center gap-2 px-3 py-1 bg-slate-100 text-slate-400 rounded-lg text-[9px] font-black uppercase border border-slate-200">
-                                                                <Clock size={12}/> Programado
-                                                            </div>
-                                                        )}
-                                                    </td>
-                                                    <td className="px-8 py-6 text-right">
-                                                        <button 
-                                                            onClick={() => handleStartCall(p)}
-                                                            disabled={!doctorSession.isAvailable || (p.status !== PatientStatus.ONLINE_WAITING && p.status !== PatientStatus.ONLINE_IN_CALL)}
-                                                            className={`px-6 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-lg transition-all flex items-center gap-2 ml-auto ${doctorSession.isAvailable && (p.status === PatientStatus.ONLINE_WAITING || p.status === PatientStatus.ONLINE_IN_CALL) ? 'bg-violet-600 text-white hover:bg-violet-700' : 'bg-slate-100 text-slate-300 cursor-not-allowed'}`}
-                                                        >
-                                                            {doctorSession.isAvailable ? <><Play size={14} fill="currentColor" /> Iniciar</> : 'Ocupado'}
-                                                        </button>
-                                                    </td>
-                                                </tr>
-                                            ))}
-                                            {myScheduledPatients.length === 0 && (
-                                                <tr><td colSpan={5} className="py-20 text-center opacity-30 text-xs font-black uppercase text-slate-400 tracking-widest">No hay citas directas agendadas</td></tr>
-                                            )}
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </div>
+
+                    {/* Próximas Citas y Historial */}
+                    <div className="space-y-6">
+                        <div className="flex justify-between items-center bg-slate-100 p-1 rounded-2xl">
+                            <button 
+                                onClick={() => setAppTab('home')} 
+                                className={`flex-1 py-2 text-[10px] font-black uppercase rounded-xl transition-all ${appTab !== 'history' ? 'bg-white shadow text-[#0057B8]' : 'text-slate-500'}`}
+                            >
+                                Próximas
+                            </button>
+                            <button 
+                                onClick={() => setAppTab('history')} 
+                                className={`flex-1 py-2 text-[10px] font-black uppercase rounded-xl transition-all ${appTab === 'history' ? 'bg-white shadow text-[#0057B8]' : 'text-slate-500'}`}
+                            >
+                                Recetas e Historial
+                            </button>
                         </div>
-
-                        {/* COLUMNA DERECHA: SALA DE ESPERA GENERAL (UBER STYLE) */}
-                        <div className="lg:col-span-4 space-y-6">
-                            <div className={`rounded-[3rem] p-8 shadow-2xl relative overflow-hidden flex flex-col h-full border-b-8 border-rose-500 transition-colors ${doctorSession.isAvailable ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-400 border-slate-300'}`}>
-                                {doctorSession.isAvailable && <div className="absolute right-0 top-0 w-64 h-64 bg-rose-600/20 rounded-full blur-3xl pointer-events-none"></div>}
-                                
-                                <div className="flex justify-between items-center mb-8 relative z-10">
-                                    <div>
-                                        <h3 className="text-xl font-black uppercase tracking-tight flex items-center gap-3">
-                                            <Zap className={doctorSession.isAvailable ? "text-rose-500 animate-pulse" : "text-slate-300"} /> Sala de Urgencia
-                                        </h3>
-                                        <p className={`text-[10px] font-bold uppercase tracking-widest mt-1 ${doctorSession.isAvailable ? 'text-slate-400' : 'text-slate-300'}`}>Bolsa General de Pacientes</p>
-                                    </div>
-                                    <span className={`px-3 py-1 rounded-xl text-xs font-black ${doctorSession.isAvailable ? 'bg-rose-600' : 'bg-slate-200 text-slate-400'}`}>{generalQueue.length}</span>
-                                </div>
-
-                                <div className="flex-1 space-y-4 overflow-y-auto custom-scrollbar relative z-10 pr-2">
-                                    {generalQueue.map(p => (
-                                        <div key={p.id} className={`p-5 rounded-3xl backdrop-blur-sm transition-all group border ${doctorSession.isAvailable ? 'bg-white/10 border-white/10 hover:bg-white/20' : 'bg-white border-slate-200 opacity-50'}`}>
-                                            <div className="flex justify-between items-start mb-3">
-                                                <div>
-                                                    <p className="text-sm font-black uppercase">{p.name}</p>
-                                                    <p className={`text-[9px] font-bold uppercase mt-1 ${doctorSession.isAvailable ? 'text-rose-400' : 'text-slate-400'}`}>Espera: 5 min</p>
+                        
+                        <div className="bg-white border border-slate-200 rounded-[2.5rem] p-6 shadow-sm min-h-[200px]">
+                            {appTab === 'history' ? (
+                                // HISTORIAL DE ATENCIONES Y RECETAS
+                                <div className="space-y-4 max-h-60 overflow-y-auto custom-scrollbar pr-2">
+                                    {notes.filter(n => n.patientId === 'DEMO-PATIENT' || n.type.includes('Teleconsulta') || n.type.includes('Receta')).map(note => (
+                                        <div key={note.id} className="p-4 bg-slate-50 rounded-2xl border border-slate-100 flex justify-between items-center group hover:bg-white hover:shadow-sm transition-all">
+                                            <div>
+                                                <div className="flex items-center gap-2 mb-1">
+                                                    <span className="text-[9px] font-black uppercase bg-blue-100 text-blue-700 px-2 py-0.5 rounded">{note.type.split('(')[0]}</span>
+                                                    <span className="text-[9px] text-slate-400 font-bold">{note.date.split(',')[0]}</span>
                                                 </div>
-                                                {doctorSession.isAvailable && <div className="w-2 h-2 rounded-full bg-rose-500 animate-ping"></div>}
+                                                <p className="text-xs font-bold text-slate-700 line-clamp-1">{note.author}</p>
                                             </div>
-                                            <p className={`text-[10px] italic mb-4 line-clamp-2 ${doctorSession.isAvailable ? 'text-slate-300' : 'text-slate-400'}`}>"{p.teleIntake?.mainSymptom || p.reason}"</p>
-                                            
-                                            {p.teleIntake && (
-                                                <div className="flex gap-2 mb-4">
-                                                    <span className={`px-2 py-1 rounded text-[8px] font-black uppercase ${doctorSession.isAvailable ? 'bg-white/10' : 'bg-slate-100 text-slate-500'}`}>Dolor: {p.teleIntake.painLevel}/10</span>
-                                                    {p.teleIntake.chronicConditions.length > 0 && <span className={`px-2 py-1 rounded text-[8px] font-black uppercase ${doctorSession.isAvailable ? 'bg-white/10 text-amber-300' : 'bg-slate-100 text-slate-400'}`}>Crónicos</span>}
-                                                </div>
-                                            )}
-
-                                            <button 
-                                                onClick={() => handleStartCall(p)}
-                                                disabled={!doctorSession.isAvailable}
-                                                className={`w-full py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2 shadow-lg ${doctorSession.isAvailable ? 'bg-white text-slate-900 hover:bg-rose-500 hover:text-white' : 'bg-slate-200 text-slate-400 cursor-not-allowed'}`}
-                                            >
-                                                {p.teleIntake ? 'Ver Triage y Atender' : 'Atender Ahora'} <ArrowRight size={14} />
-                                            </button>
+                                            <button className="p-2 bg-white rounded-xl text-slate-400 hover:text-[#0057B8] shadow-sm"><Download size={16}/></button>
                                         </div>
                                     ))}
-                                    {generalQueue.length === 0 && (
-                                        <div className="flex flex-col items-center justify-center h-40 opacity-30">
-                                            <Coffee size={40} className="mb-2" />
-                                            <p className="text-[10px] font-black uppercase tracking-widest text-center">Sala General Vacía</p>
+                                    {notes.length === 0 && (
+                                        <div className="text-center py-10 opacity-40">
+                                            <History size={32} className="mx-auto mb-2 text-slate-300"/>
+                                            <p className="text-[10px] font-black text-slate-400 uppercase">Sin historial clínico</p>
                                         </div>
                                     )}
+                                </div>
+                            ) : (
+                                // CITAS PRÓXIMAS
+                                myAppointments.length > 0 ? (
+                                    <div className="space-y-4">
+                                        {myAppointments.map(appt => (
+                                            <div key={appt.id} className="flex items-center gap-4 p-4 bg-slate-50 rounded-2xl border border-slate-100 hover:bg-white hover:shadow-md transition-all cursor-pointer">
+                                                <div className="flex-shrink-0 w-14 h-14 bg-white rounded-xl flex flex-col items-center justify-center text-center shadow-sm border border-slate-100">
+                                                    <span className="text-[9px] font-black uppercase text-rose-500">{new Date(appt.scheduledDate || new Date()).toLocaleString('es-MX', {month:'short'})}</span>
+                                                    <span className="text-lg font-black text-slate-900">{new Date(appt.scheduledDate || new Date()).getDate()}</span>
+                                                </div>
+                                                <div className="flex-1 min-w-0">
+                                                    <p className="text-xs font-black text-slate-900 truncate">{appt.assignedDoctorName || 'Médico General'}</p>
+                                                    <p className="text-[10px] text-slate-500 font-medium truncate">{appt.appointmentTime || 'Pendiente'} • {appt.status}</p>
+                                                    {appt.status === PatientStatus.ONLINE_WAITING && (
+                                                        <span className="inline-block mt-1 px-2 py-0.5 bg-amber-100 text-amber-700 text-[8px] font-black uppercase rounded-md">
+                                                            En Espera
+                                                        </span>
+                                                    )}
+                                                    {appt.status === PatientStatus.ONLINE_REVIEWING && (
+                                                        <span className="inline-block mt-1 px-2 py-0.5 bg-indigo-100 text-indigo-700 text-[8px] font-black uppercase rounded-md animate-pulse">
+                                                            Médico Leyendo...
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                <div className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center text-slate-500">
+                                                    <ChevronRight size={16}/>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <div className="h-full flex flex-col items-center justify-center text-center py-10 opacity-40">
+                                        <Calendar size={48} className="mb-2 text-slate-300"/>
+                                        <p className="text-xs font-bold text-slate-400">No tienes citas próximas</p>
+                                    </div>
+                                )
+                            )}
+                        </div>
+                    </div>
+                </div>
+
+                {/* --- MODALES DE SERVICIOS --- */}
+                
+                {/* 1. FARMACIA */}
+                {activeServiceModal === 'pharmacy' && (
+                    <div className="fixed inset-0 z-50 bg-slate-900/90 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
+                        <div className="bg-white w-full max-w-4xl rounded-[3rem] shadow-2xl p-8 flex flex-col max-h-[85vh]">
+                            <div className="flex justify-between items-center mb-6">
+                                <div>
+                                    <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tight flex items-center gap-2">
+                                        <ShoppingBag size={24} className="text-amber-500"/> Farmacia Express
+                                    </h3>
+                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Entrega en 60 minutos</p>
+                                </div>
+                                <button onClick={() => setActiveServiceModal('none')} className="p-2 hover:bg-slate-100 rounded-full"><X size={24}/></button>
+                            </div>
+
+                            <div className="flex gap-2 overflow-x-auto no-scrollbar mb-4 pb-2">
+                                {['Todos', 'Dolor', 'Alergias', 'Gástrico', 'Material', 'Equipo'].map(cat => (
+                                    <button 
+                                        key={cat}
+                                        onClick={() => setPharmacyCategory(cat)}
+                                        className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase transition-all whitespace-nowrap ${pharmacyCategory === cat ? 'bg-amber-500 text-white shadow-md' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}
+                                    >
+                                        {cat}
+                                    </button>
+                                ))}
+                            </div>
+
+                            <div className="flex gap-8 flex-1 overflow-hidden">
+                                {/* Product Grid */}
+                                <div className="flex-1 overflow-y-auto custom-scrollbar grid grid-cols-2 lg:grid-cols-3 gap-4 pb-6">
+                                    {PHARMACY_ITEMS.filter(i => pharmacyCategory === 'Todos' || i.category === pharmacyCategory).map(item => (
+                                        <div key={item.id} className="p-4 border border-slate-100 rounded-3xl flex flex-col justify-between hover:border-amber-400 hover:shadow-lg transition-all group bg-white">
+                                            <div className="text-center mb-4">
+                                                <span className="text-4xl">{item.image}</span>
+                                            </div>
+                                            <div>
+                                                <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">{item.category}</p>
+                                                <p className="text-xs font-black uppercase text-slate-800 leading-tight line-clamp-2">{item.name}</p>
+                                            </div>
+                                            <div className="flex justify-between items-end mt-4 pt-4 border-t border-slate-50">
+                                                <p className="text-lg font-black text-emerald-600">${item.price}</p>
+                                                <button onClick={() => setCart([...cart, item])} className="p-2 bg-slate-900 text-white rounded-xl shadow-md hover:bg-amber-500 transition-all"><Plus size={16}/></button>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                                
+                                {/* Cart Sidebar */}
+                                <div className="w-80 bg-slate-50 rounded-3xl p-6 flex flex-col border border-slate-200">
+                                    <h4 className="text-xs font-black uppercase text-slate-400 tracking-widest mb-4">Tu Pedido</h4>
+                                    <div className="space-y-4 mb-4">
+                                        <div className="relative">
+                                            <MapPin size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"/>
+                                            <input 
+                                                className="w-full pl-10 pr-4 py-3 bg-white border border-slate-200 rounded-xl text-xs font-bold uppercase outline-none focus:border-amber-400 transition-all"
+                                                placeholder="Dirección de entrega..."
+                                                value={pharmacyAddress}
+                                                onChange={e => setPharmacyAddress(e.target.value)}
+                                            />
+                                        </div>
+                                    </div>
+                                    <div className="flex-1 overflow-y-auto space-y-3 mb-4 custom-scrollbar pr-2">
+                                        {cart.map((item, idx) => (
+                                            <div key={idx} className="flex justify-between items-center bg-white p-3 rounded-xl border border-slate-100 shadow-sm">
+                                                <div className="flex items-center gap-2">
+                                                    <span className="text-lg">{item.image}</span>
+                                                    <div className="overflow-hidden">
+                                                        <p className="text-[9px] font-bold uppercase truncate w-24">{item.name}</p>
+                                                        <p className="text-[8px] font-bold text-emerald-600">${item.price}</p>
+                                                    </div>
+                                                </div>
+                                                <button onClick={() => setCart(cart.filter((_, i) => i !== idx))} className="text-slate-300 hover:text-rose-500"><X size={14}/></button>
+                                            </div>
+                                        ))}
+                                        {cart.length === 0 && <div className="text-center py-10 opacity-30 text-xs font-black uppercase">Carrito vacío</div>}
+                                    </div>
+                                    <div className="pt-4 border-t border-slate-200">
+                                        <div className="flex justify-between items-center mb-4">
+                                            <span className="text-xs font-bold text-slate-500 uppercase">Total</span>
+                                            <span className="text-2xl font-black text-slate-900">${cart.reduce((a,b)=>a+b.price,0)}</span>
+                                        </div>
+                                        <button onClick={handlePharmacyOrder} className="w-full py-4 bg-amber-500 text-white rounded-2xl font-black uppercase tracking-widest hover:bg-amber-600 transition-all flex items-center justify-center gap-2 shadow-lg">
+                                            <ShoppingBag size={18}/> Realizar Pedido
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
                         </div>
                     </div>
                 )}
-            </>
-          )
+
+                {/* 2. LABORATORIO */}
+                {activeServiceModal === 'lab' && (
+                    <div className="fixed inset-0 z-50 bg-slate-900/90 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
+                        <div className="bg-white w-full max-w-2xl rounded-[3rem] shadow-2xl p-8 flex flex-col max-h-[85vh]">
+                            <div className="flex justify-between items-center mb-6">
+                                <div>
+                                    <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tight flex items-center gap-2">
+                                        <FlaskConical size={24} className="text-rose-500"/> Laboratorio
+                                    </h3>
+                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Toma de muestras a domicilio</p>
+                                </div>
+                                <button onClick={() => setActiveServiceModal('none')} className="p-2 hover:bg-slate-100 rounded-full"><X size={24}/></button>
+                            </div>
+                            
+                            <div className="space-y-4 mb-6">
+                                <div className="relative">
+                                    <MapPin size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"/>
+                                    <input 
+                                        className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold uppercase outline-none focus:ring-2 focus:ring-rose-200 transition-all"
+                                        placeholder="Dirección para toma de muestra..."
+                                        value={labAddress}
+                                        onChange={e => setLabAddress(e.target.value)}
+                                    />
+                                </div>
+                                <div className="relative">
+                                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={16}/>
+                                    <input 
+                                        className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold uppercase outline-none focus:ring-2 focus:ring-rose-200"
+                                        placeholder="Buscar estudios..."
+                                        value={labSearch}
+                                        onChange={(e) => setLabSearch(e.target.value)}
+                                    />
+                                </div>
+                                {/* Cross-sell: Add Doctor Visit */}
+                                <div onClick={() => setAddDoctorToLab(!addDoctorToLab)} className={`p-4 rounded-2xl border-2 cursor-pointer flex justify-between items-center transition-all ${addDoctorToLab ? 'bg-indigo-50 border-indigo-200' : 'bg-white border-slate-100'}`}>
+                                    <div className="flex items-center gap-3">
+                                        <Stethoscope size={18} className={addDoctorToLab ? 'text-indigo-600' : 'text-slate-400'}/>
+                                        <div>
+                                            <p className={`text-[10px] font-black uppercase ${addDoctorToLab ? 'text-indigo-900' : 'text-slate-500'}`}>Añadir Valoración Médica</p>
+                                            <p className="text-[8px] text-slate-400 font-bold">Un médico acompañará al técnico</p>
+                                        </div>
+                                    </div>
+                                    <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${addDoctorToLab ? 'bg-indigo-600 border-indigo-600 text-white' : 'border-slate-300'}`}>
+                                        {addDoctorToLab && <Check size={12}/>}
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="flex-1 overflow-y-auto custom-scrollbar space-y-4 pr-2">
+                                <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-2">Paquetes Recomendados</p>
+                                {LAB_PACKAGES.filter(p => p.name.toLowerCase().includes(labSearch.toLowerCase())).map(pkg => (
+                                    <div key={pkg.id} className="p-5 border border-slate-100 rounded-3xl flex justify-between items-center hover:shadow-lg hover:border-rose-200 transition-all bg-white group">
+                                        <div>
+                                            <div className="flex items-center gap-2">
+                                                <p className="text-sm font-black uppercase text-slate-900">{pkg.name}</p>
+                                                <span className="bg-rose-50 text-rose-600 text-[8px] px-2 py-0.5 rounded font-black uppercase">{pkg.time}</span>
+                                            </div>
+                                            <p className="text-[10px] text-slate-500 mt-1 font-medium">{pkg.includes}</p>
+                                        </div>
+                                        <div className="text-right">
+                                            <p className="text-xl font-black text-rose-600">${pkg.price}</p>
+                                            <button onClick={() => handleLabOrder(pkg)} className="mt-2 px-4 py-2 bg-slate-900 text-white rounded-xl text-[9px] font-black uppercase hover:bg-rose-600 transition-all shadow-md">Solicitar</button>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* 3. VISITA MÉDICA */}
+                {activeServiceModal === 'home_visit' && (
+                    <div className="fixed inset-0 z-50 bg-slate-900/90 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
+                        <div className="bg-white w-full max-w-md rounded-[3rem] shadow-2xl p-8 flex flex-col border border-white/20">
+                            <div className="text-center mb-8 relative">
+                                <div className="w-20 h-20 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-4 animate-pulse">
+                                    <Stethoscope size={32}/>
+                                </div>
+                                <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tight">Médico en Casa</h3>
+                                <p className="text-xs text-slate-500 font-bold mt-2 uppercase">Llegada estimada: 45-60 min</p>
+                            </div>
+                            
+                            <div className="space-y-6 mb-8">
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-black text-slate-400 uppercase ml-2 flex items-center gap-1"><MapPinned size={10}/> Dirección de Visita</label>
+                                    <div className="relative">
+                                        <textarea 
+                                            className="w-full p-4 bg-slate-50 border-2 border-slate-200 rounded-2xl text-sm font-medium resize-none h-24 outline-none focus:border-emerald-400 focus:bg-white transition-all shadow-inner"
+                                            placeholder="Calle, Número, Colonia, Referencias..."
+                                            value={homeVisitAddress}
+                                            onChange={e => setHomeVisitAddress(e.target.value)}
+                                        />
+                                    </div>
+                                </div>
+
+                                {/* Cross-sell: Add Lab */}
+                                <div onClick={() => setAddLabToVisit(!addLabToVisit)} className={`p-4 rounded-2xl border-2 cursor-pointer flex justify-between items-center transition-all ${addLabToVisit ? 'bg-rose-50 border-rose-200' : 'bg-white border-slate-100'}`}>
+                                    <div className="flex items-center gap-3">
+                                        <FlaskConical size={18} className={addLabToVisit ? 'text-rose-600' : 'text-slate-400'}/>
+                                        <div>
+                                            <p className={`text-[10px] font-black uppercase ${addLabToVisit ? 'text-rose-900' : 'text-slate-500'}`}>Añadir Toma de Muestras</p>
+                                            <p className="text-[8px] text-slate-400 font-bold">El médico tomará muestras básicas</p>
+                                        </div>
+                                    </div>
+                                    <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${addLabToVisit ? 'bg-rose-600 border-rose-600 text-white' : 'border-slate-300'}`}>
+                                        {addLabToVisit && <Check size={12}/>}
+                                    </div>
+                                </div>
+
+                                <div className="bg-emerald-50 p-4 rounded-2xl flex items-center justify-between border border-emerald-100">
+                                    <span className="text-[10px] font-black uppercase text-emerald-800">Costo Estimado</span>
+                                    <span className="text-xl font-black text-emerald-600">${800 + (addLabToVisit ? 450 : 0)}.00</span>
+                                </div>
+                            </div>
+
+                            <div className="flex gap-4">
+                                <button onClick={() => setActiveServiceModal('none')} className="flex-1 py-4 bg-slate-100 text-slate-500 rounded-2xl font-black text-[10px] uppercase hover:bg-slate-200 transition-all">Cancelar</button>
+                                <button onClick={handleHomeVisitOrder} className="flex-[2] py-4 bg-emerald-600 text-white rounded-2xl font-black text-[10px] uppercase shadow-xl hover:bg-emerald-700 transition-all flex items-center justify-center gap-2">
+                                    Confirmar <ArrowRight size={14}/>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+            </div>
+        );
+    };
+
+    return (
+        <div className="min-h-screen bg-slate-50 flex flex-col">
+            {/* Navbar Responsivo */}
+            <nav className="bg-white border-b border-slate-200 sticky top-0 z-50 px-4 md:px-8 py-4">
+                <div className="max-w-7xl mx-auto flex justify-between items-center">
+                    <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 bg-[#0057B8] rounded-xl flex items-center justify-center text-white shadow-lg">
+                            <Activity size={24} />
+                        </div>
+                        <div>
+                            <h1 className="text-lg font-black text-slate-900 uppercase tracking-tight leading-none">Mi Salud</h1>
+                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Portal del Paciente</p>
+                        </div>
+                    </div>
+
+                    {/* Desktop Menu */}
+                    <div className="hidden md:flex items-center gap-8">
+                        <button onClick={() => setAppTab('home')} className={`text-xs font-bold uppercase tracking-widest hover:text-[#0057B8] transition-colors ${appTab === 'home' ? 'text-[#0057B8]' : 'text-slate-500'}`}>Inicio</button>
+                        <button onClick={() => setAppTab('doctors')} className={`text-xs font-bold uppercase tracking-widest hover:text-[#0057B8] transition-colors ${appTab === 'doctors' ? 'text-[#0057B8]' : 'text-slate-500'}`}>Doctores</button>
+                        <button onClick={() => setAppTab('vitals')} className={`text-xs font-bold uppercase tracking-widest hover:text-[#0057B8] transition-colors ${appTab === 'vitals' ? 'text-[#0057B8]' : 'text-slate-500'}`}>Mis Signos</button>
+                        <div className="w-px h-6 bg-slate-200"></div>
+                        <div className="flex items-center gap-3">
+                            <div className="text-right">
+                                <p className="text-xs font-black text-slate-900">Paciente Demo</p>
+                                <p className="text-[10px] text-emerald-600 font-bold uppercase">Activo</p>
+                            </div>
+                            <div className="w-10 h-10 bg-slate-100 rounded-full flex items-center justify-center text-slate-500 border border-slate-200">
+                                <User size={20}/>
+                            </div>
+                            <button onClick={onGoBack} className="p-2 hover:bg-rose-50 rounded-xl text-slate-400 hover:text-rose-600 transition-all" title="Cerrar Sesión">
+                                <LogOut size={20}/>
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* Mobile Menu Button */}
+                    <button onClick={() => setMobileMenuOpen(!mobileMenuOpen)} className="md:hidden p-2 text-slate-600">
+                        <Menu size={24} />
+                    </button>
+                </div>
+                
+                {/* Mobile Menu Dropdown */}
+                {mobileMenuOpen && (
+                    <div className="md:hidden absolute top-full left-0 w-full bg-white border-b border-slate-200 shadow-xl p-4 flex flex-col gap-4 animate-in slide-in-from-top-2">
+                         <button onClick={() => {setAppTab('home'); setMobileMenuOpen(false);}} className="text-left p-3 hover:bg-slate-50 rounded-xl text-sm font-bold text-slate-700">Inicio</button>
+                         <button onClick={() => {setAppTab('doctors'); setMobileMenuOpen(false);}} className="text-left p-3 hover:bg-slate-50 rounded-xl text-sm font-bold text-slate-700">Directorio Médico</button>
+                         <button onClick={() => {setAppTab('vitals'); setMobileMenuOpen(false);}} className="text-left p-3 hover:bg-slate-50 rounded-xl text-sm font-bold text-slate-700">Mis Signos</button>
+                         <div className="border-t border-slate-100 pt-2">
+                             <button onClick={onGoBack} className="w-full text-left p-3 hover:bg-rose-50 rounded-xl text-sm font-bold text-rose-600 flex items-center gap-2">
+                                <LogOut size={16}/> Cerrar Sesión
+                             </button>
+                         </div>
+                    </div>
+                )}
+            </nav>
+
+            {/* Main Content */}
+            <main className="flex-1 max-w-7xl mx-auto w-full p-4 md:p-8">
+                {renderContent()}
+            </main>
+        </div>
+    );
+};
+
+const TelemedicineDashboard: React.FC<TelemedicineDashboardProps> = ({ patients, onUpdateStatus, onAddPatient, onAddHomeRequest, onUpdateHomeRequest, doctorsList = MOCK_DOCTORS, currentUser, homeRequests = [], staffList = [], notes = [] }) => {
+  const navigate = useNavigate();
+  const [viewMode, setViewMode] = useState<'landing' | 'doctor' | 'patient_app'>('landing');
+  
+  // DOCTOR VIEW STATES
+  const [docTab, setDocTab] = useState<'waiting' | 'agenda' | 'finance'>('waiting');
+  const [viewingPatientIntake, setViewingPatientIntake] = useState<Patient | null>(null);
+  
+  // Doctor Availability Toggle
+  const [isDoctorAvailable, setIsDoctorAvailable] = useState(true);
+
+  // ... (Doctor View Logic Remains Similar) ...
+  // --- FILTERS ---
+  const waitingRoom = patients.filter(p => p.status === PatientStatus.ONLINE_QUEUE);
+  const myScheduled = patients.filter(p => p.status === PatientStatus.ONLINE_WAITING && p.assignedDoctorId === currentUser?.cedula);
+  const activePatients = patients.filter(p => p.status === PatientStatus.ONLINE_REVIEWING || p.status === PatientStatus.ONLINE_IN_CALL);
+  
+  const myConsultations = useMemo(() => {
+      return patients.filter(p => (p.status === PatientStatus.ATTENDED || p.status === PatientStatus.ONLINE_IN_CALL) && p.assignedModule === ModuleType.TELEMEDICINE);
+  }, [patients]);
+
+  const totalEarnings = useMemo(() => {
+      return myConsultations.length * (currentUser?.price || 800);
+  }, [myConsultations, currentUser]);
+
+  const earningsData = [
+      { name: 'Lun', value: 4000 }, { name: 'Mar', value: 3000 },
+      { name: 'Mie', value: 5000 }, { name: 'Jue', value: 2000 },
+      { name: 'Vie', value: 6000 }, { name: 'Sab', value: 8000 },
+      { name: 'Dom', value: 1000 }
+  ];
+
+  // --- ACTIONS (DOCTOR) ---
+  const handleReviewIntake = (patient: Patient) => {
+      onUpdateStatus(patient.id, PatientStatus.ONLINE_REVIEWING);
+      setViewingPatientIntake(patient);
+  };
+
+  const handleStartCall = () => {
+      if (viewingPatientIntake) {
+          onUpdateStatus(viewingPatientIntake.id, PatientStatus.ONLINE_IN_CALL);
+          navigate(`/telemedicine/${viewingPatientIntake.id}`);
+      }
+  };
+
+  // --- ACTIONS (PATIENT) ---
+  const handlePatientBook = (doc: DoctorInfo | null, time: string, intake: TeleIntakeForm, date?: string) => {
+      if (onAddPatient) {
+          const isImmediate = !doc;
+          const newP: Patient = {
+              id: `APP-${Date.now()}`,
+              name: 'Paciente Demo',
+              age: 30, sex: 'M', curp: '', bloodType: '', allergies: [intake.allergies], chronicDiseases: intake.chronicConditions,
+              status: isImmediate ? PatientStatus.ONLINE_QUEUE : PatientStatus.ONLINE_WAITING,
+              priority: intake.painLevel > 7 ? PriorityLevel.HIGH : PriorityLevel.ROUTINE,
+              assignedModule: ModuleType.TELEMEDICINE,
+              scheduledDate: date || new Date().toISOString().split('T')[0],
+              appointmentTime: time,
+              reason: isImmediate ? 'Atención Inmediata' : 'Cita Programada',
+              assignedDoctorId: doc?.cedula,
+              assignedDoctorName: doc?.name,
+              lastVisit: '',
+              teleIntake: intake
+          };
+          onAddPatient(newP);
+      }
+  };
+
+  const handlePatientRequestHome = (type: 'lab' | 'specialist' | 'pharmacy', details?: any) => {
+      if (onAddHomeRequest) {
+          let reason = '';
+          if (type === 'lab') reason = `Solicitud de Lab: ${details.package?.name}`;
+          else if (type === 'pharmacy') reason = `Pedido Farmacia: ${details.items?.length} items`;
+          else reason = 'Visita Médica a Domicilio';
+
+          onAddHomeRequest({
+              id: `REQ-${Date.now()}`,
+              patientId: 'DEMO-PATIENT',
+              patientName: 'Paciente Demo',
+              patientAddress: details?.address || 'Dirección Registrada en App',
+              requestedBy: 'Paciente (App)',
+              requestedDate: new Date().toISOString(),
+              status: 'Pendiente',
+              studies: type === 'lab' ? [details.package.name] : [],
+              notes: reason,
+              hasDoctorVisit: details?.includeDoctor || type === 'specialist',
+              hasLabCollection: details?.includeLab || type === 'lab',
+              hasPharmacyDelivery: type === 'pharmacy'
+          });
+      }
+  };
+
+  // --- LANDING VIEW ---
+  if (viewMode === 'landing') {
+      return (
+          <div className="min-h-[80vh] flex flex-col items-center justify-center animate-in zoom-in-95">
+              <div className="text-center space-y-4 mb-12">
+                  <div className="w-24 h-24 bg-[#0057B8] rounded-[2rem] flex items-center justify-center mx-auto shadow-2xl mb-6">
+                      <Wifi size={48} className="text-white"/>
+                  </div>
+                  <h1 className="text-4xl font-black text-slate-900 uppercase tracking-tighter">Telemedicina MX</h1>
+                  <p className="text-slate-500 font-medium uppercase tracking-widest text-sm">Seleccione su perfil de acceso</p>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8 w-full max-w-4xl px-4">
+                  <button 
+                    onClick={() => setViewMode('doctor')}
+                    className="group relative overflow-hidden bg-white p-10 rounded-[3rem] border border-slate-200 shadow-xl hover:shadow-2xl hover:border-blue-500 transition-all text-left"
+                  >
+                      <div className="relative z-10">
+                          <div className="w-16 h-16 bg-blue-50 text-[#0057B8] rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
+                              <Stethoscope size={32}/>
+                          </div>
+                          <h3 className="text-2xl font-black text-slate-900 uppercase">Soy Médico</h3>
+                          <p className="text-sm text-slate-500 mt-2 font-medium">Gestión de consultas, agenda y finanzas profesionales.</p>
+                      </div>
+                      <div className="absolute right-0 bottom-0 opacity-5 group-hover:opacity-10 transition-opacity">
+                          <Activity size={200}/>
+                      </div>
+                  </button>
+
+                  <button 
+                    onClick={() => setViewMode('patient_app')}
+                    className="group relative overflow-hidden bg-slate-900 p-10 rounded-[3rem] shadow-xl hover:shadow-2xl hover:bg-slate-800 transition-all text-left"
+                  >
+                      <div className="relative z-10">
+                          <div className="w-16 h-16 bg-white/10 text-white rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
+                              <Smartphone size={32}/>
+                          </div>
+                          <h3 className="text-2xl font-black text-white uppercase">Soy Paciente</h3>
+                          <p className="text-sm text-slate-400 mt-2 font-medium">Agendar citas, solicitar estudios y ver historial.</p>
+                      </div>
+                      <div className="absolute right-0 bottom-0 opacity-5 text-white group-hover:opacity-10 transition-opacity">
+                          <User size={200}/>
+                      </div>
+                  </button>
+              </div>
+          </div>
+      );
+  }
+
+  // --- PATIENT APP VIEW ---
+  if (viewMode === 'patient_app') {
+      const myActive = patients.find(p => p.name === 'Paciente Demo' && (p.status === PatientStatus.ONLINE_QUEUE || p.status === PatientStatus.ONLINE_WAITING || p.status === PatientStatus.ONLINE_REVIEWING || p.status === PatientStatus.ONLINE_IN_CALL));
+      
+      const patientNotes = notes.filter(n => n.patientId === 'DEMO-PATIENT' || (myActive && n.patientId === myActive.id));
+
+      return (
+          <PatientAppView 
+              currentUser={currentUser || MOCK_DOCTORS[0]} 
+              doctors={doctorsList}
+              myAppointments={patients.filter(p => p.name === 'Paciente Demo')} 
+              notes={patientNotes}
+              onBookAppointment={handlePatientBook}
+              onRequestHomeService={handlePatientRequestHome}
+              onGoBack={() => setViewMode('landing')}
+              currentWaitingPatient={myActive}
+          />
+      );
+  }
+
+  // --- DOCTOR MANAGEMENT VIEW ---
+  return (
+    <div className="space-y-6 animate-in fade-in">
+      <div className="flex flex-col md:flex-row justify-between items-end gap-6">
+         <div>
+             <button onClick={() => setViewMode('landing')} className="flex items-center gap-2 text-[10px] font-black uppercase text-slate-400 hover:text-slate-600 mb-2">
+                 <ArrowLeft size={12}/> Volver al Inicio
+             </button>
+             <h2 className="text-3xl font-black text-slate-900 uppercase tracking-tight">Portal del Especialista</h2>
+             <div className="flex items-center gap-3 mt-1">
+                <p className="text-xs font-bold text-blue-600 uppercase tracking-widest flex items-center gap-2">
+                    <CheckCircle2 size={14}/> Dr. {currentUser?.name || 'Médico'}
+                </p>
+                {/* DOCTOR AVAILABILITY TOGGLE */}
+                <button 
+                    onClick={() => setIsDoctorAvailable(!isDoctorAvailable)}
+                    className={`flex items-center gap-2 px-3 py-1 rounded-full text-[9px] font-black uppercase transition-all ${isDoctorAvailable ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}
+                >
+                    {isDoctorAvailable ? (
+                        <>
+                            <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div> Disponible
+                            <ToggleRight size={16}/>
+                        </>
+                    ) : (
+                        <>
+                            <div className="w-2 h-2 rounded-full bg-rose-500"></div> No Disponible
+                            <ToggleLeft size={16}/>
+                        </>
+                    )}
+                </button>
+             </div>
+         </div>
+         
+         <div className="flex bg-white p-1.5 rounded-2xl shadow-sm border border-slate-200">
+             <button onClick={() => setDocTab('waiting')} className={`px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${docTab === 'waiting' ? 'bg-slate-900 text-white shadow-lg' : 'text-slate-500 hover:bg-slate-50'}`}>Sala de Espera</button>
+             <button onClick={() => setDocTab('finance')} className={`px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${docTab === 'finance' ? 'bg-emerald-600 text-white shadow-lg' : 'text-slate-500 hover:bg-slate-50'}`}>Finanzas</button>
+         </div>
+      </div>
+
+      {docTab === 'waiting' && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            {/* WAITING ROOMS */}
+            <div className="lg:col-span-2 bg-white border border-slate-200 rounded-[2.5rem] p-8 shadow-sm flex flex-col min-h-[500px]">
+                <div className="flex justify-between items-center mb-8 border-b border-slate-100 pb-6">
+                    <h3 className="text-sm font-black uppercase text-slate-900 tracking-widest flex items-center gap-3">
+                        <Clock size={18} className="text-amber-500"/> Pacientes en Espera
+                    </h3>
+                    <div className="flex gap-2">
+                        <span className="bg-amber-100 text-amber-700 px-3 py-1 rounded-lg text-[10px] font-black">Bolsa: {waitingRoom.length}</span>
+                        <span className="bg-blue-100 text-blue-700 px-3 py-1 rounded-lg text-[10px] font-black">Mis Citas: {myScheduled.length}</span>
+                    </div>
+                </div>
+                
+                <div className="flex-1 overflow-y-auto space-y-4 custom-scrollbar pr-2">
+                    {[...myScheduled, ...waitingRoom].map(p => (
+                        <div key={p.id} className={`p-6 bg-slate-50 hover:bg-white border hover:border-blue-200 rounded-[2rem] shadow-sm hover:shadow-md transition-all group relative overflow-hidden ${p.assignedDoctorId ? 'border-blue-200' : 'border-slate-200'}`}>
+                            <div className={`absolute top-0 left-0 w-1 h-full ${p.assignedDoctorId ? 'bg-blue-500' : 'bg-amber-400'}`}></div>
+                            <div className="flex justify-between items-center">
+                                <div className="flex items-center gap-4">
+                                    <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center text-lg font-black text-slate-700 border border-slate-100 shadow-sm">
+                                        {p.name.charAt(0)}
+                                    </div>
+                                    <div>
+                                        <h4 className="text-xs font-black text-slate-900 uppercase tracking-wide">{p.name}</h4>
+                                        <div className="flex items-center gap-3 mt-1">
+                                            <span className="text-[9px] font-bold text-slate-400 uppercase flex items-center gap-1"><History size={10}/> {p.appointmentTime || 'Sin Hora'}</span>
+                                            {p.assignedDoctorId ? 
+                                                <span className="text-[8px] bg-blue-100 text-blue-700 px-2 rounded-full font-black uppercase">Agendado</span> : 
+                                                <span className="text-[8px] bg-amber-100 text-amber-700 px-2 rounded-full font-black uppercase">Espera General</span>
+                                            }
+                                        </div>
+                                    </div>
+                                </div>
+                                <button 
+                                    onClick={() => handleReviewIntake(p)}
+                                    disabled={!isDoctorAvailable}
+                                    className={`px-6 py-3 text-white rounded-xl text-[9px] font-black uppercase tracking-widest shadow-lg transition-all flex items-center gap-2 group-hover:scale-105 ${isDoctorAvailable ? 'bg-[#0057B8] hover:bg-slate-900' : 'bg-slate-300 cursor-not-allowed'}`}
+                                >
+                                    <FileText size={14}/> Atender
+                                </button>
+                            </div>
+                        </div>
+                    ))}
+                    {waitingRoom.length === 0 && myScheduled.length === 0 && (
+                        <div className="h-full flex flex-col items-center justify-center opacity-30">
+                            <Coffee size={48} className="mb-4 text-slate-400"/>
+                            <p className="text-xs font-black text-slate-400 uppercase">Sala de espera vacía</p>
+                        </div>
+                    )}
+                </div>
+            </div>
+
+            {/* ACTIVE CALLS / INTAKE REVIEW */}
+            <div className="bg-slate-900 text-white rounded-[2.5rem] p-8 shadow-xl h-fit min-h-[500px] flex flex-col">
+                <h3 className="text-xs font-black uppercase tracking-widest mb-6 flex items-center gap-2 text-emerald-400">
+                    <Activity size={16}/> En Curso / Revisión
+                </h3>
+                <div className="flex-1 space-y-4 overflow-y-auto custom-scrollbar">
+                    {/* INTAKE REVIEW MODAL (Embedded) */}
+                    {viewingPatientIntake && (
+                        <div className="bg-white text-slate-900 rounded-3xl p-6 border-4 border-amber-400 animate-in zoom-in-95 h-full flex flex-col">
+                             <div className="flex justify-between items-start mb-4 border-b border-slate-100 pb-2">
+                                 <div>
+                                     <h4 className="text-sm font-black uppercase">Revisión de Caso</h4>
+                                     <p className="text-[10px] text-slate-500 font-bold uppercase">Expediente Rápido</p>
+                                 </div>
+                                 <button onClick={() => setViewingPatientIntake(null)} className="p-1 hover:bg-slate-100 rounded"><X size={16}/></button>
+                             </div>
+                             
+                             <div className="flex-1 overflow-y-auto custom-scrollbar mb-4 space-y-4">
+                                 {/* Triage Info */}
+                                 <div className="bg-slate-50 p-4 rounded-2xl">
+                                     <h5 className="text-[10px] font-black uppercase text-blue-600 mb-2">Triage Actual</h5>
+                                     <div className="space-y-1 text-xs">
+                                         <p><span className="font-bold">Paciente:</span> {viewingPatientIntake.name}</p>
+                                         <p><span className="font-bold">Motivo:</span> {viewingPatientIntake.teleIntake?.mainSymptom}</p>
+                                         <p><span className="font-bold">Dolor:</span> {viewingPatientIntake.teleIntake?.painLevel}/10</p>
+                                         <p><span className="font-bold">Alergias:</span> {viewingPatientIntake.teleIntake?.allergies || 'Negadas'}</p>
+                                     </div>
+                                 </div>
+
+                                 {/* Historial Clínico (Mini Expediente) */}
+                                 <div>
+                                     <h5 className="text-[10px] font-black uppercase text-violet-600 mb-2 flex items-center gap-2"><History size={12}/> Notas Previas</h5>
+                                     <div className="space-y-2">
+                                         {notes.filter(n => n.patientId === viewingPatientIntake.id || n.patientId === 'DEMO-PATIENT').length > 0 ? (
+                                             notes.filter(n => n.patientId === viewingPatientIntake.id || n.patientId === 'DEMO-PATIENT').slice(0, 3).map(n => (
+                                                 <div key={n.id} className="p-3 bg-white border border-slate-200 rounded-xl">
+                                                     <div className="flex justify-between">
+                                                         <span className="text-[9px] font-bold uppercase text-slate-700">{n.type}</span>
+                                                         <span className="text-[8px] text-slate-400">{n.date.split(',')[0]}</span>
+                                                     </div>
+                                                     {n.content.diagnosis && <p className="text-[9px] text-slate-500 italic truncate">{n.content.diagnosis}</p>}
+                                                 </div>
+                                             ))
+                                         ) : (
+                                             <p className="text-[9px] text-slate-400 italic">Sin historial previo</p>
+                                         )}
+                                     </div>
+                                 </div>
+                             </div>
+
+                             <button onClick={handleStartCall} className="w-full py-3 bg-emerald-600 text-white rounded-xl font-black uppercase text-[10px] flex items-center justify-center gap-2 hover:bg-emerald-700 transition-all shadow-lg animate-pulse">
+                                 <Video size={14}/> Iniciar Videollamada
+                             </button>
+                        </div>
+                    )}
+
+                    {activePatients.filter(p => p.id !== viewingPatientIntake?.id).map(p => (
+                        <div key={p.id} className="bg-white/10 p-4 rounded-2xl border border-white/10 flex justify-between items-center">
+                            <div>
+                                <p className="text-[10px] font-black uppercase">{p.name}</p>
+                                <p className="text-[8px] font-bold text-emerald-400 uppercase mt-0.5 animate-pulse">
+                                    {p.status === PatientStatus.ONLINE_REVIEWING ? '● Leyendo Historial' : '● En Llamada'}
+                                </p>
+                            </div>
+                            <button onClick={() => navigate(`/telemedicine/${p.id}`)} className="p-2 bg-white/20 hover:bg-emerald-500 rounded-xl transition-all"><ArrowRight size={14}/></button>
+                        </div>
+                    ))}
+                    {activePatients.length === 0 && !viewingPatientIntake && <p className="text-center text-[10px] text-slate-500 font-bold uppercase py-4">Ninguna consulta activa</p>}
+                </div>
+            </div>
+        </div>
       )}
 
-      {/* NEW: Telemedicine Consent Modal */}
-      <TeleConsentModal 
-          isOpen={showConsentModal} 
-          onClose={() => setShowConsentModal(false)}
-          onAccept={handleConsentAccept}
-      />
-
-      <IntakeModal isOpen={showIntakeModal} onClose={() => setShowIntakeModal(false)} onSubmit={handleIntakeSubmit} preSelectedDoctor={selectedDoctorForRequest} />
-      <HomeLabRequestModal isOpen={showHomeLabModal} onClose={() => setShowHomeLabModal(false)} onSubmit={handleHomeLabSubmit} />
-      
-      {/* MODAL PREVISUALIZACIÓN TRIAGE (PARA MÉDICO) */}
-      {showTriagePreview && (
-          <div className="fixed inset-0 z-50 bg-slate-900/95 backdrop-blur-md flex items-center justify-center p-4 animate-in zoom-in-95">
-              <div className="bg-white w-full max-w-2xl rounded-[3rem] p-10 relative">
-                  <div className="flex justify-between items-center mb-8 border-b border-slate-100 pb-4">
-                      <div className="flex items-center gap-4">
-                          <div className="w-14 h-14 bg-rose-100 text-rose-600 rounded-2xl flex items-center justify-center"><ClipboardList size={28}/></div>
-                          <div>
-                              <h3 className="text-2xl font-black uppercase text-slate-900 tracking-tight">Ficha de Triage Digital</h3>
-                              <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">{showTriagePreview.name}</p>
-                          </div>
+      {/* --- FINANCE TAB --- */}
+      {docTab === 'finance' && (
+          <div className="space-y-8 animate-in slide-in-from-right-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                  <div className="bg-emerald-600 text-white p-8 rounded-[2.5rem] shadow-xl flex flex-col justify-between h-48 relative overflow-hidden">
+                      <div className="absolute right-0 bottom-0 opacity-10"><DollarSign size={120}/></div>
+                      <div>
+                          <p className="text-[10px] font-black uppercase tracking-widest text-emerald-200">Ingresos Totales (Mes)</p>
+                          <p className="text-4xl font-black mt-2">${totalEarnings.toLocaleString()}</p>
                       </div>
-                      <button onClick={() => setShowTriagePreview(null)} className="p-3 hover:bg-slate-100 rounded-full"><X size={24}/></button>
-                  </div>
-                  
-                  <div className="grid grid-cols-2 gap-8 mb-8">
-                      <div className="p-6 bg-slate-50 rounded-3xl space-y-2">
-                          <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Síntoma Principal</p>
-                          <p className="text-lg font-black text-slate-900 leading-snug">"{showTriagePreview.teleIntake?.mainSymptom}"</p>
-                      </div>
-                      <div className="space-y-4">
-                          <div className="flex justify-between items-center p-4 bg-slate-50 rounded-2xl">
-                              <span className="text-[10px] font-black text-slate-500 uppercase">Inicio</span>
-                              <span className="font-bold text-slate-900">{showTriagePreview.teleIntake?.onsetDuration}</span>
-                          </div>
-                          <div className="flex justify-between items-center p-4 bg-slate-50 rounded-2xl">
-                              <span className="text-[10px] font-black text-slate-500 uppercase">Escala Dolor</span>
-                              <span className={`font-black ${showTriagePreview.teleIntake?.painLevel! > 7 ? 'text-rose-600' : 'text-slate-900'}`}>{showTriagePreview.teleIntake?.painLevel}/10</span>
-                          </div>
+                      <div className="bg-white/20 backdrop-blur rounded-xl p-3 flex items-center justify-between">
+                          <span className="text-[9px] font-bold uppercase">Consultas Realizadas</span>
+                          <span className="text-lg font-black">{myConsultations.length}</span>
                       </div>
                   </div>
 
-                  <div className="space-y-4 mb-10">
-                      <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 pb-2">Antecedentes Reportados</h4>
-                      <div className="flex gap-4">
-                          <div className="flex-1 p-4 border border-slate-100 rounded-2xl">
-                              <p className="text-[9px] font-bold text-slate-400 uppercase mb-1">Crónicos</p>
-                              <p className="text-xs font-black uppercase text-slate-700">{showTriagePreview.teleIntake?.chronicConditions.join(', ') || 'Ninguno'}</p>
-                          </div>
-                          <div className="flex-1 p-4 border border-slate-100 rounded-2xl">
-                              <p className="text-[9px] font-bold text-slate-400 uppercase mb-1">Alergias</p>
-                              <p className="text-xs font-black uppercase text-rose-600">{showTriagePreview.teleIntake?.allergies || 'Negadas'}</p>
-                          </div>
-                      </div>
-                      <div className="p-4 bg-blue-50 border border-blue-100 rounded-2xl flex items-center gap-3">
-                          <ShieldCheck size={20} className="text-blue-600"/>
-                          <p className="text-[10px] font-bold text-blue-800 uppercase">Consentimiento Informado Firmado Digitalmente</p>
+                  <div className="md:col-span-2 bg-white border border-slate-200 p-8 rounded-[2.5rem] shadow-sm">
+                      <h3 className="text-xs font-black uppercase tracking-widest text-slate-500 mb-6 flex items-center gap-2">
+                          <TrendingUp size={16}/> Tendencia de Ingresos Semanal
+                      </h3>
+                      <div className="h-32 w-full">
+                           <ResponsiveContainer width="100%" height="100%">
+                                <AreaChart data={earningsData}>
+                                    <defs>
+                                        <linearGradient id="colorEarn" x1="0" y1="0" x2="0" y2="1">
+                                            <stop offset="5%" stopColor="#10b981" stopOpacity={0.3}/>
+                                            <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
+                                        </linearGradient>
+                                    </defs>
+                                    <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false}/>
+                                    <XAxis dataKey="name" fontSize={10} axisLine={false} tickLine={false}/>
+                                    <Tooltip contentStyle={{borderRadius:'12px', border:'none', boxShadow:'0 10px 15px -3px rgba(0,0,0,0.1)'}}/>
+                                    <Area type="monotone" dataKey="value" stroke="#10b981" strokeWidth={3} fillOpacity={1} fill="url(#colorEarn)" />
+                                </AreaChart>
+                           </ResponsiveContainer>
                       </div>
                   </div>
+              </div>
 
-                  <div className="flex gap-4">
-                      <button onClick={() => setShowTriagePreview(null)} className="flex-1 py-4 bg-slate-100 text-slate-500 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-slate-200 transition-all">Cancelar</button>
-                      <button onClick={confirmTriageAccept} className="flex-[2] py-4 bg-slate-900 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl hover:bg-blue-600 transition-all flex items-center justify-center gap-3">
-                          <CheckCircle2 size={18}/> Aceptar y Conectar
-                      </button>
+              <div className="bg-white border border-slate-200 rounded-[2.5rem] p-8 shadow-sm">
+                  <h3 className="text-xs font-black uppercase tracking-widest text-slate-500 mb-6">Desglose de Consultas</h3>
+                  <div className="overflow-x-auto">
+                      <table className="w-full text-left">
+                          <thead className="bg-slate-50 text-[9px] font-black uppercase text-slate-400 tracking-widest">
+                              <tr>
+                                  <th className="p-4 rounded-l-xl">Fecha</th>
+                                  <th className="p-4">Paciente</th>
+                                  <th className="p-4">Tipo</th>
+                                  <th className="p-4 text-right rounded-r-xl">Honorarios</th>
+                              </tr>
+                          </thead>
+                          <tbody className="text-xs font-bold text-slate-700 divide-y divide-slate-100">
+                              {myConsultations.map(c => (
+                                  <tr key={c.id}>
+                                      <td className="p-4">{c.lastVisit || new Date().toLocaleDateString()}</td>
+                                      <td className="p-4 uppercase">{c.name}</td>
+                                      <td className="p-4 uppercase text-[10px]"><span className="bg-blue-50 text-blue-600 px-2 py-1 rounded">Telemedicina</span></td>
+                                      <td className="p-4 text-right text-emerald-600 font-black">${(currentUser?.price || 800).toLocaleString()}</td>
+                                  </tr>
+                              ))}
+                              {myConsultations.length === 0 && (
+                                  <tr><td colSpan={4} className="p-8 text-center text-slate-400 text-[10px] font-black uppercase">Sin registros financieros</td></tr>
+                              )}
+                          </tbody>
+                      </table>
                   </div>
               </div>
           </div>
       )}
+
     </div>
   );
 };

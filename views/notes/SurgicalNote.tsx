@@ -1,13 +1,12 @@
-
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { 
   ChevronLeft, ShieldCheck, Save, Scissors, Activity, HeartPulse, ClipboardCheck, Info, Droplets, UserCheck, Lock
 } from 'lucide-react';
-import { Patient, ClinicalNote } from '../../types';
+import { Patient, ClinicalNote, DoctorInfo } from '../../types';
 
 // Fix: Add notes to props interface to match routing in App.tsx
-const SurgicalNote: React.FC<{ patients: Patient[], notes: ClinicalNote[], onSaveNote: (n: ClinicalNote) => void }> = ({ patients, notes, onSaveNote }) => {
+const SurgicalNote: React.FC<{ patients: Patient[], notes: ClinicalNote[], onSaveNote: (n: ClinicalNote) => void, doctorInfo?: DoctorInfo }> = ({ patients, notes, onSaveNote, doctorInfo }) => {
   const { id, noteId } = useParams();
   const location = useLocation();
   const navigate = useNavigate();
@@ -26,7 +25,7 @@ const SurgicalNote: React.FC<{ patients: Patient[], notes: ClinicalNote[], onSav
     gasasCount: true,
     bleeding: 'Sin sangrado importante',
     incidentes: 'Sin incidentes',
-    surgeon: 'Dr. Alejandro Méndez',
+    surgeon: doctorInfo?.name || 'Dr. Alejandro Méndez',
     anesthesiologist: 'Dr. Roberto Cruz',
     surgicalRisk: 'ASA I',
     technique: ''

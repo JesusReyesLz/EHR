@@ -6,9 +6,9 @@ import {
   AlertTriangle, HeartPulse, Droplets, Brain, Syringe, 
   Timer, Lock, CheckCircle2, AlertOctagon, ThumbsUp, Scale
 } from 'lucide-react';
-import { Patient, ClinicalNote, Vitals } from '../../types';
+import { Patient, ClinicalNote, Vitals, DoctorInfo } from '../../types';
 
-const PostAnestheticNote: React.FC<{ patients: Patient[], notes: ClinicalNote[], onSaveNote: (n: ClinicalNote) => void }> = ({ patients, notes, onSaveNote }) => {
+const PostAnestheticNote: React.FC<{ patients: Patient[], notes: ClinicalNote[], onSaveNote: (n: ClinicalNote) => void, doctorInfo?: DoctorInfo }> = ({ patients, notes, onSaveNote, doctorInfo }) => {
   const { id, noteId } = useParams();
   const navigate = useNavigate();
   const patient = patients.find(p => p.id === id);
@@ -30,7 +30,7 @@ const PostAnestheticNote: React.FC<{ patients: Patient[], notes: ClinicalNote[],
 
   const [form, setForm] = useState({
     // Datos Generales
-    anesthesiologist: 'Dr. Roberto Cruz',
+    anesthesiologist: doctorInfo?.name || 'Dr. Roberto Cruz',
     procedurePerformed: '',
     
     // Tiempos
@@ -53,11 +53,13 @@ const PostAnestheticNote: React.FC<{ patients: Patient[], notes: ClinicalNote[],
     inCrystalloids: 0,
     inColloids: 0,
     inBlood: 0,
+    inBloodProducts: 0, // NEW
     outUrine: 0,
     outBleeding: 0,
+    outEmesis: 0, // NEW
     
     // Incidentes
-    incidents: 'Sin incidentes ni accidentes anestésicos.',
+    incidents: 'Sin incidentes ni accidentes.',
     
     // Estado al Egreso de Sala
     painScoreEVA: 0, // 0-10
@@ -76,8 +78,8 @@ const PostAnestheticNote: React.FC<{ patients: Patient[], notes: ClinicalNote[],
 
   // Calcular balance hídrico
   const fluidBalance = useMemo(() => {
-      const totalIn = (form.inCrystalloids || 0) + (form.inColloids || 0) + (form.inBlood || 0);
-      const totalOut = (form.outUrine || 0) + (form.outBleeding || 0);
+      const totalIn = (form.inCrystalloids || 0) + (form.inColloids || 0) + (form.inBlood || 0) + (form.inBloodProducts || 0);
+      const totalOut = (form.outUrine || 0) + (form.outBleeding || 0) + (form.outEmesis || 0);
       return totalIn - totalOut;
   }, [form]);
 
@@ -245,14 +247,15 @@ const PostAnestheticNote: React.FC<{ patients: Patient[], notes: ClinicalNote[],
                         <div className="grid grid-cols-3 gap-2">
                             <div className="space-y-1"><label className="text-[7px] font-bold text-slate-400 uppercase">Cristaloides</label><input type="number" className="w-full bg-white/10 rounded-lg p-2 text-xs font-bold text-center outline-none" value={form.inCrystalloids} onChange={e => setForm({...form, inCrystalloids: parseInt(e.target.value) || 0})} /></div>
                             <div className="space-y-1"><label className="text-[7px] font-bold text-slate-400 uppercase">Coloides</label><input type="number" className="w-full bg-white/10 rounded-lg p-2 text-xs font-bold text-center outline-none" value={form.inColloids} onChange={e => setForm({...form, inColloids: parseInt(e.target.value) || 0})} /></div>
-                            <div className="space-y-1"><label className="text-[7px] font-bold text-slate-400 uppercase">Sangre</label><input type="number" className="w-full bg-white/10 rounded-lg p-2 text-xs font-bold text-center outline-none" value={form.inBlood} onChange={e => setForm({...form, inBlood: parseInt(e.target.value) || 0})} /></div>
+                            <div className="space-y-1"><label className="text-[7px] font-bold text-slate-400 uppercase">Sangre/Der</label><input type="number" className="w-full bg-white/10 rounded-lg p-2 text-xs font-bold text-center outline-none" value={form.inBloodProducts} onChange={e => setForm({...form, inBloodProducts: parseInt(e.target.value) || 0})} /></div>
                         </div>
                     </div>
                     <div className="space-y-2">
                         <p className="text-[9px] font-black text-rose-400 uppercase tracking-widest border-b border-white/10 pb-1">Egresos</p>
-                        <div className="grid grid-cols-2 gap-2">
-                            <div className="space-y-1"><label className="text-[7px] font-bold text-slate-400 uppercase">Uresis</label><input type="number" className="w-full bg-white/10 rounded-lg p-2 text-xs font-bold text-center outline-none" value={form.outUrine} onChange={e => setForm({...form, outUrine: parseInt(e.target.value) || 0})} /></div>
+                        <div className="grid grid-cols-3 gap-2">
                             <div className="space-y-1"><label className="text-[7px] font-bold text-slate-400 uppercase">Sangrado</label><input type="number" className="w-full bg-white/10 rounded-lg p-2 text-xs font-bold text-center outline-none" value={form.outBleeding} onChange={e => setForm({...form, outBleeding: parseInt(e.target.value) || 0})} /></div>
+                            <div className="space-y-1"><label className="text-[7px] font-bold text-slate-400 uppercase">Uresis</label><input type="number" className="w-full bg-white/10 rounded-lg p-2 text-xs font-bold text-center outline-none" value={form.outUrine} onChange={e => setForm({...form, outUrine: parseInt(e.target.value) || 0})} /></div>
+                            <div className="space-y-1"><label className="text-[7px] font-bold text-slate-400 uppercase">Emesis/Otros</label><input type="number" className="w-full bg-white/10 rounded-lg p-2 text-xs font-bold text-center outline-none" value={form.outEmesis} onChange={e => setForm({...form, outEmesis: parseInt(e.target.value) || 0})} /></div>
                         </div>
                     </div>
                 </div>

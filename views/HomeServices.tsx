@@ -4,7 +4,7 @@ import {
   Ambulance, MapPin, Clock, User, FileText, CheckCircle2, 
   AlertCircle, Truck, Phone, ChevronRight, Filter, Search, Calendar,
   UserPlus, X, MapPinned, LayoutList, Navigation, UserCheck, Timer, Wallet, DollarSign,
-  ArrowRight
+  ArrowRight, Pill, FlaskConical, Stethoscope, ShoppingBag, Activity, Syringe
 } from 'lucide-react';
 import { HomeServiceRequest, StaffMember, DoctorInfo } from '../types';
 
@@ -39,6 +39,39 @@ const HomeServices: React.FC<HomeServicesProps> = ({ requests, onUpdateRequest, 
             case 'Finalizado': return 'bg-emerald-100 text-emerald-700 border-emerald-200';
             default: return 'bg-slate-100 text-slate-500';
         }
+    };
+
+    // Helper para identificar el tipo de servicio basado en los datos
+    const getRequestTypeConfig = (req: HomeServiceRequest) => {
+        // Lógica de detección basada en el contenido
+        if (req.studies && req.studies.length > 0) {
+            return { 
+                type: 'Laboratorio', 
+                icon: <FlaskConical size={18} />, 
+                color: 'text-rose-600', 
+                bg: 'bg-rose-50', 
+                border: 'border-rose-200',
+                label: 'Toma de Muestras'
+            };
+        }
+        if (req.notes?.toLowerCase().includes('farmacia') || req.notes?.toLowerCase().includes('medicamento')) {
+            return { 
+                type: 'Farmacia', 
+                icon: <Pill size={18} />, 
+                color: 'text-amber-600', 
+                bg: 'bg-amber-50', 
+                border: 'border-amber-200',
+                label: 'Entrega Medicamentos'
+            };
+        }
+        return { 
+            type: 'Visita Médica', 
+            icon: <Stethoscope size={18} />, 
+            color: 'text-emerald-600', 
+            bg: 'bg-emerald-50', 
+            border: 'border-emerald-200',
+            label: 'Consulta Domiciliaria'
+        };
     };
 
     // --- DISPATCH LOGIC ---
@@ -211,55 +244,67 @@ const HomeServices: React.FC<HomeServicesProps> = ({ requests, onUpdateRequest, 
 
                                 {fieldTab === 'active' && (
                                     /* MY ACTIVE JOBS */
-                                    myActiveJobs.length > 0 ? myActiveJobs.map(job => (
-                                        <div key={job.id} className="bg-white rounded-[2.5rem] p-6 shadow-xl border-l-8 border-rose-600 animate-in slide-in-from-bottom-4">
-                                            <div className="flex justify-between items-start mb-4">
-                                                <div>
-                                                    <div className="flex items-center gap-2 mb-1">
-                                                        <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase border ${getStatusColor(job.status)}`}>{job.status}</span>
-                                                        <span className="text-[9px] text-slate-400 font-bold uppercase">{new Date(job.requestedDate).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span>
+                                    myActiveJobs.length > 0 ? myActiveJobs.map(job => {
+                                        const typeConfig = getRequestTypeConfig(job);
+                                        return (
+                                            <div key={job.id} className={`bg-white rounded-[2.5rem] p-6 shadow-xl border-l-8 ${typeConfig.type === 'Laboratorio' ? 'border-rose-500' : typeConfig.type === 'Farmacia' ? 'border-amber-500' : 'border-emerald-500'} animate-in slide-in-from-bottom-4`}>
+                                                <div className="flex justify-between items-start mb-4">
+                                                    <div>
+                                                        <div className="flex items-center gap-2 mb-1">
+                                                            <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase border ${getStatusColor(job.status)}`}>{job.status}</span>
+                                                            <span className="text-[9px] text-slate-400 font-bold uppercase">{new Date(job.requestedDate).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span>
+                                                        </div>
+                                                        <h3 className="text-2xl font-black text-slate-900 uppercase">{job.patientName}</h3>
+                                                        <p className={`text-[10px] font-black uppercase mt-1 flex items-center gap-1 ${typeConfig.color}`}>{typeConfig.icon} {typeConfig.label}</p>
                                                     </div>
-                                                    <h3 className="text-2xl font-black text-slate-900 uppercase">{job.patientName}</h3>
+                                                    <button onClick={() => window.open(`https://maps.google.com/?q=${job.patientAddress}`)} className="p-3 bg-slate-100 rounded-2xl hover:bg-rose-100 hover:text-rose-600 transition-all"><Navigation size={24}/></button>
                                                 </div>
-                                                <button onClick={() => window.open(`https://maps.google.com/?q=${job.patientAddress}`)} className="p-3 bg-slate-100 rounded-2xl hover:bg-rose-100 hover:text-rose-600 transition-all"><Navigation size={24}/></button>
-                                            </div>
 
-                                            <div className="space-y-4 mb-6">
-                                                <div className="flex items-start gap-3 p-4 bg-slate-50 rounded-2xl">
-                                                    <MapPin className="text-rose-500 shrink-0 mt-0.5" size={16}/>
-                                                    <p className="text-xs font-bold text-slate-600 uppercase">{job.patientAddress}</p>
+                                                <div className="space-y-4 mb-6">
+                                                    <div className="flex items-start gap-3 p-4 bg-slate-50 rounded-2xl">
+                                                        <MapPin className="text-rose-500 shrink-0 mt-0.5" size={16}/>
+                                                        <p className="text-xs font-bold text-slate-600 uppercase">{job.patientAddress}</p>
+                                                    </div>
+                                                    {/* REQUEST DETAILS */}
+                                                    <div className={`p-4 rounded-2xl border ${typeConfig.bg} ${typeConfig.border}`}>
+                                                        <p className="text-[9px] font-black uppercase opacity-60 mb-2">Requerimientos:</p>
+                                                        {job.studies.length > 0 ? (
+                                                            <div className="flex flex-wrap gap-2">
+                                                                {job.studies.map((s, i) => (
+                                                                    <span key={i} className="px-2 py-1 bg-white rounded-lg text-[10px] font-black uppercase border border-slate-100">{s}</span>
+                                                                ))}
+                                                            </div>
+                                                        ) : (
+                                                            <p className="text-xs font-bold text-slate-700">{job.notes || 'Revisión General'}</p>
+                                                        )}
+                                                    </div>
                                                 </div>
-                                                <div className="flex flex-wrap gap-2">
-                                                    {job.studies.map((s, i) => (
-                                                        <span key={i} className="px-3 py-1.5 bg-blue-50 text-blue-700 rounded-lg text-[10px] font-black uppercase border border-blue-100">{s}</span>
-                                                    ))}
-                                                </div>
-                                            </div>
 
-                                            <div className="grid grid-cols-2 gap-3">
-                                                {job.status === 'Asignado' && (
-                                                    <button onClick={() => handleUpdateStatusField(job, 'En Camino')} className="col-span-2 py-4 bg-rose-600 text-white rounded-2xl font-black uppercase text-xs shadow-lg hover:bg-rose-700 transition-all flex items-center justify-center gap-2">
-                                                        <Truck size={18}/> Iniciar Viaje
-                                                    </button>
-                                                )}
-                                                {job.status === 'En Camino' && (
-                                                    <button onClick={() => handleUpdateStatusField(job, 'En Proceso')} className="col-span-2 py-4 bg-amber-500 text-white rounded-2xl font-black uppercase text-xs shadow-lg hover:bg-amber-600 transition-all flex items-center justify-center gap-2">
-                                                        <MapPin size={18}/> Llegué al Domicilio
-                                                    </button>
-                                                )}
-                                                {job.status === 'En Proceso' && (
-                                                    <button onClick={() => handleUpdateStatusField(job, 'Recolectado')} className="col-span-2 py-4 bg-purple-600 text-white rounded-2xl font-black uppercase text-xs shadow-lg hover:bg-purple-700 transition-all flex items-center justify-center gap-2">
-                                                        <CheckCircle2 size={18}/> Muestra Tomada
-                                                    </button>
-                                                )}
-                                                {job.status === 'Recolectado' && (
-                                                    <button onClick={() => handleUpdateStatusField(job, 'Finalizado')} className="col-span-2 py-4 bg-emerald-600 text-white rounded-2xl font-black uppercase text-xs shadow-lg hover:bg-emerald-700 transition-all flex items-center justify-center gap-2">
-                                                        <ArrowRight size={18}/> Entregar en Laboratorio (Finalizar)
-                                                    </button>
-                                                )}
+                                                <div className="grid grid-cols-2 gap-3">
+                                                    {job.status === 'Asignado' && (
+                                                        <button onClick={() => handleUpdateStatusField(job, 'En Camino')} className="col-span-2 py-4 bg-rose-600 text-white rounded-2xl font-black uppercase text-xs shadow-lg hover:bg-rose-700 transition-all flex items-center justify-center gap-2">
+                                                            <Truck size={18}/> Iniciar Viaje
+                                                        </button>
+                                                    )}
+                                                    {job.status === 'En Camino' && (
+                                                        <button onClick={() => handleUpdateStatusField(job, 'En Proceso')} className="col-span-2 py-4 bg-amber-500 text-white rounded-2xl font-black uppercase text-xs shadow-lg hover:bg-amber-600 transition-all flex items-center justify-center gap-2">
+                                                            <MapPin size={18}/> Llegué al Domicilio
+                                                        </button>
+                                                    )}
+                                                    {job.status === 'En Proceso' && (
+                                                        <button onClick={() => handleUpdateStatusField(job, 'Recolectado')} className="col-span-2 py-4 bg-purple-600 text-white rounded-2xl font-black uppercase text-xs shadow-lg hover:bg-purple-700 transition-all flex items-center justify-center gap-2">
+                                                            <CheckCircle2 size={18}/> Servicio Realizado
+                                                        </button>
+                                                    )}
+                                                    {job.status === 'Recolectado' && (
+                                                        <button onClick={() => handleUpdateStatusField(job, 'Finalizado')} className="col-span-2 py-4 bg-emerald-600 text-white rounded-2xl font-black uppercase text-xs shadow-lg hover:bg-emerald-700 transition-all flex items-center justify-center gap-2">
+                                                            <ArrowRight size={18}/> Finalizar Orden
+                                                        </button>
+                                                    )}
+                                                </div>
                                             </div>
-                                        </div>
-                                    )) : (
+                                        );
+                                    }) : (
                                         <div className="text-center py-20 bg-white/80 backdrop-blur rounded-[3rem] shadow-sm">
                                             <div className="w-20 h-20 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4 text-slate-300"><Navigation size={32}/></div>
                                             <p className="text-slate-400 font-black uppercase text-xs">No tienes ruta activa</p>
@@ -270,37 +315,44 @@ const HomeServices: React.FC<HomeServicesProps> = ({ requests, onUpdateRequest, 
                                 
                                 {fieldTab === 'available' && (
                                     /* AVAILABLE JOBS (UBER FEED) */
-                                    availableJobs.length > 0 ? availableJobs.map(job => (
-                                        <div key={job.id} className="bg-white rounded-[2.5rem] p-6 shadow-md hover:shadow-xl transition-all border border-slate-100 animate-in slide-in-from-bottom-2">
-                                            <div className="flex justify-between items-start">
-                                                <div>
-                                                    <span className="px-3 py-1 bg-emerald-100 text-emerald-700 rounded-full text-[9px] font-black uppercase border border-emerald-200">Nueva Solicitud</span>
-                                                    <h3 className="text-lg font-black text-slate-900 uppercase mt-2">{job.patientName}</h3>
-                                                    <p className="text-[10px] text-slate-400 font-bold uppercase mt-1 flex items-center gap-1"><Clock size={10}/> {new Date(job.requestedDate).toLocaleTimeString()} • Zona: Centro</p>
+                                    availableJobs.length > 0 ? availableJobs.map(job => {
+                                        const typeConfig = getRequestTypeConfig(job);
+                                        return (
+                                            <div key={job.id} className="bg-white rounded-[2.5rem] p-6 shadow-md hover:shadow-xl transition-all border border-slate-100 animate-in slide-in-from-bottom-2">
+                                                <div className="flex justify-between items-start">
+                                                    <div>
+                                                        <div className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-[9px] font-black uppercase border ${typeConfig.bg} ${typeConfig.color} ${typeConfig.border}`}>
+                                                            {typeConfig.icon} {typeConfig.label}
+                                                        </div>
+                                                        <h3 className="text-lg font-black text-slate-900 uppercase mt-2">{job.patientName}</h3>
+                                                        <p className="text-[10px] text-slate-400 font-bold uppercase mt-1 flex items-center gap-1"><Clock size={10}/> {new Date(job.requestedDate).toLocaleTimeString()}</p>
+                                                    </div>
+                                                    <div className="text-right">
+                                                        <p className="text-2xl font-black text-slate-900">$250</p>
+                                                        <p className="text-[8px] text-slate-400 font-black uppercase">Tarifa</p>
+                                                    </div>
                                                 </div>
-                                                <div className="text-right">
-                                                    <p className="text-2xl font-black text-slate-900">$250</p>
-                                                    <p className="text-[8px] text-slate-400 font-black uppercase">Tarifa Estimada</p>
+                                                
+                                                <div className="mt-4 p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                                                    <div className="flex items-center gap-2 text-xs font-bold text-slate-700 uppercase truncate">
+                                                        <MapPin size={14} className="text-rose-500 shrink-0"/> {job.patientAddress}
+                                                    </div>
                                                 </div>
-                                            </div>
-                                            
-                                            <div className="mt-4 p-4 bg-slate-50 rounded-2xl border border-slate-100">
-                                                <div className="flex items-center gap-2 text-xs font-bold text-slate-700 uppercase truncate">
-                                                    <MapPin size={14} className="text-rose-500 shrink-0"/> {job.patientAddress}
-                                                </div>
-                                            </div>
 
-                                            <div className="mt-4 pt-4 border-t border-slate-50 flex items-center justify-between">
-                                                <p className="text-[10px] font-bold text-slate-500 uppercase">{job.studies.length} Estudios Solicitados</p>
-                                                <button 
-                                                    onClick={() => handleAcceptJob(job)}
-                                                    className="px-8 py-3 bg-slate-900 text-white rounded-xl font-black text-xs uppercase tracking-widest shadow-lg hover:bg-emerald-600 transition-all flex items-center gap-2"
-                                                >
-                                                    Aceptar <ChevronRight size={14}/>
-                                                </button>
+                                                <div className="mt-4 pt-4 border-t border-slate-50 flex items-center justify-between">
+                                                    <p className="text-[10px] font-bold text-slate-500 uppercase">
+                                                        {job.studies.length > 0 ? `${job.studies.length} Estudios` : 'Revisión General'}
+                                                    </p>
+                                                    <button 
+                                                        onClick={() => handleAcceptJob(job)}
+                                                        className="px-8 py-3 bg-slate-900 text-white rounded-xl font-black text-xs uppercase tracking-widest shadow-lg hover:bg-emerald-600 transition-all flex items-center gap-2"
+                                                    >
+                                                        Aceptar <ChevronRight size={14}/>
+                                                    </button>
+                                                </div>
                                             </div>
-                                        </div>
-                                    )) : (
+                                        );
+                                    }) : (
                                         <div className="text-center py-20 bg-white/80 backdrop-blur rounded-[3rem] shadow-sm">
                                             <div className="w-20 h-20 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4 text-slate-300 animate-pulse"><MapPinned size={32}/></div>
                                             <p className="text-slate-400 font-black uppercase text-xs">Buscando solicitudes cercanas...</p>
@@ -340,40 +392,43 @@ const HomeServices: React.FC<HomeServicesProps> = ({ requests, onUpdateRequest, 
                         </div>
 
                         <div className="flex-1 overflow-y-auto space-y-4 pr-2 custom-scrollbar">
-                            {filteredRequests.map(req => (
-                                <div 
-                                    key={req.id}
-                                    onClick={() => setSelectedRequest(req)}
-                                    className={`bg-white border rounded-[2rem] p-5 hover:shadow-lg transition-all cursor-pointer group relative overflow-hidden ${selectedRequest?.id === req.id ? 'border-rose-500 ring-2 ring-rose-100' : 'border-slate-200'}`}
-                                >
-                                    <div className="flex justify-between items-start mb-3">
-                                        <div className="flex items-center gap-3">
-                                            <div className="w-10 h-10 bg-slate-100 rounded-xl flex items-center justify-center text-slate-500 font-black text-sm">
-                                                {req.patientName.charAt(0)}
+                            {filteredRequests.map(req => {
+                                const typeConfig = getRequestTypeConfig(req);
+                                return (
+                                    <div 
+                                        key={req.id}
+                                        onClick={() => setSelectedRequest(req)}
+                                        className={`bg-white border rounded-[2rem] p-5 hover:shadow-lg transition-all cursor-pointer group relative overflow-hidden ${selectedRequest?.id === req.id ? 'border-rose-500 ring-2 ring-rose-100' : 'border-slate-200'}`}
+                                    >
+                                        <div className="flex justify-between items-start mb-3">
+                                            <div className="flex items-center gap-3">
+                                                <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-black text-sm ${typeConfig.bg} ${typeConfig.color}`}>
+                                                    {typeConfig.icon}
+                                                </div>
+                                                <div className="flex-1 min-w-0">
+                                                    <h4 className="text-xs font-black text-slate-900 uppercase truncate">{req.patientName}</h4>
+                                                    <p className="text-[9px] font-bold text-slate-400 uppercase mt-0.5">{typeConfig.label}</p>
+                                                </div>
                                             </div>
-                                            <div className="flex-1 min-w-0">
-                                                <h4 className="text-xs font-black text-slate-900 uppercase truncate">{req.patientName}</h4>
-                                                <p className="text-[9px] font-bold text-slate-400 uppercase mt-0.5">{new Date(req.requestedDate).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</p>
-                                            </div>
+                                            <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase border ${getStatusColor(req.status)}`}>
+                                                {req.status}
+                                            </span>
                                         </div>
-                                        <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase border ${getStatusColor(req.status)}`}>
-                                            {req.status}
-                                        </span>
-                                    </div>
-                                    
-                                    <div className="space-y-2 pl-12">
-                                        <div className="flex items-center gap-2 text-slate-500 text-[9px] uppercase font-bold truncate">
-                                            <MapPin size={10} className="text-rose-500 shrink-0"/>
-                                            <span className="truncate">{req.patientAddress}</span>
-                                        </div>
-                                        {req.assignedStaff && (
-                                            <div className="mt-2 pt-2 border-t border-slate-50 flex items-center gap-2 text-blue-600 text-[9px] font-black uppercase">
-                                                <UserCheck size={10}/> {req.assignedStaff}
+                                        
+                                        <div className="space-y-2 pl-12">
+                                            <div className="flex items-center gap-2 text-slate-500 text-[9px] uppercase font-bold truncate">
+                                                <MapPin size={10} className="text-rose-500 shrink-0"/>
+                                                <span className="truncate">{req.patientAddress}</span>
                                             </div>
-                                        )}
+                                            {req.assignedStaff && (
+                                                <div className="mt-2 pt-2 border-t border-slate-50 flex items-center gap-2 text-blue-600 text-[9px] font-black uppercase">
+                                                    <UserCheck size={10}/> {req.assignedStaff}
+                                                </div>
+                                            )}
+                                        </div>
                                     </div>
-                                </div>
-                            ))}
+                                );
+                            })}
                             {filteredRequests.length === 0 && (
                                 <div className="py-20 text-center opacity-30">
                                     <LayoutList size={48} className="mx-auto mb-4 text-slate-400"/>
@@ -394,6 +449,7 @@ const HomeServices: React.FC<HomeServicesProps> = ({ requests, onUpdateRequest, 
                             {filteredRequests.map(req => {
                                 const coords = req.coordinates || { lat: 0.5, lng: 0.5 };
                                 const isSelected = selectedRequest?.id === req.id;
+                                const typeConfig = getRequestTypeConfig(req);
                                 
                                 return (
                                     <div 
@@ -404,7 +460,9 @@ const HomeServices: React.FC<HomeServicesProps> = ({ requests, onUpdateRequest, 
                                     >
                                         <div className={`relative flex flex-col items-center ${isSelected ? 'animate-bounce' : ''}`}>
                                             <div className={`p-2 rounded-full shadow-lg border-2 border-white ${req.status === 'Pendiente' ? 'bg-rose-600' : req.status === 'Asignado' ? 'bg-blue-600' : 'bg-emerald-600'}`}>
-                                                {req.status === 'Asignado' || req.status === 'En Camino' ? <Truck size={20} className="text-white"/> : <MapPin size={20} className="text-white"/>}
+                                                <div className="text-white">
+                                                    {typeConfig.icon}
+                                                </div>
                                             </div>
                                             {isSelected && (
                                                 <div className="absolute top-full mt-2 bg-white px-3 py-1 rounded-xl shadow-xl whitespace-nowrap z-30">
@@ -419,31 +477,52 @@ const HomeServices: React.FC<HomeServicesProps> = ({ requests, onUpdateRequest, 
 
                         {/* DETALLE FLOTANTE */}
                         {selectedRequest && (
-                            <div className="absolute bottom-6 left-6 right-6 bg-white/95 backdrop-blur-md border border-slate-200 rounded-[2.5rem] p-6 shadow-2xl animate-in slide-in-from-bottom-10 z-30 flex flex-col md:flex-row gap-6 items-center">
-                                <div className="flex-1 space-y-1">
-                                    <div className="flex items-center gap-3">
-                                        <h3 className="text-lg font-black text-slate-900 uppercase tracking-tight">{selectedRequest.patientName}</h3>
-                                        <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase border ${getStatusColor(selectedRequest.status)}`}>{selectedRequest.status}</span>
-                                    </div>
-                                    <p className="text-[10px] font-bold text-slate-500 uppercase flex items-center gap-1"><MapPin size={10}/> {selectedRequest.patientAddress}</p>
-                                    {selectedRequest.assignedStaff && <p className="text-[10px] font-bold text-blue-600 uppercase mt-1">Asignado a: {selectedRequest.assignedStaff}</p>}
-                                </div>
-
-                                <div className="flex items-center gap-3 shrink-0">
-                                    {selectedRequest.status === 'Pendiente' ? (
-                                        <button 
-                                            onClick={() => { setSelectedRequest(selectedRequest); setShowAssignModal(true); setAssignForm({ unit: selectedRequest.assignedUnit || '', staffId: '' }); }}
-                                            className="px-6 py-3 bg-slate-900 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-blue-600 transition-all flex items-center gap-2 shadow-lg"
-                                        >
-                                            <UserPlus size={14}/> Asignar Unidad
-                                        </button>
-                                    ) : (
-                                        <div className="flex gap-2">
-                                            <button onClick={() => handleStatusChange('Pendiente')} className="px-4 py-3 bg-slate-100 text-slate-500 rounded-xl text-[9px] font-black uppercase hover:bg-slate-200">Liberar</button>
-                                            <button onClick={() => handleStatusChange('Finalizado')} className="px-4 py-3 bg-emerald-600 text-white rounded-xl text-[9px] font-black uppercase hover:bg-emerald-700 shadow-lg">Forzar Cierre</button>
+                            <div className="absolute bottom-6 left-6 right-6 bg-white/95 backdrop-blur-md border border-slate-200 rounded-[2.5rem] p-6 shadow-2xl animate-in slide-in-from-bottom-10 z-30 flex flex-col gap-6">
+                                <div className="flex flex-col md:flex-row gap-6 items-start">
+                                    <div className="flex-1 space-y-1">
+                                        <div className="flex items-center gap-3">
+                                            <h3 className="text-lg font-black text-slate-900 uppercase tracking-tight">{selectedRequest.patientName}</h3>
+                                            <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase border ${getStatusColor(selectedRequest.status)}`}>{selectedRequest.status}</span>
                                         </div>
-                                    )}
-                                    <button onClick={() => setSelectedRequest(null)} className="p-3 bg-slate-100 text-slate-400 rounded-xl hover:bg-slate-200"><X size={18}/></button>
+                                        <p className="text-[10px] font-bold text-slate-500 uppercase flex items-center gap-1"><MapPin size={10}/> {selectedRequest.patientAddress}</p>
+                                        {selectedRequest.assignedStaff && <p className="text-[10px] font-bold text-blue-600 uppercase mt-1">Asignado a: {selectedRequest.assignedStaff}</p>}
+                                    </div>
+
+                                    <div className="flex items-center gap-3 shrink-0">
+                                        {selectedRequest.status === 'Pendiente' ? (
+                                            <button 
+                                                onClick={() => { setSelectedRequest(selectedRequest); setShowAssignModal(true); setAssignForm({ unit: selectedRequest.assignedUnit || '', staffId: '' }); }}
+                                                className="px-6 py-3 bg-slate-900 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-blue-600 transition-all flex items-center gap-2 shadow-lg"
+                                            >
+                                                <UserPlus size={14}/> Asignar Unidad
+                                            </button>
+                                        ) : (
+                                            <div className="flex gap-2">
+                                                <button onClick={() => handleStatusChange('Pendiente')} className="px-4 py-3 bg-slate-100 text-slate-500 rounded-xl text-[9px] font-black uppercase hover:bg-slate-200">Liberar</button>
+                                                <button onClick={() => handleStatusChange('Finalizado')} className="px-4 py-3 bg-emerald-600 text-white rounded-xl text-[9px] font-black uppercase hover:bg-emerald-700 shadow-lg">Forzar Cierre</button>
+                                            </div>
+                                        )}
+                                        <button onClick={() => setSelectedRequest(null)} className="p-3 bg-slate-100 text-slate-400 rounded-xl hover:bg-slate-200"><X size={18}/></button>
+                                    </div>
+                                </div>
+                                
+                                {/* DETALLE ESPECÍFICO DE LA SOLICITUD */}
+                                <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 flex gap-4 items-start">
+                                    <div className={`p-3 rounded-xl ${getRequestTypeConfig(selectedRequest).bg} ${getRequestTypeConfig(selectedRequest).color}`}>
+                                        {getRequestTypeConfig(selectedRequest).icon}
+                                    </div>
+                                    <div className="flex-1">
+                                        <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-1">{getRequestTypeConfig(selectedRequest).label}</p>
+                                        {selectedRequest.studies && selectedRequest.studies.length > 0 ? (
+                                            <div className="flex flex-wrap gap-2">
+                                                {selectedRequest.studies.map((s, i) => (
+                                                    <span key={i} className="px-2 py-1 bg-white border border-slate-200 rounded-lg text-[10px] font-bold uppercase text-slate-700">{s}</span>
+                                                ))}
+                                            </div>
+                                        ) : (
+                                            <p className="text-xs font-bold text-slate-800 uppercase italic">"{selectedRequest.notes || 'Sin detalles específicos'}"</p>
+                                        )}
+                                    </div>
                                 </div>
                             </div>
                         )}

@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { 
@@ -7,9 +6,9 @@ import {
   FileText, Microscope, Thermometer, Syringe, Layers, CheckCircle2,
   AlertOctagon, Scale
 } from 'lucide-react';
-import { Patient, ClinicalNote, Vitals } from '../../types';
+import { Patient, ClinicalNote, Vitals, DoctorInfo } from '../../types';
 
-const PostOperativeNote: React.FC<{ patients: Patient[], notes: ClinicalNote[], onSaveNote: (n: ClinicalNote) => void }> = ({ patients, notes, onSaveNote }) => {
+const PostOperativeNote: React.FC<{ patients: Patient[], notes: ClinicalNote[], onSaveNote: (n: ClinicalNote) => void, doctorInfo?: DoctorInfo }> = ({ patients, notes, onSaveNote, doctorInfo }) => {
   const { id, noteId } = useParams();
   const navigate = useNavigate();
   const patient = patients.find(p => p.id === id);
@@ -27,7 +26,7 @@ const PostOperativeNote: React.FC<{ patients: Patient[], notes: ClinicalNote[], 
     anesthesiaEndTime: '',
     
     // Equipo Quirúrgico
-    surgeon: 'Dr. Alejandro Méndez',
+    surgeon: doctorInfo?.name || 'Dr. Alejandro Méndez',
     assistant1: '',
     assistant2: '',
     anesthesiologist: '',
@@ -373,7 +372,7 @@ const PostOperativeNote: React.FC<{ patients: Patient[], notes: ClinicalNote[], 
 
             </div>
 
-            <div className="flex justify-end gap-4 pt-6">
+            <div className="flex justify-end gap-4 pt-6 border-t border-slate-100">
                 <button onClick={() => navigate(-1)} className="px-8 py-4 text-slate-400 font-black uppercase text-[10px] hover:text-slate-600 transition-colors">Cancelar</button>
                 <button onClick={() => handleSave(false)} className="px-10 py-5 bg-white border border-slate-200 text-slate-600 rounded-[2rem] font-black text-[10px] uppercase tracking-widest shadow-sm hover:bg-slate-50 transition-all">
                     Guardar Borrador

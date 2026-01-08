@@ -23,7 +23,8 @@ export const MOCK_DOCTORS: DoctorInfo[] = [
     rating: 4.9,
     reviewCount: 120,
     price: 800,
-    availableFrom: '09:00 AM'
+    availableFrom: '09:00 AM',
+    schedule: { days: [1, 3, 5], startHour: '09:00', endHour: '14:00', slotDuration: 30 } // L-M-V
   },
   {
     name: 'MARIA GONZALEZ',
@@ -38,7 +39,8 @@ export const MOCK_DOCTORS: DoctorInfo[] = [
     rating: 5.0,
     reviewCount: 85,
     price: 900,
-    availableFrom: '10:00 AM'
+    availableFrom: '10:00 AM',
+    schedule: { days: [2, 4, 6], startHour: '10:00', endHour: '16:00', slotDuration: 45 } // M-J-S
   },
   {
     name: 'ROBERTO CRUZ',
@@ -53,7 +55,8 @@ export const MOCK_DOCTORS: DoctorInfo[] = [
     rating: 4.5,
     reviewCount: 42,
     price: 700,
-    availableFrom: '11:30 AM'
+    availableFrom: '11:30 AM',
+    schedule: { days: [1, 2, 3, 4, 5], startHour: '15:00', endHour: '20:00', slotDuration: 30 } // L-V tarde
   },
   {
     name: 'ANA TORRES',
@@ -68,7 +71,8 @@ export const MOCK_DOCTORS: DoctorInfo[] = [
     rating: 4.8,
     reviewCount: 210,
     price: 1000,
-    availableFrom: 'En Línea'
+    availableFrom: 'En Línea',
+    schedule: { days: [1, 2, 3, 4, 5], startHour: '09:00', endHour: '18:00', slotDuration: 30 } // L-V todo el día
   }
 ];
 
@@ -123,12 +127,13 @@ const ALL_MODULES = Object.values(ModuleType);
 export const INITIAL_STAFF: StaffMember[] = [
   { id: 'S-001', name: 'Dr. Jesus Reyes Lozano', role: 'Médico Especialista', specialty: 'Cirugía General', status: 'Activo', cedula: '12840177', assignedArea: ['Quirófano'], salaryDaily: 1200, paymentPeriod: 'Quincenal', allowedModules: ALL_MODULES },
   { id: 'S-002', name: 'Dra. Ana Torres', role: 'Médico General', status: 'Activo', cedula: '87654321', assignedArea: ['Urgencias', 'Consulta Externa'], salaryDaily: 800, paymentPeriod: 'Quincenal', allowedModules: [ModuleType.OUTPATIENT, ModuleType.EMERGENCY, ModuleType.HOSPITALIZATION] },
-  { id: 'S-003', name: 'Enf. Lucía Rodríguez', role: 'Enfermería', status: 'Activo', assignedArea: ['Hospitalización', 'Urgencias'], salaryDaily: 500, paymentPeriod: 'Quincenal', allowedModules: [ModuleType.HOSPITALIZATION, ModuleType.EMERGENCY, ModuleType.MONITOR] },
-  { id: 'S-004', name: 'Q.F.B. Beatriz Mendoza', role: 'Químico / Laboratorio', status: 'Activo', assignedArea: ['Laboratorio'], salaryDaily: 600, paymentPeriod: 'Quincenal', allowedModules: [ModuleType.AUXILIARY] },
+  { id: 'S-003', name: 'Enf. Lucía Rodríguez', role: 'Enfermería', status: 'Activo', assignedArea: ['Hospitalización', 'Urgencias'], salaryDaily: 500, paymentPeriod: 'Quincenal', allowedModules: [ModuleType.HOSPITALIZATION, ModuleType.EMERGENCY, ModuleType.MONITOR], isHomeServiceEnabled: true },
+  { id: 'S-004', name: 'Q.F.B. Beatriz Mendoza', role: 'Químico / Laboratorio', status: 'Activo', assignedArea: ['Laboratorio'], salaryDaily: 600, paymentPeriod: 'Quincenal', allowedModules: [ModuleType.AUXILIARY], isHomeServiceEnabled: true },
   { id: 'S-005', name: 'Tec. Carlos Ruiz', role: 'Radiólogo / Imagen', status: 'Activo', assignedArea: ['Imagenología'], salaryDaily: 550, paymentPeriod: 'Quincenal', allowedModules: [ModuleType.AUXILIARY] },
   { id: 'S-006', name: 'Pedro Díaz', role: 'Camillero', status: 'Activo', assignedArea: ['General'], salaryDaily: 350, paymentPeriod: 'Semanal', allowedModules: [ModuleType.MONITOR] },
   { id: 'S-007', name: 'Martha Solís', role: 'Limpieza / Intendencia', status: 'Activo', assignedArea: ['Planta Baja'], salaryDaily: 300, paymentPeriod: 'Semanal', allowedModules: [ModuleType.MONITOR] },
-  { id: 'S-008', name: 'Lic. Sofía Vergara', role: 'Caja / Admisión', status: 'Activo', assignedArea: ['Recepción', 'Caja'], salaryDaily: 400, paymentPeriod: 'Quincenal', allowedModules: [ModuleType.BILLING, ModuleType.FINANCE, ModuleType.OUTPATIENT] }
+  { id: 'S-008', name: 'Lic. Sofía Vergara', role: 'Caja / Admisión', status: 'Activo', assignedArea: ['Recepción', 'Caja'], salaryDaily: 400, paymentPeriod: 'Quincenal', allowedModules: [ModuleType.BILLING, ModuleType.FINANCE, ModuleType.OUTPATIENT] },
+  { id: 'S-009', name: 'Ricardo Moto', role: 'Repartidor / Chofer', status: 'Activo', assignedArea: ['Logística'], salaryDaily: 350, paymentPeriod: 'Semanal', allowedModules: [ModuleType.HOME_SERVICES], isHomeServiceEnabled: true }
 ];
 
 export const DEFAULT_INFRASTRUCTURE = {

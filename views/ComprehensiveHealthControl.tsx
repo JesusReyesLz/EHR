@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { 
@@ -7,7 +6,7 @@ import {
   Save, CheckCircle2, Clock, Info, Check, Plus, Lock, AlertTriangle,
   ClipboardList, BookOpen, MessageSquare, HeartHandshake, Leaf, Apple,
   Thermometer, FileText, TrendingUp, Accessibility, Target, Calculator,
-  ChevronDown, ChevronUp, AlertCircle, ChevronRight, X
+  ChevronDown, ChevronUp, AlertCircle, ChevronRight, X, History as HistoryIcon
 } from 'lucide-react';
 import { 
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer 
@@ -108,10 +107,8 @@ const MEDICAL_SCALES: Record<string, MedicalScale> = {
             { id: '3', text: '¿Siente que su vida está vacía?', options: [{label:'Sí', points:1}, {label:'No', points:0}] },
             { id: '4', text: '¿Se aburre a menudo?', options: [{label:'Sí', points:1}, {label:'No', points:0}] },
             { id: '5', text: '¿Está de buen ánimo la mayor parte del tiempo?', options: [{label:'Sí', points:0}, {label:'No', points:1}] },
-            // ... (Se pueden añadir las 15 completas, recortadas por brevedad en este ejemplo)
         ],
         interpret: (score) => {
-            // Nota: Con 5 preguntas, el corte cambia. Asumimos 5 items para demo.
             if (score <= 1) return { classification: 'Normal', color: 'text-emerald-600', risk: 'Bajo' };
             return { classification: 'Probable Depresión', color: 'text-rose-600', risk: 'Alto' };
         }
@@ -432,7 +429,7 @@ const ComprehensiveHealthControl: React.FC<{ patients: Patient[], onSaveNote: (n
   const finishScale = () => {
       if (!activeScaleId) return;
       const scale = MEDICAL_SCALES[activeScaleId];
-      const score = Object.values(scaleAnswers).reduce((a: number, b: number) => a + b, 0);
+      const score = (Object.values(scaleAnswers) as number[]).reduce((a, b) => a + b, 0);
       const result = scale.interpret(score);
       const interpretationText = `${result.classification} (${score} pts)`;
       
@@ -722,8 +719,140 @@ const ComprehensiveHealthControl: React.FC<{ patients: Patient[], onSaveNote: (n
                     </div>
                 )}
 
-                {/* --- TAB: VACCINES (Simplified for brevity, logic exists in original) --- */}
-                {/* ... (Same as before) ... */}
+                {/* --- TAB: VACCINES (Implemented) --- */}
+                {activeTab === 'vaccines' && (
+                    <div className="space-y-8 animate-in slide-in-from-right-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            {stageConfig.vaccines.map((v, i) => {
+                                const appliedDoses = healthRecord.vaccines.filter(vac => vac.name === v.name);
+                                return (
+                                    <div key={i} className="bg-white border border-slate-200 rounded-[2.5rem] p-6 shadow-sm">
+                                        <div className="flex justify-between items-center mb-4">
+                                            <h4 className="text-sm font-black text-slate-900 uppercase flex items-center gap-2">
+                                                <Syringe size={16} className="text-blue-500"/> {v.name}
+                                            </h4>
+                                            <span className="text-[9px] font-bold text-slate-400 bg-slate-100 px-2 py-1 rounded">{v.age}</span>
+                                        </div>
+                                        <div className="flex gap-2">
+                                            {v.doses.map(dose => {
+                                                const isApplied = appliedDoses.some(ad => ad.doseNumber === dose);
+                                                const appliedRecord = appliedDoses.find(ad => ad.doseNumber === dose);
+                                                return (
+                                                    <div key={dose} className={`flex-1 p-3 rounded-xl border text-center ${isApplied ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-slate-50 border-slate-100 text-slate-400'}`}>
+                                                        <p className="text-[9px] font-black uppercase">{dose}</p>
+                                                        <p className="text-[8px] font-medium">{isApplied ? appliedRecord?.applicationDate : 'Pendiente'}</p>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+                )}
+                
+                {/* --- TAB: SCREENINGS (Implemented) --- */}
+                {activeTab === 'screenings' && (
+                    <div className="space-y-8 animate-in slide-in-from-right-4">
+                        <div className="bg-white border border-slate-200 rounded-[2.5rem] p-8 shadow-sm">
+                             <h3 className="text-lg font-black uppercase text-slate-900 mb-6 flex items-center gap-2">
+                                <FlaskConical size={20} className="text-emerald-600"/> Tamizajes y Detección Oportuna
+                             </h3>
+                             <div className="space-y-4">
+                                 {stageConfig.screenings.map((s, i) => {
+                                    if (s.gender && s.gender !== patient.sex) return null;
+                                    const record = healthRecord.screenings.find(r => r.name === s.name);
+                                    
+                                    return (
+                                        <div key={i} className={`p-5 rounded-2xl border flex justify-between items-center transition-all ${record ? 'bg-white border-slate-200 shadow-sm' : 'bg-slate-50 border-slate-100 opacity-70'}`}>
+                                            <div>
+                                                <h4 className="text-xs font-black text-slate-900 uppercase">{s.name}</h4>
+                                                <p className="text-[9px] text-slate-500 font-bold uppercase mt-1">{s.cat} • Frecuencia: {s.freq}</p>
+                                            </div>
+                                            <div className="text-right">
+                                                {record ? (
+                                                    <div>
+                                                        <span className={`px-3 py-1 rounded-lg text-[9px] font-black uppercase ${record.status === 'Normal' ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>
+                                                            {record.status}
+                                                        </span>
+                                                        <p className="text-[8px] text-slate-400 mt-1">{record.lastDate}</p>
+                                                    </div>
+                                                ) : (
+                                                    <span className="text-[9px] font-bold text-slate-400 uppercase bg-slate-200 px-3 py-1 rounded-lg">Pendiente</span>
+                                                )}
+                                            </div>
+                                        </div>
+                                    );
+                                 })}
+                             </div>
+                        </div>
+                    </div>
+                )}
+                
+                {/* --- TAB: PROMOTION (Implemented) --- */}
+                {activeTab === 'promotion' && (
+                    <div className="space-y-8 animate-in slide-in-from-right-4">
+                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            {stageConfig.promotion.map((topic, i) => {
+                                const record = healthRecord.healthPromotion?.find(r => r.topic === topic);
+                                return (
+                                    <div key={i} className={`p-6 rounded-[2rem] border transition-all flex items-center justify-between ${record ? 'bg-indigo-50 border-indigo-200' : 'bg-white border-slate-100'}`}>
+                                        <div className="flex items-center gap-4">
+                                            <div className={`p-3 rounded-xl ${record ? 'bg-indigo-100 text-indigo-600' : 'bg-slate-100 text-slate-400'}`}>
+                                                <BookOpen size={18}/>
+                                            </div>
+                                            <div>
+                                                <p className="text-xs font-black text-slate-900 uppercase max-w-[200px] leading-tight">{topic}</p>
+                                                <p className="text-[9px] text-slate-500 font-bold uppercase mt-1">Educación para la Salud</p>
+                                            </div>
+                                        </div>
+                                        {record ? (
+                                            <div className="text-right">
+                                                <CheckCircle2 size={20} className="text-emerald-500 ml-auto mb-1"/>
+                                                <p className="text-[8px] font-bold text-slate-500">{record.date}</p>
+                                            </div>
+                                        ) : (
+                                            <div className="w-5 h-5 rounded-full border-2 border-slate-200"></div>
+                                        )}
+                                    </div>
+                                );
+                            })}
+                         </div>
+                    </div>
+                )}
+                
+                {/* --- TAB: GROWTH (Implemented) --- */}
+                {activeTab === 'growth' && (
+                    <div className="space-y-8 animate-in slide-in-from-right-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                            <div className="bg-white border border-slate-200 rounded-[2.5rem] p-8 shadow-sm h-80">
+                                <h3 className="text-xs font-black uppercase text-slate-500 mb-4 flex items-center gap-2"><TrendingUp size={16}/> Curva de Peso (kg)</h3>
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <LineChart data={growthData} margin={{top:5, right:20, bottom:5, left:0}}>
+                                        <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9"/>
+                                        <XAxis dataKey="date" fontSize={10} tickFormatter={(v)=> new Date(v).toLocaleDateString()}/>
+                                        <YAxis fontSize={10} domain={['auto', 'auto']}/>
+                                        <Tooltip contentStyle={{borderRadius:'12px', border:'none', fontSize:'12px'}}/>
+                                        <Line type="monotone" dataKey="weight" stroke="#3b82f6" strokeWidth={3} dot={{r:4}} />
+                                    </LineChart>
+                                </ResponsiveContainer>
+                            </div>
+                             <div className="bg-white border border-slate-200 rounded-[2.5rem] p-8 shadow-sm h-80">
+                                <h3 className="text-xs font-black uppercase text-slate-500 mb-4 flex items-center gap-2"><Ruler size={16}/> Curva de Talla (cm)</h3>
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <LineChart data={growthData} margin={{top:5, right:20, bottom:5, left:0}}>
+                                        <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9"/>
+                                        <XAxis dataKey="date" fontSize={10} tickFormatter={(v)=> new Date(v).toLocaleDateString()}/>
+                                        <YAxis fontSize={10} domain={['auto', 'auto']}/>
+                                        <Tooltip contentStyle={{borderRadius:'12px', border:'none', fontSize:'12px'}}/>
+                                        <Line type="monotone" dataKey="height" stroke="#10b981" strokeWidth={3} dot={{r:4}} />
+                                    </LineChart>
+                                </ResponsiveContainer>
+                            </div>
+                        </div>
+                    </div>
+                )}
 
                 {/* --- TAB: SPECIFIC ASSESSMENTS (INTERACTIVE ENGINE) --- */}
                 {activeTab === 'specifics' && (
@@ -789,8 +918,8 @@ const ComprehensiveHealthControl: React.FC<{ patients: Patient[], onSaveNote: (n
                                             <div className="flex justify-between items-end">
                                                 <div>
                                                     <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Resultado Preliminar</p>
-                                                    <p className={`text-lg font-black uppercase mt-1 ${MEDICAL_SCALES[activeScaleId].interpret(Object.values(scaleAnswers).reduce((a: number, b: number) => a + b, 0)).color.replace('text-', 'text-')}`}>
-                                                        {MEDICAL_SCALES[activeScaleId].interpret(Object.values(scaleAnswers).reduce((a: number, b: number) => a + b, 0)).classification}
+                                                    <p className={`text-lg font-black uppercase mt-1 ${MEDICAL_SCALES[activeScaleId].interpret((Object.values(scaleAnswers) as number[]).reduce((a: number, b: number) => a + b, 0)).color.replace('text-', 'text-')}`}>
+                                                        {MEDICAL_SCALES[activeScaleId].interpret((Object.values(scaleAnswers) as number[]).reduce((a: number, b: number) => a + b, 0)).classification}
                                                     </p>
                                                 </div>
                                                 <button onClick={finishScale} className="px-6 py-3 bg-white text-slate-900 rounded-2xl text-[9px] font-black uppercase tracking-widest hover:bg-emerald-400 transition-all shadow-lg">
@@ -811,7 +940,7 @@ const ComprehensiveHealthControl: React.FC<{ patients: Patient[], onSaveNote: (n
                         {/* HISTORIAL DE EVALUACIONES */}
                         {healthRecord.visits.some(v => v.notes.includes('[')) && (
                             <div className="bg-slate-50 p-8 rounded-[2.5rem] border border-slate-200">
-                                <h4 className="text-xs font-black text-slate-500 uppercase tracking-widest mb-4 flex items-center gap-2"><History size={14}/> Historial de Evaluaciones</h4>
+                                <h4 className="text-xs font-black text-slate-500 uppercase tracking-widest mb-4 flex items-center gap-2"><HistoryIcon size={14}/> Historial de Evaluaciones</h4>
                                 <div className="space-y-2">
                                     {healthRecord.visits.filter(v => v.notes.includes('[')).map((visit, i) => (
                                         <div key={i} className="p-4 bg-white rounded-2xl border border-slate-100 shadow-sm flex justify-between items-center">

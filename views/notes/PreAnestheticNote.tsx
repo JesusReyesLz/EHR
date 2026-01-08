@@ -7,9 +7,16 @@ import {
   Brain, Syringe, Timer, Lock, FileText, CheckCircle2,
   AlertOctagon, Eye
 } from 'lucide-react';
-import { Patient, ClinicalNote, Vitals } from '../../types';
+import { Patient, ClinicalNote, Vitals, DoctorInfo } from '../../types';
 
-const PreAnestheticNote: React.FC<{ patients: Patient[], notes: ClinicalNote[], onSaveNote: (n: ClinicalNote) => void }> = ({ patients, notes, onSaveNote }) => {
+interface PreAnestheticNoteProps {
+  patients: Patient[];
+  notes: ClinicalNote[];
+  onSaveNote: (note: ClinicalNote) => void;
+  doctorInfo?: DoctorInfo;
+}
+
+const PreAnestheticNote: React.FC<PreAnestheticNoteProps> = ({ patients, notes, onSaveNote, doctorInfo }) => {
   const { id, noteId } = useParams();
   const navigate = useNavigate();
   const patient = patients.find(p => p.id === id);
@@ -108,7 +115,7 @@ const PreAnestheticNote: React.FC<{ patients: Patient[], notes: ClinicalNote[], 
       patientId: patient.id,
       type: 'Nota Pre-anestésica',
       date: new Date().toLocaleString('es-MX'),
-      author: 'Dr. Roberto Cruz (Anestesiólogo)',
+      author: doctorInfo?.name || 'Dr. Roberto Cruz (Anestesiólogo)',
       content: { ...form, vitals },
       isSigned: finalize,
       hash: finalize ? `CERT-ANEST-${Math.random().toString(36).substr(2, 9).toUpperCase()}` : undefined

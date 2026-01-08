@@ -7,14 +7,17 @@ import {
   Lock, PenTool, ShieldAlert, Info, Clock, Scale,
   FileText, Siren, Ambulance, Fingerprint, FolderInput
 } from 'lucide-react';
-import { Patient, ClinicalNote } from '../types';
+/* Added DoctorInfo to imports */
+import { Patient, ClinicalNote, DoctorInfo } from '../types';
 
 interface MPNotificationProps {
   patients: Patient[];
   onSaveNote: (note: ClinicalNote) => void;
+  /* Added doctorInfo to props interface */
+  doctorInfo?: DoctorInfo;
 }
 
-const MPNotification: React.FC<MPNotificationProps> = ({ patients, onSaveNote }) => {
+const MPNotification: React.FC<MPNotificationProps> = ({ patients, onSaveNote, doctorInfo }) => {
   const { id } = useParams();
   const navigate = useNavigate();
   const patient = patients.find(p => p.id === id);
@@ -72,6 +75,19 @@ const MPNotification: React.FC<MPNotificationProps> = ({ patients, onSaveNote })
 
   const [isSigned, setIsSigned] = useState(false);
   const [showPrintPreview, setShowPrintPreview] = useState(false);
+
+  /* Added useEffect to sync doctorInfo with the form */
+  useEffect(() => {
+    if (doctorInfo) {
+      setForm(prev => ({
+        ...prev,
+        doctorNotifying: doctorInfo.name,
+        cedulaNotifying: doctorInfo.cedula,
+        institution: `${doctorInfo.hospital} / MedExpediente MX`,
+        address: doctorInfo.address,
+      }));
+    }
+  }, [doctorInfo]);
 
   if (!patient) return null;
 
@@ -231,7 +247,7 @@ const MPNotification: React.FC<MPNotificationProps> = ({ patients, onSaveNote })
           </button>
           <div>
             <h1 className="text-2xl font-black text-slate-900 uppercase tracking-tight">Aviso al Ministerio Público</h1>
-            <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest mt-1 flex items-center">
+            <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest mt-1 flex items-center gap-2">
                <ShieldCheck size={12} className="text-emerald-500 mr-2" /> Obligatorio en casos médico-legales
             </p>
           </div>

@@ -6,9 +6,16 @@ import {
   AlertTriangle, FileCheck, Stethoscope, Scissors, HeartPulse, 
   Utensils, ClipboardList, Lock, User, Syringe, CheckSquare, CheckCircle2
 } from 'lucide-react';
-import { Patient, ClinicalNote, Vitals } from '../../types';
+import { Patient, ClinicalNote, Vitals, DoctorInfo } from '../../types';
 
-const PreoperativeNote: React.FC<{ patients: Patient[], notes: ClinicalNote[], onSaveNote: (n: ClinicalNote) => void }> = ({ patients, notes, onSaveNote }) => {
+interface PreoperativeNoteProps {
+  patients: Patient[];
+  notes: ClinicalNote[];
+  onSaveNote: (note: ClinicalNote) => void;
+  doctorInfo?: DoctorInfo;
+}
+
+const PreoperativeNote: React.FC<PreoperativeNoteProps> = ({ patients, notes, onSaveNote, doctorInfo }) => {
   const { id, noteId } = useParams();
   const navigate = useNavigate();
   const patient = patients.find(p => p.id === id);
@@ -24,7 +31,7 @@ const PreoperativeNote: React.FC<{ patients: Patient[], notes: ClinicalNote[], o
     surgeryType: 'Electiva', // Electiva / Urgencia
     
     // Equipo Quirúrgico
-    surgeon: 'Dr. Alejandro Méndez',
+    surgeon: doctorInfo?.name || 'Dr. Alejandro Méndez',
     anesthesiologist: '',
     surgicalRoom: '',
     
@@ -283,7 +290,7 @@ const PreoperativeNote: React.FC<{ patients: Patient[], notes: ClinicalNote[], o
                                 <option>Clase I (0-5 pts)</option>
                                 <option>Clase II (6-12 pts)</option>
                                 <option>Clase III (13-25 pts)</option>
-                                <option>Clase IV (>26 pts)</option>
+                                <option>Clase IV (&gt;26 pts)</option>
                             </select>
                         </div>
                         <div className="space-y-2">

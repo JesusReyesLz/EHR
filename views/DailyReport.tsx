@@ -327,7 +327,7 @@ const DailyReport: React.FC<DailyReportProps> = ({ patients, notes }) => {
                                      </td>
                                      <td className="p-6 max-w-xs">
                                          <div className="flex items-start gap-2">
-                                             {isNotifiable && <AlertTriangle size={14} className="text-rose-500 flex-shrink-0 animate-pulse" title="Notificación Obligatoria" />}
+                                             {isNotifiable && <div title="Notificación Obligatoria"><AlertTriangle size={14} className="text-rose-500 flex-shrink-0 animate-pulse" /></div>}
                                              <p className={`uppercase leading-tight ${isNotifiable ? 'text-rose-700 font-black' : ''}`}>{dxName}</p>
                                          </div>
                                      </td>

@@ -1,15 +1,15 @@
 
-
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { 
   ChevronLeft, ShieldCheck, Save, LogOut, Calendar, 
-  AlertTriangle, Info, ClipboardCheck, Lock, Skull, 
-  Activity, Clock, FileText, AlertOctagon, Heart, UserMinus, CheckCircle2
+  AlertTriangle, ClipboardCheck, Lock, Skull, 
+  Activity, FileText, AlertOctagon, Utensils, Droplet, 
+  Syringe, AlertCircle, CheckCircle2
 } from 'lucide-react';
-import { Patient, ClinicalNote } from '../../types';
+import { Patient, ClinicalNote, DoctorInfo } from '../../types';
 
-const DischargeNote: React.FC<{ patients: Patient[], notes: ClinicalNote[], onSaveNote: (n: ClinicalNote) => void }> = ({ patients, notes, onSaveNote }) => {
+const DischargeNote: React.FC<{ patients: Patient[], notes: ClinicalNote[], onSaveNote: (n: ClinicalNote) => void, doctorInfo?: DoctorInfo }> = ({ patients, notes, onSaveNote, doctorInfo }) => {
   const { id, noteId } = useParams();
   const navigate = useNavigate();
   const patient = patients.find(p => p.id === id);
@@ -48,7 +48,7 @@ const DischargeNote: React.FC<{ patients: Patient[], notes: ClinicalNote[], onSa
     ambulatorySurveillance: 'Datos de alarma: Fiebre, dolor intenso, sangrado. Acudir a urgencias.',
     
     // Pronóstico
-    prognosis: 'Bueno para la vida y la función',
+    prognosis: 'Reservado a evolución',
     
     // En caso de Defunción
     causeOfDeath: '',
@@ -120,7 +120,7 @@ const DischargeNote: React.FC<{ patients: Patient[], notes: ClinicalNote[], onSa
       patientId: patient.id,
       type: 'Nota de Egreso / Alta',
       date: new Date().toLocaleString('es-MX'),
-      author: 'Dr. Alejandro Méndez', // Debería venir del contexto
+      author: doctorInfo?.name || 'Dr. Alejandro Méndez',
       content: { ...form },
       isSigned: finalize,
       hash: finalize ? `CERT-EGR-${Math.random().toString(36).substr(2, 9).toUpperCase()}` : undefined

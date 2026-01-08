@@ -1,8 +1,8 @@
-
 import React, { useState, useEffect } from 'react';
 import { HashRouter as Router, Routes, Route, Navigate, Link, useLocation, useNavigate } from 'react-router-dom';
 import { 
-  Users, Calendar, Settings, ShieldCheck, LogOut, ClipboardList,
+  // Rename Settings icon to avoid collision with the Settings view component
+  Users, Calendar, Settings as SettingsIcon, ShieldCheck, LogOut, ClipboardList,
   FileSpreadsheet, Package, Monitor as MonitorIcon, History, FileText,
   Activity, FlaskConical, HeartPulse, Bed, ShoppingBag, Tag, PieChart
 } from 'lucide-react';
@@ -13,7 +13,7 @@ import Telemedicine from './views/Telemedicine';
 import Prescription from './views/Prescription';
 import NewPatient from './views/NewPatient';
 import Agenda from './views/Agenda';
-import SettingsView from './views/Settings';
+import Settings from './views/Settings';
 import DailyReport from './views/DailyReport';
 import MedicalHistory from './views/MedicalHistory';
 import Inventory from './views/Inventory';
@@ -80,7 +80,8 @@ function Layout({ children, currentModule, onModuleChange, doctorInfo }: any) {
     { icon: <Tag className="w-4 h-4" />, label: 'Catálogo Precios', path: '/prices' },
     { icon: <FileSpreadsheet className="w-4 h-4" />, label: 'Hoja Diaria (SUIVE)', path: '/daily-report' },
     { icon: <ClipboardList className="w-4 h-4" />, label: 'Bitácoras', path: '/logs' },
-    { icon: <Settings className="w-4 h-4" />, label: 'Configuración', path: '/settings' },
+    // Use renamed icon here
+    { icon: <SettingsIcon className="w-4 h-4" />, label: 'Configuración', path: '/settings' },
   ];
 
   const modules = [
@@ -117,7 +118,7 @@ function Layout({ children, currentModule, onModuleChange, doctorInfo }: any) {
                         onModuleChange(mod);
                       }
                   }}
-                  className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${currentModule === mod ? 'bg-white text-blue-700 shadow-sm border border-slate-200' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/50'}`}
+                  className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${currentModule === mod ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/50'}`}
                 >
                   {mod === ModuleType.BILLING ? 'Caja / Tickets' : mod === ModuleType.FINANCE ? 'Finanzas' : mod === ModuleType.STAFF ? 'RRHH' : mod === ModuleType.TELEMEDICINE ? 'Telemedicina' : mod === ModuleType.HOME_SERVICES ? 'Domiciliario' : mod}
                 </button>
@@ -144,7 +145,7 @@ function Layout({ children, currentModule, onModuleChange, doctorInfo }: any) {
                 title={item.label}
                 className={`flex items-center justify-center lg:justify-start px-0 lg:px-3 py-2.5 rounded-xl transition-all group ${location.pathname === item.path ? 'bg-slate-900 text-white shadow-md' : 'text-slate-600 hover:bg-slate-50'}`}
               >
-                <div className={`shrink-0 ${location.pathname === item.path ? 'text-blue-400' : 'text-slate-500'}`}>{item.icon}</div>
+                <div className={`shrink-0 ${location.pathname === item.path ? 'text-blue-400' : 'text-slate-50'}`}>{item.icon}</div>
                 <span className="ml-3 font-black text-[10px] uppercase tracking-widest hidden lg:block whitespace-nowrap overflow-hidden text-ellipsis">{item.label}</span>
               </Link>
             ))}
@@ -289,7 +290,7 @@ const App: React.FC = () => {
           <Route path="/telemedicine/:id" element={<Telemedicine patients={patients} notes={notes} onSaveNote={handleSaveNote} onUpdatePatient={handleUpdatePatient} onAddHomeRequest={handleAddHomeRequest} />} />
           <Route path="/inventory" element={<Inventory />} />
           <Route path="/staff" element={<StaffManagement staffList={staffList} onUpdateStaffList={handleUpdateStaffList} />} />
-          <Route path="/settings" element={<SettingsView doctorInfo={doctorInfo} onUpdateDoctor={setDoctorInfo} />} />
+          <Route path="/settings" element={<Settings doctorInfo={doctorInfo} onUpdateDoctor={setDoctorInfo} />} />
           <Route path="/daily-report" element={<DailyReport patients={patients} notes={notes} />} />
           <Route path="/patient/:id/history" element={<MedicalHistory patients={patients} notes={notes} onUpdatePatient={handleUpdatePatient} onSaveNote={handleSaveNote} doctorInfo={doctorInfo} />} />
           <Route path="/patient/:id/prescription" element={<Prescription patients={patients} doctorInfo={doctorInfo} onSaveNote={handleSaveNote} onUpdatePatient={handleUpdatePatient} />} />
@@ -328,9 +329,9 @@ const App: React.FC = () => {
           <Route path="/patient/:id/auxiliary-order" element={<AuxiliaryOrder patients={patients} onSaveNote={handleSaveNote} doctorInfo={doctorInfo} />} />
           <Route path="/patient/:id/auxiliary-report" element={<AuxiliaryReport patients={patients} onSaveNote={handleSaveNote} onUpdatePatient={handleUpdatePatient} />} />
           <Route path="/auxiliary-intake" element={<AuxiliaryIntake patients={patients} onSaveNote={handleSaveNote} onUpdatePatient={handleUpdatePatient} onAddPatient={handleAddPatient} />} />
-          <Route path="/patient/:id/consent" element={<InformedConsent patients={patients} onSaveNote={handleSaveNote} doctorInfo={doctorInfo} />} />
+          <Route path="/patient/:id/consent" element={<InformedConsent patients={patients} notes={notes} onSaveNote={handleSaveNote} doctorInfo={doctorInfo} />} />
           <Route path="/patient/:id/voluntary-discharge" element={<VoluntaryDischarge patients={patients} onSaveNote={handleSaveNote} doctorInfo={doctorInfo} />} />
-          <Route path="/patient/:id/mp-notification" element={<MPNotification patients={patients} onSaveNote={handleSaveNote} />} />
+          <Route path="/patient/:id/mp-notification" element={<MPNotification patients={patients} onSaveNote={handleSaveNote} doctorInfo={doctorInfo} />} />
           <Route path="/patient/:id/death-certificate" element={<DeathCertificate patients={patients} onSaveNote={handleSaveNote} />} />
           <Route path="/patient/:id/transfusion" element={<TransfusionRegistry patients={patients} onSaveNote={handleSaveNote} />} />
           <Route path="/patient/:id/social-work" element={<SocialWorkSheet patients={patients} onSaveNote={handleSaveNote} />} />

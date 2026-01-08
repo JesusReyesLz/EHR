@@ -14,6 +14,7 @@ interface MedicalCertificateProps {
   patients: Patient[];
   onSaveNote: (note: ClinicalNote) => void;
   doctorInfo?: DoctorInfo;
+  notes?: ClinicalNote[];
 }
 
 type CertificateType = 'Escolar' | 'Laboral' | 'Deportivo' | 'Licencia de Conducir' | 'Viaje' | 'General';

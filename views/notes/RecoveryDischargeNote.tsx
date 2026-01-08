@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { 
@@ -6,9 +5,9 @@ import {
   HeartPulse, Brain, Lock, CheckSquare, 
   FileText, LogOut, CheckCircle2
 } from 'lucide-react';
-import { Patient, ClinicalNote, Vitals } from '../../types';
+import { Patient, ClinicalNote, Vitals, DoctorInfo } from '../../types';
 
-const RecoveryDischargeNote: React.FC<{ patients: Patient[], notes: ClinicalNote[], onSaveNote: (n: ClinicalNote) => void }> = ({ patients, notes, onSaveNote }) => {
+const RecoveryDischargeNote: React.FC<{ patients: Patient[], notes: ClinicalNote[], onSaveNote: (n: ClinicalNote) => void, doctorInfo?: DoctorInfo }> = ({ patients, notes, onSaveNote, doctorInfo }) => {
   const { id, noteId } = useParams();
   const navigate = useNavigate();
   const patient = patients.find(p => p.id === id);
@@ -37,7 +36,7 @@ const RecoveryDischargeNote: React.FC<{ patients: Patient[], notes: ClinicalNote
 
   const [form, setForm] = useState({
     // Encabezado
-    anesthesiologist: 'Dr. Roberto Cruz',
+    anesthesiologist: doctorInfo?.name || 'Dr. Roberto Cruz',
     dischargeDate: new Date().toISOString().split('T')[0],
     dischargeTime: new Date().toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' }),
     
