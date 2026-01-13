@@ -35,7 +35,11 @@ export enum PatientStatus {
   ONLINE_WAITING = 'En Sala Virtual', // Esperando a su médico específico (Cita)
   ONLINE_QUEUE = 'En Bolsa General', // Espera rápida (Cualquier médico)
   ONLINE_REVIEWING = 'Médico Revisando Historial', // Médico aceptó y lee antes de llamar
-  ONLINE_IN_CALL = 'En Videoconsulta'
+  ONLINE_IN_CALL = 'En Videoconsulta',
+  
+  // HOME SERVICE STATES
+  HOME_VISIT_IN_PROGRESS = 'Médico en Domicilio',
+  HOME_TRANSFER_REQUESTED = 'Solicitud Traslado a Hospital'
 }
 
 export enum AgendaStatus {
@@ -250,6 +254,7 @@ export interface PriceItem {
   linkedInventoryId?: string; // Para productos 1:1
   linkedSupplies?: LinkedSupply[]; // Para procedimientos con insumos (1:N)
   cost?: number; // Costo operativo manual para servicios
+  isHomeServiceAvailable?: boolean; // NEW: Flag para permitir venta a domicilio
 }
 
 export interface ChargeItem {
@@ -412,6 +417,9 @@ export interface DoctorInfo {
 
   // Clinic Documents
   clinicDocuments?: ClinicDocument[];
+
+  // Geo Location for Home Services
+  location?: { lat: number, lng: number }; 
 }
 
 export interface Vitals {
@@ -495,6 +503,17 @@ export interface HomeServiceRequest {
     hasDoctorVisit?: boolean;
     hasLabCollection?: boolean;
     hasPharmacyDelivery?: boolean;
+    isHospitalizationRequest?: boolean; // NEW: Solicitud de internamiento
+
+    // Logistics & Pricing
+    selectedClinicId?: string; // NEW: Which branch handles this
+    selectedClinicName?: string;
+    distanceKm?: number; // NEW: Calculated distance
+    deliveryFee?: number; // NEW: Calculated logistics fee
+    totalCost?: number; // NEW: Total service cost
+    
+    // Consent
+    consentSigned?: boolean;
 }
 
 // --- PERINATAL & PREGNANCY TYPES ---
@@ -741,6 +760,8 @@ export interface Patient {
   name: string;
   curp: string;
   age: number;
+  ageUnit?: 'Años' | 'Meses' | 'Días'; // NEW: Precise Age Unit for Pediatrics
+  birthDate?: string; // NEW: ISO Date
   sex: 'M' | 'F' | 'O';
   bloodType: string;
   allergies: string[];
@@ -783,6 +804,7 @@ export interface Patient {
   assignedDoctorName?: string;
   hasTelemedicineConsent?: boolean; // Flag para consentimiento firmado
   teleIntake?: TeleIntakeForm; // Datos del cuestionario previo
+  doctorMessage?: string; // Mensaje del doctor al paciente (retrasos, instrucciones)
 
   // Perinatal History (Multi-Pregnancy Support)
   pregnancyHistory?: PregnancyRecord[];

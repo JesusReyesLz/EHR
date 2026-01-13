@@ -23,7 +23,9 @@ import {
   Baby,
   Stethoscope,
   PieChart,
-  ExternalLink
+  ExternalLink,
+  Video,
+  Truck
 } from 'lucide-react';
 import { Patient, PatientStatus, ClinicalNote, ModuleType } from '../types';
 
@@ -92,6 +94,8 @@ const DailyReport: React.FC<DailyReportProps> = ({ patients, notes }) => {
             curp: patient?.curp || '',
             age: patient?.age || 0,
             sex: patient?.sex || '',
+            assignedModule: patient?.assignedModule, // Added to track origin
+            origin: note.origin, // Added to track note origin (Telemedicine, etc)
             dischargeData: note.content // El contenido de la nota SUIVE es el dischargeData
         };
     });
@@ -181,15 +185,21 @@ const DailyReport: React.FC<DailyReportProps> = ({ patients, notes }) => {
   };
 
   const renderSpecifics = (specifics: any) => {
-      if (!specifics || Object.keys(specifics).length === 0) return '-';
+      if (!specifics || Object.keys(specifics).length === 0) return null;
       const entries = Object.entries(specifics);
       return (
-          <div className="text-[8px] uppercase text-slate-500 leading-tight">
+          <div className="flex flex-wrap gap-1 mt-1">
               {entries.map(([key, val]) => {
+                  if (!val) return null;
+                  const displayKey = key.replace(/_/g, ' ');
                   if (typeof val === 'boolean') {
-                      return val ? <span key={key} className="block">• {key}</span> : null;
+                      return val ? <span key={key} className="px-2 py-0.5 bg-slate-100 text-slate-600 rounded text-[7px] font-bold uppercase border border-slate-200">{displayKey}</span> : null;
                   }
-                  return <span key={key} className="block">• {key}: <b>{String(val)}</b></span>;
+                  return (
+                      <span key={key} className="px-2 py-0.5 bg-indigo-50 text-indigo-700 rounded text-[7px] font-bold uppercase border border-indigo-100 truncate max-w-[120px]">
+                          {val}
+                      </span>
+                  );
               })}
           </div>
       );
@@ -314,10 +324,12 @@ const DailyReport: React.FC<DailyReportProps> = ({ patients, notes }) => {
                                      <td className="p-6">
                                          <p className="text-slate-900 font-black uppercase">{r.patientName}</p>
                                          <p className="text-[9px] font-mono text-slate-400 mt-1">{r.curp}</p>
-                                         <div className="flex gap-2 mt-1">
+                                         <div className="flex gap-2 mt-1 flex-wrap">
                                              {data?.programDetails?.isIndigenous && <span className="px-2 py-0.5 bg-amber-100 text-amber-700 rounded text-[7px] font-black uppercase">Indígena</span>}
                                              {data?.programDetails?.isDisability && <span className="px-2 py-0.5 bg-purple-100 text-purple-700 rounded text-[7px] font-black uppercase">Discapacidad</span>}
                                              {data?.programDetails?.isMigrant && <span className="px-2 py-0.5 bg-cyan-100 text-cyan-700 rounded text-[7px] font-black uppercase">Migrante</span>}
+                                             {r.origin === 'Telemedicine' && <span className="px-2 py-0.5 bg-violet-100 text-violet-700 rounded text-[7px] font-black uppercase flex items-center gap-1 border border-violet-200"><Video size={8}/> Telemedicina</span>}
+                                             {r.assignedModule === ModuleType.HOME_SERVICES && <span className="px-2 py-0.5 bg-amber-100 text-amber-700 rounded text-[7px] font-black uppercase flex items-center gap-1 border border-amber-200"><Truck size={8}/> Domiciliario</span>}
                                          </div>
                                      </td>
                                      <td className="p-6 text-center">
@@ -466,6 +478,12 @@ const DailyReport: React.FC<DailyReportProps> = ({ patients, notes }) => {
                               {filteredData.map((r, i) => {
                                   const d = r.dischargeData;
                                   const isFirst = d?.programDetails?.consultationType === '1a Vez';
+                                  
+                                  // Formato de Impresión de Específicos
+                                  const specificsText = d?.programDetails?.specifics 
+                                      ? Object.entries(d.programDetails.specifics).map(([k,v]) => `${k}:${v}`).join(', ')
+                                      : '';
+
                                   return (
                                       <tr key={r.noteId}>
                                           <td className="border border-black p-1 text-center">{i + 1}</td>
@@ -481,7 +499,7 @@ const DailyReport: React.FC<DailyReportProps> = ({ patients, notes }) => {
                                           <td className="border border-black p-1 text-center">{!isFirst ? 'X' : ''}</td>
                                           <td className="border border-black p-1">
                                               {d?.program}<br/>
-                                              <span className="italic">{d?.programDetails?.referral !== 'Ninguna' ? `Ref: ${d?.programDetails?.referral}` : ''}</span>
+                                              <span className="italic text-[8px]">{specificsText}</span>
                                           </td>
                                       </tr>
                                   );

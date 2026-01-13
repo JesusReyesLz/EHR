@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { 
@@ -6,12 +7,218 @@ import {
   ClipboardList, Calendar, MessageSquare, AlertCircle, Info, 
   Search, Trash2, PlusCircle, Quote, FlaskConical, Zap, Repeat, ShieldAlert,
   Clock, Clipboard, Scissors, X, Heart, AlertTriangle, CheckCircle2, Maximize2, Scale, Ruler,
-  Brain, FileText, User
+  Brain, FileText, User, Printer, QrCode, ArrowRight
 } from 'lucide-react';
 import { Patient, ClinicalNote, Vitals, MedicationPrescription, MedicationStock, PriceItem, PriceType, ChargeItem, DoctorInfo } from '../../types';
 import { VADEMECUM_DB, INITIAL_STOCK, INITIAL_PRICES } from '../../constants';
 
-// Added onUpdatePatient prop
+// --- COMPONENTE DE IMPRESIÓN (DISEÑO FINAL) ---
+const EvolutionNotePrint: React.FC<{ 
+  data: any, 
+  vitals: Vitals | null, 
+  patient: Patient, 
+  doctor: DoctorInfo, 
+  noteId: string,
+  onClose: () => void,
+  actionLabel?: string
+}> = ({ data, vitals, patient, doctor, noteId, onClose, actionLabel = "Cerrar" }) => {
+  
+  return (
+    <div className="min-h-screen bg-slate-100 flex justify-center p-4 lg:p-8 animate-in fade-in fixed inset-0 z-[100] overflow-y-auto">
+      <div className="w-full max-w-[215mm] bg-white shadow-2xl flex flex-col relative print:shadow-none print:w-full print:m-0 print:p-0 h-fit min-h-[279mm]">
+        
+        {/* BARRA DE HERRAMIENTAS (NO IMPRIMIR) */}
+        <div className="bg-slate-900 p-4 flex justify-between items-center no-print sticky top-0 z-50 shadow-lg">
+           <div className="flex items-center gap-4 text-white">
+               <ShieldCheck className="text-emerald-400" />
+               <div>
+                   <p className="text-xs font-black uppercase tracking-widest">Nota Certificada</p>
+                   <p className="text-[10px] text-slate-400">Folio: {noteId}</p>
+               </div>
+           </div>
+           <div className="flex gap-3">
+               <button onClick={() => window.print()} className="px-6 py-2 bg-blue-600 text-white rounded-xl text-xs font-black uppercase tracking-widest hover:bg-blue-500 transition-all flex items-center gap-2">
+                   <Printer size={16}/> Imprimir
+               </button>
+               <button onClick={onClose} className="px-6 py-2 bg-slate-700 text-white rounded-xl text-xs font-black uppercase tracking-widest hover:bg-emerald-600 transition-all flex items-center gap-2">
+                   {actionLabel} {actionLabel.includes('Receta') && <ArrowRight size={14}/>}
+               </button>
+           </div>
+        </div>
+
+        {/* CONTENIDO DEL DOCUMENTO */}
+        <div className="p-[15mm] text-slate-900 flex-1 flex flex-col">
+           
+           {/* ENCABEZADO */}
+           <div className="border-b-4 border-slate-900 pb-6 mb-6 flex justify-between items-start">
+               <div>
+                   <h1 className="text-2xl font-black uppercase tracking-tighter">{doctor.hospital || 'CONSULTORIO MÉDICO'}</h1>
+                   <p className="text-xs font-bold text-slate-500 uppercase tracking-[0.2em] mt-1">Nota de Evolución Médica</p>
+                   <p className="text-[10px] font-medium text-slate-400 mt-1">NOM-004-SSA3-2012</p>
+               </div>
+               <div className="text-right">
+                   <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Fecha de Atención</p>
+                   <p className="text-sm font-black uppercase">{new Date().toLocaleDateString('es-MX', {weekday: 'long', day:'numeric', month:'long', year:'numeric'})}</p>
+                   <p className="text-[10px] font-bold text-slate-500 uppercase">{new Date().toLocaleTimeString('es-MX', {hour:'2-digit', minute:'2-digit'})} HRS</p>
+               </div>
+           </div>
+
+           {/* FICHA DE IDENTIFICACIÓN */}
+           <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 mb-8 flex flex-wrap gap-x-8 gap-y-2 text-xs uppercase">
+               <div><span className="font-bold text-slate-500">Paciente:</span> <span className="font-black text-slate-900 text-sm">{patient.name}</span></div>
+               <div><span className="font-bold text-slate-500">Edad:</span> <span className="font-black text-slate-900">{patient.age} Años</span></div>
+               <div><span className="font-bold text-slate-500">Sexo:</span> <span className="font-black text-slate-900">{patient.sex}</span></div>
+               <div><span className="font-bold text-slate-500">Expediente:</span> <span className="font-black text-slate-900">{patient.id}</span></div>
+               <div className="w-full border-t border-slate-200 my-1"></div>
+               <div><span className="font-bold text-slate-500">Alergias:</span> <span className="font-black text-rose-600">{patient.allergies?.join(', ') || 'NEGADAS'}</span></div>
+               <div><span className="font-bold text-slate-500">Tipo Sangre:</span> <span className="font-black text-slate-900">{patient.bloodType || 'DESC'}</span></div>
+           </div>
+
+           {/* CUERPO PRINCIPAL (2 COLUMNAS) */}
+           <div className="flex gap-8 flex-1">
+               
+               {/* COLUMNA IZQUIERDA: SIGNOS VITALES (MARGEN) */}
+               <div className="w-48 flex-shrink-0 border-r-2 border-slate-100 pr-6 space-y-6">
+                   <div className="bg-slate-900 text-white p-2 text-center rounded-lg mb-4">
+                       <p className="text-[10px] font-black uppercase tracking-widest">Signos Vitales</p>
+                   </div>
+
+                   <div className="space-y-4 text-center">
+                       <div className="border-b border-slate-100 pb-2">
+                           <p className="text-[9px] font-bold text-slate-400 uppercase mb-1">Tensión Arterial</p>
+                           <p className="text-xl font-black text-slate-900">{vitals?.bp || '--/--'}</p>
+                           <p className="text-[8px] text-slate-400">mmHg</p>
+                       </div>
+                       <div className="border-b border-slate-100 pb-2">
+                           <p className="text-[9px] font-bold text-slate-400 uppercase mb-1">Frec. Cardiaca</p>
+                           <p className="text-xl font-black text-slate-900">{vitals?.hr || '--'}</p>
+                           <p className="text-[8px] text-slate-400">lpm</p>
+                       </div>
+                       <div className="border-b border-slate-100 pb-2">
+                           <p className="text-[9px] font-bold text-slate-400 uppercase mb-1">Frec. Respiratoria</p>
+                           <p className="text-xl font-black text-slate-900">{vitals?.rr || '--'}</p>
+                           <p className="text-[8px] text-slate-400">rpm</p>
+                       </div>
+                       <div className="border-b border-slate-100 pb-2">
+                           <p className="text-[9px] font-bold text-slate-400 uppercase mb-1">Temperatura</p>
+                           <p className="text-xl font-black text-slate-900">{vitals?.temp || '--'}</p>
+                           <p className="text-[8px] text-slate-400">°C</p>
+                       </div>
+                       <div className="border-b border-slate-100 pb-2">
+                           <p className="text-[9px] font-bold text-slate-400 uppercase mb-1">Saturación O2</p>
+                           <p className="text-xl font-black text-slate-900">{vitals?.o2 || '--'}</p>
+                           <p className="text-[8px] text-slate-400">%</p>
+                       </div>
+                       
+                       <div className="pt-4 space-y-2">
+                           <div className="flex justify-between text-xs">
+                               <span className="font-bold text-slate-500">Peso:</span>
+                               <span className="font-black">{vitals?.weight} kg</span>
+                           </div>
+                           <div className="flex justify-between text-xs">
+                               <span className="font-bold text-slate-500">Talla:</span>
+                               <span className="font-black">{vitals?.height} cm</span>
+                           </div>
+                           <div className="flex justify-between text-xs">
+                               <span className="font-bold text-slate-500">IMC:</span>
+                               <span className="font-black">{vitals?.bmi}</span>
+                           </div>
+                       </div>
+                   </div>
+               </div>
+
+               {/* COLUMNA DERECHA: PSOAP */}
+               <div className="flex-1 space-y-6 text-sm text-justify leading-relaxed">
+                   
+                   {/* SUBJETIVO */}
+                   <div>
+                       <h3 className="text-xs font-black text-slate-900 uppercase tracking-widest border-b border-slate-300 pb-1 mb-2">S - Subjetivo</h3>
+                       <p className="text-slate-700 whitespace-pre-wrap">{data.subjectiveNarrative || 'Sin datos subjetivos relevantes.'}</p>
+                       {data.interrogationSummary && (
+                           <p className="text-xs text-slate-500 mt-2 italic bg-slate-50 p-2 rounded border border-slate-100">{data.interrogationSummary}</p>
+                       )}
+                   </div>
+
+                   {/* OBJETIVO */}
+                   <div>
+                       <h3 className="text-xs font-black text-slate-900 uppercase tracking-widest border-b border-slate-300 pb-1 mb-2">O - Objetivo</h3>
+                       <p className="text-slate-700 whitespace-pre-wrap">{data.objectivePhysical}</p>
+                       {data.mentalStatus && <p className="mt-2"><span className="font-bold text-xs uppercase text-slate-500">Estado Mental:</span> {data.mentalStatus}</p>}
+                       {data.objectiveResults && <p className="mt-2"><span className="font-bold text-xs uppercase text-slate-500">Estudios:</span> {data.objectiveResults}</p>}
+                   </div>
+
+                   {/* ANALISIS */}
+                   <div>
+                       <h3 className="text-xs font-black text-slate-900 uppercase tracking-widest border-b border-slate-300 pb-1 mb-2">A - Análisis y Diagnóstico</h3>
+                       <div className="bg-slate-100 p-3 rounded-lg border-l-4 border-slate-400 mb-2">
+                           <p className="font-black text-slate-900 uppercase">{data.mainProblem}</p>
+                           {data.cieCode && <p className="text-[10px] text-slate-500 font-mono mt-1">{data.cieCode}</p>}
+                       </div>
+                       <p className="text-slate-700">{data.analysisReasoning}</p>
+                       <div className="flex gap-4 mt-2 text-xs font-bold text-slate-600">
+                           <span>Pronóstico Vida: {data.pronosticoVida}</span>
+                           <span>Pronóstico Función: {data.pronosticoFuncion}</span>
+                       </div>
+                   </div>
+
+                   {/* PLAN */}
+                   <div>
+                       <h3 className="text-xs font-black text-slate-900 uppercase tracking-widest border-b border-slate-300 pb-1 mb-2">P - Plan de Manejo</h3>
+                       
+                       {/* Medicamentos */}
+                       {data.prescriptions && data.prescriptions.length > 0 && (
+                           <div className="mb-4">
+                               <p className="text-[10px] font-bold text-slate-500 uppercase mb-1">Farmacoterapia:</p>
+                               <ul className="list-disc ml-4 space-y-1">
+                                   {data.prescriptions.map((med: any, i: number) => (
+                                       <li key={i} className="text-slate-900 font-bold uppercase text-xs">
+                                           {med.name} <span className="font-normal text-slate-600">({med.genericName})</span> - {med.dosage} {med.route} cada {med.frequency} por {med.duration}.
+                                       </li>
+                                   ))}
+                               </ul>
+                           </div>
+                       )}
+
+                       {data.nonPharmaPlan && (
+                           <div className="mb-2">
+                               <p className="text-[10px] font-bold text-slate-500 uppercase">Indicaciones Generales:</p>
+                               <p className="text-slate-700">{data.nonPharmaPlan}</p>
+                           </div>
+                       )}
+                       
+                       <p className="text-xs mt-2"><span className="font-bold text-slate-500 uppercase">Seguimiento:</span> {data.seguimiento}</p>
+                   </div>
+
+               </div>
+           </div>
+
+           {/* PIE DE PÁGINA (FIRMAS) */}
+           <div className="mt-auto pt-12 pb-4">
+               <div className="flex justify-between items-end">
+                   <div className="text-center">
+                       <div className="w-24 h-24 border border-slate-200 mb-2 flex items-center justify-center">
+                           <QrCode size={64} className="text-slate-800"/>
+                       </div>
+                       <p className="text-[8px] font-mono text-slate-400">Sello Digital</p>
+                   </div>
+                   <div className="text-center w-64">
+                       <div className="border-b-2 border-slate-900 mb-2"></div>
+                       <p className="text-sm font-black text-slate-900 uppercase">{doctor.name}</p>
+                       <p className="text-[10px] font-bold text-slate-500 uppercase">{doctor.specialty}</p>
+                       <p className="text-[10px] text-slate-400 uppercase">Céd. Prof. {doctor.cedula}</p>
+                   </div>
+               </div>
+               <div className="text-center mt-8 border-t border-slate-200 pt-2">
+                   <p className="text-[8px] text-slate-400 uppercase">Expediente Clínico Electrónico generado por MedExpediente MX • {new Date().getFullYear()}</p>
+               </div>
+           </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+
 const EvolutionNote: React.FC<{ patients: Patient[], notes: ClinicalNote[], onSaveNote: (n: ClinicalNote) => void, onUpdatePatient: (p: Patient) => void, doctorInfo?: DoctorInfo }> = ({ patients, notes, onSaveNote, onUpdatePatient, doctorInfo }) => {
   const { id, noteId } = useParams();
   const navigate = useNavigate();
@@ -36,27 +243,25 @@ const EvolutionNote: React.FC<{ patients: Patient[], notes: ClinicalNote[], onSa
   }, []);
 
   const [form, setForm] = useState({
-    // Identificación y Generales (La fecha, hora, nombre y edad se toman del contexto del paciente/sistema)
-    
     // S: Subjetivo
-    interrogationSummary: '', // Nuevo: AHFM, APP, APNP, PA, IPAYS
-    subjectiveNarrative: '', // Evolución del cuadro clínico (incluye toxicomanías)
+    interrogationSummary: '', 
+    subjectiveNarrative: '', 
     
     // O: Objetivo
     objectivePhysical: '', 
-    mentalStatus: '', // Nuevo: Estado Mental
-    objectiveResults: '', // Resultados de estudios
+    mentalStatus: '', 
+    objectiveResults: '', 
     vitalsInterpretation: 'Estable / Sin eventualidades',
     
     // A: Análisis
     analysisReasoning: '', 
-    mainProblem: '', // Diagnóstico Principal
+    mainProblem: '', 
     secondaryProblems: '',
-    cieCode: 'CIE-11: ',
+    cieCode: '',
     
     // P: Plan / Pronóstico
-    pronosticoVida: 'Bueno', // Nuevo
-    pronosticoFuncion: 'Bueno', // Nuevo
+    pronosticoVida: 'Bueno', 
+    pronosticoFuncion: 'Bueno', 
     nursingInstructions: '',
     nonPharmaPlan: '',
     medConciliation: '',
@@ -71,11 +276,14 @@ const EvolutionNote: React.FC<{ patients: Patient[], notes: ClinicalNote[], onSa
   const [procSuggestions, setProcSuggestions] = useState<PriceItem[]>([]);
   const [vitals, setVitals] = useState<Vitals | null>(null);
   
-  // Toggle para buscar fármacos o procedimientos
   const [searchType, setSearchType] = useState<'med' | 'proc'>('med');
-  
-  // Estado para secciones expandidas
   const [fullScreenSection, setFullScreenSection] = useState<string | null>(null);
+  
+  // Estado para controlar la vista de impresión
+  const [isNoteFinalized, setIsNoteFinalized] = useState(false);
+  
+  // Estado para manejar la redirección post-impresión
+  const [pendingRedirect, setPendingRedirect] = useState<string | null>(null);
 
   useEffect(() => {
     if (patient) {
@@ -83,6 +291,10 @@ const EvolutionNote: React.FC<{ patients: Patient[], notes: ClinicalNote[], onSa
       if (noteId) {
         const existing = notes.find(n => n.id === noteId);
         if (existing) {
+          // Si está firmada, activar modo lectura/impresión inmediatamente
+          if (existing.isSigned) {
+             setIsNoteFinalized(true);
+          }
           setForm(existing.content as any);
           setMedications(existing.content.prescriptions || []);
           setSelectedProcedures(existing.content.procedures || []);
@@ -90,6 +302,43 @@ const EvolutionNote: React.FC<{ patients: Patient[], notes: ClinicalNote[], onSa
       }
     }
   }, [patient, noteId, notes]);
+
+  // Si la nota está finalizada, mostrar la vista de impresión directamente
+  // Usamos un doctorInfo fallback por si la prop viene undefined (evita crash)
+  if (isNoteFinalized && patient) {
+      const displayDoctor = doctorInfo || { 
+          name: 'Dr. No Identificado', 
+          hospital: 'Clínica', 
+          cedula: '', 
+          specialty: '',
+          email: '', address: '', phone: '' 
+      };
+
+      return (
+          <EvolutionNotePrint 
+              data={{...form, prescriptions: medications}} 
+              vitals={vitals} 
+              patient={patient} 
+              doctor={displayDoctor} 
+              noteId={noteId || 'BORRADOR'}
+              onClose={() => {
+                  if (pendingRedirect) {
+                      navigate(pendingRedirect, { 
+                        state: { 
+                          diagnosis: form.mainProblem, 
+                          meds: medications,
+                          generalPlan: form.nonPharmaPlan,
+                          cieCode: form.cieCode
+                        } 
+                      });
+                  } else {
+                      navigate(`/patient/${id}`);
+                  }
+              }}
+              actionLabel={pendingRedirect ? "Continuar a Receta" : "Cerrar y Salir"}
+          />
+      );
+  }
 
   const handleSearch = (val: string) => {
     setSearchTerm(val);
@@ -113,7 +362,6 @@ const EvolutionNote: React.FC<{ patients: Patient[], notes: ClinicalNote[], onSa
 
       setSuggestions([...stockMatches, ...catalogMatches]);
     } else {
-      // Buscar Procedimientos
       const serviceMatches = prices.filter(p => 
          p.type === PriceType.SERVICE && 
          (p.name.toLowerCase().includes(term) || p.code.toLowerCase().includes(term))
@@ -155,12 +403,14 @@ const EvolutionNote: React.FC<{ patients: Patient[], notes: ClinicalNote[], onSa
     setMedications(medications.map(m => m.id === mid ? { ...m, [field]: value } : m));
   };
 
-  const generateId = (prefix: string) => `${prefix}-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
-
   const handleSave = (finalize: boolean = false, goToPrescription: boolean = false) => {
     if (!form.mainProblem || !form.analysisReasoning) {
       alert("Diagnóstico Principal y Análisis Clínico son obligatorios.");
       return;
+    }
+    
+    if (finalize && !window.confirm("¿Desea firmar y cerrar esta nota? No podrá editarse posteriormente.")) {
+        return;
     }
 
     const currentNoteId = noteId || `EVO-${Date.now()}`;
@@ -174,7 +424,7 @@ const EvolutionNote: React.FC<{ patients: Patient[], notes: ClinicalNote[], onSa
          ...form, 
          vitals, 
          prescriptions: medications, 
-         procedures: selectedProcedures // Guardamos procedimientos
+         procedures: selectedProcedures 
       },
       isSigned: finalize,
       hash: finalize ? `CERT-EVO-${Math.random().toString(36).substr(2, 9).toUpperCase()}` : undefined
@@ -182,67 +432,28 @@ const EvolutionNote: React.FC<{ patients: Patient[], notes: ClinicalNote[], onSa
     
     onSaveNote(newNote);
 
-    // INTEGRACIÓN CON CAJA (SOLO SI SE FINALIZA LA NOTA)
-    if (finalize && patient && onUpdatePatient) {
-        const pendingCharges: ChargeItem[] = [];
-        
-        // 1. Cargos de Medicamentos
-        medications.forEach(med => {
-            const priceItem = prices.find(p => p.name === med.name || p.name.includes(med.name));
-            const unitPrice = priceItem ? priceItem.price : 0;
-            const tax = priceItem ? (unitPrice * priceItem.taxPercent / 100) : 0;
-            
-            pendingCharges.push({
-                id: generateId('CHG'),
-                date: new Date().toISOString(),
-                concept: med.name,
-                quantity: 1, 
-                unitPrice: unitPrice,
-                tax: tax,
-                total: unitPrice + tax,
-                type: 'Farmacia',
-                status: 'Pendiente',
-                linkedInventoryId: priceItem?.linkedInventoryId
-            });
-        });
-
-        // 2. Cargos de Procedimientos
-        selectedProcedures.forEach(proc => {
-            const tax = proc.price * proc.taxPercent / 100;
-            pendingCharges.push({
-                id: generateId('CHG'),
-                date: new Date().toISOString(),
-                concept: proc.name,
-                quantity: 1,
-                unitPrice: proc.price,
-                tax: tax,
-                total: proc.price + tax,
-                type: 'Honorarios',
-                status: 'Pendiente',
-                linkedSupplies: proc.linkedSupplies
-            });
-        });
-
-        if (pendingCharges.length > 0) {
-            onUpdatePatient({
-                ...patient,
-                paymentStatus: 'Pendiente',
-                pendingCharges: [...(patient.pendingCharges || []), ...pendingCharges]
-            });
+    if (finalize) {
+        // Al finalizar, cambiamos al modo de visualización de impresión
+        setIsNoteFinalized(true);
+        // Configurar la siguiente acción para el botón de la vista previa
+        if (goToPrescription) {
+            setPendingRedirect(`/patient/${id}/prescription`);
+        } else {
+            setPendingRedirect(null);
         }
-    }
-
-    if (goToPrescription) {
-      navigate(`/patient/${id}/prescription`, { 
-        state: { 
-          diagnosis: form.mainProblem, 
-          meds: medications,
-          generalPlan: form.nonPharmaPlan,
-          cieCode: form.cieCode
-        } 
-      });
     } else {
-      navigate(`/patient/${id}`, { state: finalize ? { openNoteId: currentNoteId } : {} });
+        alert("Borrador guardado correctamente.");
+        // Si es borrador pero quiere ir a receta, navegamos directamente
+        if (goToPrescription) {
+             navigate(`/patient/${id}/prescription`, { 
+                state: { 
+                  diagnosis: form.mainProblem, 
+                  meds: medications,
+                  generalPlan: form.nonPharmaPlan,
+                  cieCode: form.cieCode
+                } 
+              });
+        }
     }
   };
 

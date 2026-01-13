@@ -11,54 +11,61 @@ const todayStr = getLocalToday();
 
 export const MOCK_DOCTORS: DoctorInfo[] = [
   {
+    id: 'DR-01',
     name: 'JESUS REYES LOZANO',
     cedula: '12840177',
     institution: 'UNAM',
     specialty: 'Cirugía General',
     email: 'dr.reyes@med.mx',
-    address: 'Consultorio 101',
+    address: 'Av. Insurgentes Sur 1200, CDMX',
     phone: '55 1234 5678',
-    hospital: 'San Francisco',
+    hospital: 'San Francisco (Matriz)',
     isPremium: true,
     rating: 4.9,
     reviewCount: 120,
     price: 800,
     availableFrom: '09:00 AM',
-    schedule: { days: [1, 3, 5], startHour: '09:00', endHour: '14:00', slotDuration: 30 } // L-M-V
+    schedule: { days: [1, 3, 5], startHour: '09:00', endHour: '14:00', slotDuration: 30 },
+    location: { lat: 19.373, lng: -99.176 } // Del Valle
   },
   {
+    id: 'DR-02',
     name: 'MARIA GONZALEZ',
     cedula: '87654321',
     institution: 'TEC MONTERREY',
     specialty: 'Pediatría',
     email: 'dra.maria@med.mx',
-    address: 'Consultorio 205',
+    address: 'Calle Ohio 15, Nápoles',
     phone: '55 8765 4321',
-    hospital: 'San Francisco',
+    hospital: 'San Francisco (Sucursal Nápoles)',
     isPremium: true,
     rating: 5.0,
     reviewCount: 85,
     price: 900,
     availableFrom: '10:00 AM',
-    schedule: { days: [2, 4, 6], startHour: '10:00', endHour: '16:00', slotDuration: 45 } // M-J-S
+    schedule: { days: [2, 4, 6], startHour: '10:00', endHour: '16:00', slotDuration: 45 },
+    location: { lat: 19.395, lng: -99.174 } // Nápoles
   },
   {
+    id: 'DR-03',
     name: 'ROBERTO CRUZ',
     cedula: '45678912',
     institution: 'IPN',
     specialty: 'Medicina Interna',
     email: 'dr.cruz@med.mx',
-    address: 'Consultorio 304',
+    address: 'Consultorio 304, Polanco',
     phone: '55 1122 3344',
-    hospital: 'San Francisco',
+    hospital: 'San Francisco (Polanco)',
     isPremium: false,
     rating: 4.5,
     reviewCount: 42,
     price: 700,
     availableFrom: '11:30 AM',
-    schedule: { days: [1, 2, 3, 4, 5], startHour: '15:00', endHour: '20:00', slotDuration: 30 } // L-V tarde
+    schedule: { days: [1, 2, 3, 4, 5], startHour: '15:00', endHour: '20:00', slotDuration: 30 },
+    location: { lat: 19.432, lng: -99.193 } // Polanco
   },
   {
+    id: 'DR-04',
     name: 'ANA TORRES',
     cedula: '11223344',
     institution: 'UAG',
@@ -72,7 +79,8 @@ export const MOCK_DOCTORS: DoctorInfo[] = [
     reviewCount: 210,
     price: 1000,
     availableFrom: 'En Línea',
-    schedule: { days: [1, 2, 3, 4, 5], startHour: '09:00', endHour: '18:00', slotDuration: 30 } // L-V todo el día
+    schedule: { days: [1, 2, 3, 4, 5], startHour: '09:00', endHour: '18:00', slotDuration: 30 },
+    location: { lat: 19.373, lng: -99.176 } // Misma que Matriz
   }
 ];
 
@@ -318,7 +326,8 @@ export const INITIAL_STOCK: MedicationStock[] = [
 
 // Datos iniciales para el Catálogo de Precios - Incluyendo Estudios y Procedimientos
 export const INITIAL_PRICES: PriceItem[] = [
-  { id: 'P-001', code: 'CON-GEN', name: 'Consulta Médica General', type: PriceType.SERVICE, category: 'Honorarios', price: 500, taxPercent: 16 },
+  { id: 'P-LOG-01', code: 'LOG-BASE', name: 'Tarifa Base Servicio a Domicilio', type: PriceType.SERVICE, category: 'Logística', price: 150, taxPercent: 16, isHomeServiceAvailable: true },
+  { id: 'P-001', code: 'CON-GEN', name: 'Consulta Médica General', type: PriceType.SERVICE, category: 'Honorarios', price: 500, taxPercent: 16, isHomeServiceAvailable: true },
   { id: 'P-002', code: 'CON-ESP', name: 'Consulta Especialidad', type: PriceType.SERVICE, category: 'Honorarios', price: 900, taxPercent: 16 },
   { id: 'P-003', code: 'URG-BAS', name: 'Atención Urgencias Básica', type: PriceType.SERVICE, category: 'Urgencias', price: 800, taxPercent: 16 },
   { id: 'P-004', code: 'TEMPRA', name: 'Tempra (Paracetamol) 500mg', type: PriceType.PRODUCT, category: 'Farmacia', price: 120, taxPercent: 0, linkedInventoryId: 'S-001' },
@@ -331,6 +340,7 @@ export const INITIAL_PRICES: PriceItem[] = [
     category: 'Procedimientos', 
     price: 850, 
     taxPercent: 16,
+    isHomeServiceAvailable: true,
     linkedSupplies: [
       { inventoryId: 'INS-001', quantity: 1, name: 'SUTURA NYLON' },
       { inventoryId: 'INS-002', quantity: 3, name: 'GASAS' },
@@ -347,6 +357,7 @@ export const INITIAL_PRICES: PriceItem[] = [
     category: 'Procedimientos', 
     price: 450, 
     taxPercent: 16,
+    isHomeServiceAvailable: true,
     linkedSupplies: [
       { inventoryId: 'INS-002', quantity: 4, name: 'GASAS' },
       { inventoryId: 'INS-003', quantity: 1, name: 'SOLUCIÓN SALINA (Uso parcial)' }, // Se descuenta 1 unidad de inventario aunque se use poco
@@ -404,7 +415,8 @@ export const INITIAL_PRICES: PriceItem[] = [
     type: PriceType.SERVICE,
     category: 'Estudios / Auxiliares',
     price: 350 + (i * 50),
-    taxPercent: 16
+    taxPercent: 16,
+    isHomeServiceAvailable: true
   })),
   // Estudios de Imagen
   ...IMAGING_STUDIES.map((s, i) => ({
@@ -414,7 +426,8 @@ export const INITIAL_PRICES: PriceItem[] = [
     type: PriceType.SERVICE,
     category: 'Estudios / Auxiliares',
     price: 600 + (i * 200),
-    taxPercent: 16
+    taxPercent: 16,
+    isHomeServiceAvailable: s.includes('Electrocardiograma') // Solo EKG a domicilio por defecto
   }))
 ];
 

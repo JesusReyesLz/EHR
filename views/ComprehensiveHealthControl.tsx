@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { 
@@ -13,16 +14,9 @@ import {
 } from 'recharts';
 import { Patient, ClinicalNote, HealthControlRecord, PreventiveVisit, VaccineRecord, ScreeningRecord, PromotionTopic, GeriatricAssessment, AdolescentAssessment } from '../types';
 
-// --- INTERFACES PARA EL MOTOR DE ESCALAS ---
-interface ScaleOption {
-    label: string;
-    points: number;
-}
-interface ScaleQuestion {
-    id: string;
-    text: string;
-    options: ScaleOption[];
-}
+// --- INTERFACES ---
+interface ScaleOption { label: string; points: number; }
+interface ScaleQuestion { id: string; text: string; options: ScaleOption[]; }
 interface MedicalScale {
     id: string;
     title: string;
@@ -31,7 +25,122 @@ interface MedicalScale {
     interpret: (score: number) => { classification: string; color: string; risk: 'Bajo' | 'Medio' | 'Alto' };
 }
 
-// --- BASE DE CONOCIMIENTOS DE ESCALAS CLÍNICAS ---
+// --- HELPER: CALCULATE AGE IN MONTHS ---
+const calculateAgeInMonths = (birthDate: string) => {
+    if (!birthDate) return 0;
+    const birth = new Date(birthDate);
+    const now = new Date();
+    const months = (now.getFullYear() - birth.getFullYear()) * 12 + (now.getMonth() - birth.getMonth());
+    return months; // Puede devolver 0 si es recien nacido
+};
+
+const getDetailedAge = (birthDate: string) => {
+    if (!birthDate) return '';
+    const birth = new Date(birthDate);
+    const now = new Date();
+    let years = now.getFullYear() - birth.getFullYear();
+    let months = now.getMonth() - birth.getMonth();
+    let days = now.getDate() - birth.getDate();
+    if (days < 0) {
+        months--;
+        days += new Date(now.getFullYear(), now.getMonth(), 0).getDate();
+    }
+    if (months < 0) {
+        years--;
+        months += 12;
+    }
+    return `${years > 0 ? years + 'a ' : ''}${months}m ${days}d`;
+};
+
+// --- BASE DE CONOCIMIENTOS DE ESCALAS EDI (AUTOMATIZADAS POR GRUPO DE EDAD) ---
+const EDI_QUESTIONS_BY_GROUP: Record<string, ScaleQuestion[]> = {
+    '1': [ // Grupo 1: 1 mes
+        { id: 'MG', text: 'MG: ¿Mantiene la cabeza levantada momentáneamente?', options: [{label:'Sí', points:1}, {label:'No', points:0}]},
+        { id: 'MF', text: 'MF: ¿Aprieta su dedo cuando lo pone en su mano?', options: [{label:'Sí', points:1}, {label:'No', points:0}]},
+        { id: 'LE', text: 'LE: ¿Llora cuando está incómodo?', options: [{label:'Sí', points:1}, {label:'No', points:0}]},
+        { id: 'SO', text: 'SO: ¿Se calma cuando le hablan o lo cargan?', options: [{label:'Sí', points:1}, {label:'No', points:0}]}
+    ],
+    '2': [ // Grupo 2: 2 meses
+        { id: 'MG', text: 'MG: ¿Levanta la cabeza y parte del pecho boca abajo?', options: [{label:'Sí', points:1}, {label:'No', points:0}]},
+        { id: 'MF', text: 'MF: ¿Abre las manos frecuentemente?', options: [{label:'Sí', points:1}, {label:'No', points:0}]},
+        { id: 'LE', text: 'LE: ¿Emite sonidos (gorjeos)?', options: [{label:'Sí', points:1}, {label:'No', points:0}]},
+        { id: 'SO', text: 'SO: ¿Sonríe ante estímulos (sonrisa social)?', options: [{label:'Sí', points:1}, {label:'No', points:0}]}
+    ],
+    '3': [ // Grupo 3: 3 meses
+        { id: 'MG', text: 'MG: ¿Sostiene la cabeza firme al estar sentado?', options: [{label:'Sí', points:1}, {label:'No', points:0}]},
+        { id: 'MF', text: 'MF: ¿Sigue objetos con la mirada 180 grados?', options: [{label:'Sí', points:1}, {label:'No', points:0}]},
+        { id: 'LE', text: 'LE: ¿Grita o ríe fuerte?', options: [{label:'Sí', points:1}, {label:'No', points:0}]},
+        { id: 'SO', text: 'SO: ¿Busca con la mirada la fuente de un sonido?', options: [{label:'Sí', points:1}, {label:'No', points:0}]}
+    ],
+    '4': [ // Grupo 4: 4 meses
+        { id: 'MG', text: 'MG: ¿Se apoya en antebrazos boca abajo?', options: [{label:'Sí', points:1}, {label:'No', points:0}]},
+        { id: 'MF', text: 'MF: ¿Agarra objetos voluntariamente?', options: [{label:'Sí', points:1}, {label:'No', points:0}]},
+        { id: 'LE', text: 'LE: ¿Hace burbujas o "frambuesas"?', options: [{label:'Sí', points:1}, {label:'No', points:0}]},
+        { id: 'SO', text: 'SO: ¿Se ríe a carcajadas?', options: [{label:'Sí', points:1}, {label:'No', points:0}]}
+    ],
+    '5': [ // Grupo 5: 5 meses
+        { id: 'MG', text: 'MG: ¿Rueda de boca abajo a boca arriba?', options: [{label:'Sí', points:1}, {label:'No', points:0}]},
+        { id: 'MF', text: 'MF: ¿Pasa objetos de una mano a otra?', options: [{label:'Sí', points:1}, {label:'No', points:0}]},
+        { id: 'LE', text: 'LE: ¿Balbucea (ba-ba, da-da)?', options: [{label:'Sí', points:1}, {label:'No', points:0}]},
+        { id: 'SO', text: 'SO: ¿Reconoce a sus cuidadores principales?', options: [{label:'Sí', points:1}, {label:'No', points:0}]}
+    ],
+    '6': [ // Grupo 6: 6-7 meses
+        { id: 'MG', text: 'MG: ¿Se sienta sin apoyo por momentos?', options: [{label:'Sí', points:1}, {label:'No', points:0}]},
+        { id: 'MF', text: 'MF: ¿Intenta agarrar objetos pequeños (rastrillo)?', options: [{label:'Sí', points:1}, {label:'No', points:0}]},
+        { id: 'LE', text: 'LE: ¿Imita sonidos?', options: [{label:'Sí', points:1}, {label:'No', points:0}]},
+        { id: 'SO', text: 'SO: ¿Muestra ansiedad ante extraños?', options: [{label:'Sí', points:1}, {label:'No', points:0}]}
+    ],
+    '8': [ // Grupo 8: 8-9 meses
+        { id: 'MG', text: 'MG: ¿Gatea o se arrastra?', options: [{label:'Sí', points:1}, {label:'No', points:0}]},
+        { id: 'MF', text: 'MF: ¿Usa pinza fina (índice-pulgar)?', options: [{label:'Sí', points:1}, {label:'No', points:0}]},
+        { id: 'LE', text: 'LE: ¿Dice "mamá" o "papá" inespecífico?', options: [{label:'Sí', points:1}, {label:'No', points:0}]},
+        { id: 'SO', text: 'SO: ¿Juega a "dónde está"?', options: [{label:'Sí', points:1}, {label:'No', points:0}]}
+    ],
+    '10': [ // Grupo 9: 10-12 meses
+        { id: 'MG', text: 'MG: ¿Se para con apoyo o camina sostenido?', options: [{label:'Sí', points:1}, {label:'No', points:0}]},
+        { id: 'MF', text: 'MF: ¿Mete objetos en un recipiente?', options: [{label:'Sí', points:1}, {label:'No', points:0}]},
+        { id: 'LE', text: 'LE: ¿Dice "mamá" o "papá" específico?', options: [{label:'Sí', points:1}, {label:'No', points:0}]},
+        { id: 'SO', text: 'SO: ¿Dice adiós con la mano?', options: [{label:'Sí', points:1}, {label:'No', points:0}]}
+    ],
+    '13': [ // Grupo 10: 13-15 meses
+        { id: 'MG', text: 'MG: ¿Camina solo?', options: [{label:'Sí', points:1}, {label:'No', points:0}]},
+        { id: 'MF', text: 'MF: ¿Hace torres de 2 cubos?', options: [{label:'Sí', points:1}, {label:'No', points:0}]},
+        { id: 'LE', text: 'LE: ¿Dice 3-5 palabras?', options: [{label:'Sí', points:1}, {label:'No', points:0}]},
+        { id: 'SO', text: 'SO: ¿Señala lo que quiere?', options: [{label:'Sí', points:1}, {label:'No', points:0}]}
+    ],
+    '16': [ // Grupo 11: 16-18 meses
+        { id: 'MG', text: 'MG: ¿Sube escaleras gateando o con ayuda?', options: [{label:'Sí', points:1}, {label:'No', points:0}]},
+        { id: 'MF', text: 'MF: ¿Come con cuchara (aunque derrame)?', options: [{label:'Sí', points:1}, {label:'No', points:0}]},
+        { id: 'LE', text: 'LE: ¿Tiene un vocabulario de 10 palabras?', options: [{label:'Sí', points:1}, {label:'No', points:0}]},
+        { id: 'SO', text: 'SO: ¿Imita tareas del hogar?', options: [{label:'Sí', points:1}, {label:'No', points:0}]}
+    ],
+    '19': [ // Grupo 12: 19-24 meses
+        { id: 'MG', text: 'MG: ¿Patea una pelota?', options: [{label:'Sí', points:1}, {label:'No', points:0}]},
+        { id: 'MF', text: 'MF: ¿Hace torres de 4-6 cubos?', options: [{label:'Sí', points:1}, {label:'No', points:0}]},
+        { id: 'LE', text: 'LE: ¿Une 2 palabras (frases)?', options: [{label:'Sí', points:1}, {label:'No', points:0}]},
+        { id: 'SO', text: 'SO: ¿Juega con otros niños?', options: [{label:'Sí', points:1}, {label:'No', points:0}]}
+    ],
+    '25': [ // Grupo 13: 25-36 meses (2-3 años)
+        { id: 'MG', text: 'MG: ¿Salta con ambos pies?', options: [{label:'Sí', points:1}, {label:'No', points:0}]},
+        { id: 'MF', text: 'MF: ¿Copia un círculo?', options: [{label:'Sí', points:1}, {label:'No', points:0}]},
+        { id: 'LE', text: 'LE: ¿Dice su nombre y edad?', options: [{label:'Sí', points:1}, {label:'No', points:0}]},
+        { id: 'SO', text: 'SO: ¿Se viste con ayuda?', options: [{label:'Sí', points:1}, {label:'No', points:0}]}
+    ],
+    '37': [ // Grupo 14: 37-48 meses (3-4 años)
+        { id: 'MG', text: 'MG: ¿Se para en un pie por 2 seg?', options: [{label:'Sí', points:1}, {label:'No', points:0}]},
+        { id: 'MF', text: 'MF: ¿Dibuja una persona (cabeza y cuerpo)?', options: [{label:'Sí', points:1}, {label:'No', points:0}]},
+        { id: 'LE', text: 'LE: ¿Cuenta una historia simple?', options: [{label:'Sí', points:1}, {label:'No', points:0}]},
+        { id: 'SO', text: 'SO: ¿Va al baño solo?', options: [{label:'Sí', points:1}, {label:'No', points:0}]}
+    ],
+    '49': [ // Grupo 15: 49-60 meses (4-5 años)
+        { id: 'MG', text: 'MG: ¿Salta en un pie?', options: [{label:'Sí', points:1}, {label:'No', points:0}]},
+        { id: 'MF', text: 'MF: ¿Copia un cuadrado?', options: [{label:'Sí', points:1}, {label:'No', points:0}]},
+        { id: 'LE', text: 'LE: ¿Habla claramente (desconocidos le entienden)?', options: [{label:'Sí', points:1}, {label:'No', points:0}]},
+        { id: 'SO', text: 'SO: ¿Sigue reglas de juegos?', options: [{label:'Sí', points:1}, {label:'No', points:0}]}
+    ]
+};
+
+// --- BASE DE CONOCIMIENTOS DE ESCALAS CLÍNICAS (GENERAL + EDI DINÁMICO) ---
 const MEDICAL_SCALES: Record<string, MedicalScale> = {
     // --- SALUD MENTAL ---
     'PHQ-9': {
@@ -77,7 +186,6 @@ const MEDICAL_SCALES: Record<string, MedicalScale> = {
             return { classification: 'Ansiedad Severa', color: 'text-rose-600', risk: 'Alto' };
         }
     },
-    // --- GERIATRÍA ---
     'KATZ': {
         id: 'KATZ',
         title: 'Índice de Katz (ABVD)',
@@ -113,7 +221,6 @@ const MEDICAL_SCALES: Record<string, MedicalScale> = {
             return { classification: 'Probable Depresión', color: 'text-rose-600', risk: 'Alto' };
         }
     },
-    // --- RIESGO METABÓLICO ---
     'FINDRISC': {
         id: 'FINDRISC',
         title: 'Test FINDRISC (Riesgo Diabetes)',
@@ -135,26 +242,10 @@ const MEDICAL_SCALES: Record<string, MedicalScale> = {
             if (score <= 20) return { classification: 'Riesgo Alto (33%)', color: 'text-orange-600', risk: 'Alto' };
             return { classification: 'Riesgo Muy Alto (50%)', color: 'text-rose-600', risk: 'Alto' };
         }
-    },
-    // --- DESARROLLO INFANTIL ---
-    'EDI_2M': {
-        id: 'EDI_2M',
-        title: 'Evaluación Desarrollo Infantil (2 Meses)',
-        description: 'Hitos del desarrollo esperados para la edad.',
-        questions: [
-            { id: '1', text: '¿Sigue con la mirada objetos en movimiento?', options: [{label:'Sí', points:1}, {label:'No', points:0}] },
-            { id: '2', text: '¿Reacciona a sonidos fuertes?', options: [{label:'Sí', points:1}, {label:'No', points:0}] },
-            { id: '3', text: '¿Sonríe cuando se le habla?', options: [{label:'Sí', points:1}, {label:'No', points:0}] },
-            { id: '4', text: '¿Puede levantar la cabeza estando boca abajo?', options: [{label:'Sí', points:1}, {label:'No', points:0}] }
-        ],
-        interpret: (score) => {
-            if (score === 4) return { classification: 'Desarrollo Normal', color: 'text-emerald-600', risk: 'Bajo' };
-            return { classification: 'Rezago en el Desarrollo', color: 'text-rose-600', risk: 'Alto' };
-        }
     }
 };
 
-// CONFIGURACIÓN MAESTRA DE ETAPAS DE VIDA Y ACCIONES (BASE DE CONOCIMIENTOS)
+// CONFIGURACIÓN MAESTRA DE ETAPAS DE VIDA
 const LIFE_STAGES_CONFIG: Record<string, {
     color: string;
     icon: any;
@@ -162,7 +253,7 @@ const LIFE_STAGES_CONFIG: Record<string, {
     screenings: { name: string, cat: string, freq: string, gender?: 'M'|'F' }[];
     promotion: string[]; 
     specificAssessmentLabel?: string; 
-    availableScales: string[]; // IDs de las escalas disponibles
+    availableScales: string[]; // Se llena dinámicamente
 }> = {
     'Recién Nacido': { // 0-28 días
         color: 'bg-pink-100 text-pink-700 border-pink-200',
@@ -209,7 +300,7 @@ const LIFE_STAGES_CONFIG: Record<string, {
             'Higiene Bucal (Primeros Dientes)',
             'Sueño y Rutinas'
         ],
-        availableScales: ['EDI_2M']
+        availableScales: [] // Se llena dinámicamente
     },
     'Preescolar': { // 2-5 años
         color: 'bg-emerald-100 text-emerald-700 border-emerald-200',
@@ -360,31 +451,88 @@ const ComprehensiveHealthControl: React.FC<{ patients: Patient[], onSaveNote: (n
   const navigate = useNavigate();
   const patient = patients.find(p => p.id === id);
 
-  // States
   const [activeTab, setActiveTab] = useState<'dashboard' | 'vaccines' | 'screenings' | 'growth' | 'promotion' | 'specifics'>('dashboard');
   const [showVisitModal, setShowVisitModal] = useState(false);
-  
-  // Interactive Scale State
   const [activeScaleId, setActiveScaleId] = useState<string | null>(null);
   const [scaleAnswers, setScaleAnswers] = useState<Record<string, number>>({});
   const [completedScales, setCompletedScales] = useState<Record<string, {score: number, interpretation: string, date: string}>>({});
 
-  // Determinación de Etapa de Vida
-  const currentStage = useMemo(() => {
-      if (!patient) return 'Adulto';
-      const age = patient.age;
-      if (age < 1) return 'Lactante'; // Simplificado
-      if (age >= 1 && age <= 2) return 'Lactante';
-      if (age >= 3 && age <= 5) return 'Preescolar';
-      if (age >= 6 && age <= 9) return 'Escolar';
-      if (age >= 10 && age <= 19) return 'Adolescente';
-      if (age >= 20 && age <= 39) return 'Adulto Joven';
-      if (age >= 40 && age <= 59) return 'Adulto';
-      if (age >= 60) return 'Adulto Mayor';
-      return 'Adulto';
+  const [patientAgeInMonths, setPatientAgeInMonths] = useState(0);
+
+  // Calcular edad en meses al cargar
+  useEffect(() => {
+    if (patient?.birthDate) {
+        setPatientAgeInMonths(calculateAgeInMonths(patient.birthDate));
+    } else if (patient?.age && patient?.ageUnit === 'Meses') {
+        setPatientAgeInMonths(patient.age);
+    } else if (patient?.age && patient?.ageUnit === 'Años') {
+        setPatientAgeInMonths(patient.age * 12);
+    }
   }, [patient]);
 
-  const stageConfig = LIFE_STAGES_CONFIG[currentStage];
+  // --- LÓGICA DE SELECCIÓN DE EDI ---
+  const currentEdiScaleId = useMemo(() => {
+      if (patientAgeInMonths <= 1) return 'EDI_1M';
+      if (patientAgeInMonths === 2) return 'EDI_2M';
+      if (patientAgeInMonths === 3) return 'EDI_3M';
+      if (patientAgeInMonths === 4) return 'EDI_4M';
+      if (patientAgeInMonths === 5) return 'EDI_5M';
+      if (patientAgeInMonths >= 6 && patientAgeInMonths <= 7) return 'EDI_6M';
+      if (patientAgeInMonths >= 8 && patientAgeInMonths <= 9) return 'EDI_8M';
+      if (patientAgeInMonths >= 10 && patientAgeInMonths <= 12) return 'EDI_10M';
+      if (patientAgeInMonths >= 13 && patientAgeInMonths <= 15) return 'EDI_13M';
+      if (patientAgeInMonths >= 16 && patientAgeInMonths <= 18) return 'EDI_16M';
+      if (patientAgeInMonths >= 19 && patientAgeInMonths <= 24) return 'EDI_19M';
+      if (patientAgeInMonths >= 25 && patientAgeInMonths <= 36) return 'EDI_25M';
+      if (patientAgeInMonths >= 37 && patientAgeInMonths <= 48) return 'EDI_37M';
+      if (patientAgeInMonths >= 49 && patientAgeInMonths <= 60) return 'EDI_49M';
+      return null;
+  }, [patientAgeInMonths]);
+
+  // Determinación de Etapa de Vida (Actualizada)
+  const currentStage = useMemo(() => {
+      if (!patient) return 'Adulto';
+      if (patientAgeInMonths <= 1) return 'Recién Nacido';
+      if (patientAgeInMonths <= 24) return 'Lactante';
+      if (patientAgeInMonths <= 71) return 'Preescolar';
+      if (patient.age >= 6 && patient.age <= 9) return 'Escolar';
+      if (patient.age >= 10 && patient.age <= 19) return 'Adolescente';
+      if (patient.age >= 20 && patient.age <= 39) return 'Adulto Joven';
+      if (patient.age >= 40 && patient.age <= 59) return 'Adulto';
+      if (patient.age >= 60) return 'Adulto Mayor';
+      return 'Adulto';
+  }, [patient, patientAgeInMonths]);
+
+  const stageConfig = useMemo(() => {
+      const config = LIFE_STAGES_CONFIG[currentStage];
+      // Insertar EDI Dinámico si aplica
+      if ((currentStage === 'Lactante' || currentStage === 'Preescolar') && currentEdiScaleId) {
+          return { ...config, availableScales: [currentEdiScaleId] };
+      }
+      return config;
+  }, [currentStage, currentEdiScaleId]);
+
+  // Registrar escala EDI dinámica en MEDICAL_SCALES si es necesario
+  useEffect(() => {
+      if (currentEdiScaleId) {
+          const groupKey = currentEdiScaleId.replace('EDI_', '').replace('M', ''); // Obtiene '1', '2', etc.
+          const questions = EDI_QUESTIONS_BY_GROUP[groupKey];
+          
+          if (questions) {
+              MEDICAL_SCALES[currentEdiScaleId] = {
+                  id: currentEdiScaleId,
+                  title: `Evaluación Desarrollo Infantil (${patientAgeInMonths} Meses)`,
+                  description: 'Hitos del desarrollo esperados para la edad exacta.',
+                  questions: questions,
+                  interpret: (score) => {
+                      if (score === 4) return { classification: 'Desarrollo Normal (Verde)', color: 'text-emerald-600', risk: 'Bajo' };
+                      if (score >= 2) return { classification: 'Rezago en Desarrollo (Amarillo)', color: 'text-amber-600', risk: 'Medio' };
+                      return { classification: 'Riesgo de Retraso (Rojo)', color: 'text-rose-600', risk: 'Alto' };
+                  }
+              };
+          }
+      }
+  }, [currentEdiScaleId, patientAgeInMonths]);
 
   // Inicializar registro de salud si no existe
   useEffect(() => {
@@ -621,7 +769,9 @@ const ComprehensiveHealthControl: React.FC<{ patients: Patient[], onSaveNote: (n
                         <span className={`px-3 py-1 rounded-lg text-[10px] font-black uppercase bg-white/20 text-white border border-white/30`}>
                             {currentStage}
                         </span>
-                        <p className="text-[10px] font-bold uppercase tracking-widest opacity-80">Curso de Vida: Prevención y Promoción</p>
+                        <p className="text-[10px] font-bold uppercase tracking-widest opacity-80">
+                            {getDetailedAge(patient.birthDate || '') || `${patient.age} ${patient.ageUnit || 'Años'}`}
+                        </p>
                     </div>
                 </div>
             </div>

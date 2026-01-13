@@ -12,15 +12,15 @@ import {
   ArrowLeft, GraduationCap, MessageSquare, ImageIcon, Ambulance, FlaskConical, Plus, Coffee, Truck, Wallet, DollarSign, Download,
   History, Navigation, Bot, Send, Headphones, CalendarCheck, FileSignature, AlertOctagon, Check, Smartphone, Home,
   Pill, ChevronLeft, TrendingUp, Menu, Info, Heart, ShoppingBag, Package, Watch, Award, BookOpen, ToggleRight, ToggleLeft,
-  MapPinned, Syringe, CalendarDays, Siren, Bike
+  MapPinned, Syringe, CalendarDays, Siren, Bike, Route, FileCheck, Printer, QrCode, Bell, MessageCircle
 } from 'lucide-react';
-import { Patient, PatientStatus, AgendaStatus, PriorityLevel, ModuleType, DoctorInfo, TeleIntakeForm, HomeServiceRequest, ClinicalNote, StaffMember } from '../types';
-import { MOCK_DOCTORS } from '../constants';
+import { Patient, PatientStatus, AgendaStatus, PriorityLevel, ModuleType, DoctorInfo, TeleIntakeForm, HomeServiceRequest, ClinicalNote, StaffMember, PriceItem } from '../types';
+import { MOCK_DOCTORS, INITIAL_PRICES } from '../constants';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 interface TelemedicineDashboardProps {
   patients: Patient[];
-  onUpdateStatus: (id: string, status: PatientStatus) => void;
+  onUpdateStatus: (id: string, status: PatientStatus, agendaStatus?: AgendaStatus) => void;
   onAddPatient?: (patient: Patient) => void;
   onAddHomeRequest?: (req: HomeServiceRequest) => void;
   onUpdateHomeRequest?: (req: HomeServiceRequest) => void; 
@@ -29,10 +29,10 @@ interface TelemedicineDashboardProps {
   currentUser?: DoctorInfo; 
   notes?: ClinicalNote[]; 
   homeRequests?: HomeServiceRequest[];
-  staffList?: StaffMember[]; 
+  staffList?: StaffMember[];
+  onUpdatePatient?: (patient: Patient) => void; // Added to update doctorMessage
 }
 
-// --- CONSTANTES LOCALES PARA SERVICIOS ---
 const PHARMACY_ITEMS = [
     { id: 1, name: 'Paracetamol 500mg', price: 50, category: 'Dolor', image: '💊' },
     { id: 2, name: 'Ibuprofeno 400mg', price: 85, category: 'Dolor', image: '💊' },
@@ -42,14 +42,6 @@ const PHARMACY_ITEMS = [
     { id: 6, name: 'Termómetro Digital', price: 150, category: 'Equipo', image: '🌡️' },
     { id: 7, name: 'Vitaminas C + Zinc', price: 120, category: 'Suplementos', image: '🍊' },
     { id: 8, name: 'Jarabe para Tos', price: 95, category: 'Respiratorio', image: '🥣' },
-];
-
-const LAB_PACKAGES = [
-    { id: 1, name: 'Check-up General', includes: 'BH, QS(6), EGO', price: 450, time: '24 hrs' },
-    { id: 2, name: 'Perfil Diabético', includes: 'Glucosa, HbA1c, Microalbúmina', price: 600, time: '24 hrs' },
-    { id: 3, name: 'Perfil Tiroideo', includes: 'TSH, T3, T4', price: 550, time: '48 hrs' },
-    { id: 4, name: 'Prueba COVID-19', includes: 'Antígenos Nasofaríngeo', price: 300, time: '2 hrs' },
-    { id: 5, name: 'Perfil Lipídico', includes: 'Colesterol, Triglicéridos, HDL/LDL', price: 400, time: '24 hrs' },
 ];
 
 const MOCK_IOT_DATA = [
@@ -89,6 +81,30 @@ const generateTimeSlots = (schedule: DoctorInfo['schedule'], date: Date) => {
     return slots;
 };
 
+// --- LOGÍSTICA DE DISTANCIA (HAVERSINE) ---
+function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number) {
+  const R = 6371; // Radius of the earth in km
+  const dLat = deg2rad(lat2 - lat1);
+  const dLon = deg2rad(lon2 - lon1);
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) *
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  const d = R * c; // Distance in km
+  return d;
+}
+
+function deg2rad(deg: number) {
+  return deg * (Math.PI / 180);
+}
+
+// COSTOS LOGÍSTICOS
+const BASE_DELIVERY_FEE = 150; // Tarifa base de envío
+const COST_PER_KM = 20; // Costo por kilómetro
+// Posición simulada del paciente (Centro CDMX aprox)
+const PATIENT_MOCK_LOCATION = { lat: 19.4326, lng: -99.1332 };
+
 // --- SUB-COMPONENT: PORTAL DEL PACIENTE (RESPONSIVO) ---
 const PatientAppView: React.FC<{
     currentUser: DoctorInfo;
@@ -99,7 +115,8 @@ const PatientAppView: React.FC<{
     onRequestHomeService: (type: 'lab' | 'specialist' | 'pharmacy', details?: any) => void;
     onGoBack: () => void;
     currentWaitingPatient?: Patient; 
-}> = ({ currentUser, doctors, myAppointments, notes, onBookAppointment, onRequestHomeService, onGoBack, currentWaitingPatient }) => {
+    onCancelAppointment: (id: string) => void; // New prop for cancellation
+}> = ({ currentUser, doctors, myAppointments, notes, onBookAppointment, onRequestHomeService, onGoBack, currentWaitingPatient, onCancelAppointment }) => {
     const [appTab, setAppTab] = useState<'home' | 'doctors' | 'history' | 'vitals'>('home');
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
     
@@ -116,19 +133,38 @@ const PatientAppView: React.FC<{
     const [selectedSlot, setSelectedSlot] = useState<string | null>(null);
 
     // Modales de Servicios
-    const [activeServiceModal, setActiveServiceModal] = useState<'none' | 'pharmacy' | 'lab' | 'home_visit'>('none');
-    
+    const [activeServiceModal, setActiveServiceModal] = useState<'none' | 'pharmacy' | 'home_care' | 'logistics'>('none');
+    const [viewingNote, setViewingNote] = useState<ClinicalNote | null>(null);
+
     // Estados internos de los servicios
     const [cart, setCart] = useState<any[]>([]);
     const [pharmacyCategory, setPharmacyCategory] = useState('Todos');
-    const [homeVisitAddress, setHomeVisitAddress] = useState('');
     const [pharmacyAddress, setPharmacyAddress] = useState('');
-    const [labAddress, setLabAddress] = useState('');
+    
+    // HOME CARE UNIFIED LOGIC
+    const [homeCareStep, setHomeCareStep] = useState<'type' | 'details' | 'logistics'>('type');
+    const [homeCareType, setHomeCareType] = useState<'medical' | 'lab' | 'hospitalization'>('medical');
+    const [homeAddress, setHomeAddress] = useState('');
+    const [selectedLabTests, setSelectedLabTests] = useState<PriceItem[]>([]);
     const [labSearch, setLabSearch] = useState('');
+    const [homeConsent, setHomeConsent] = useState(false);
+    
+    // --- LOGISTICS STATE ---
+    const [selectedClinic, setSelectedClinic] = useState<DoctorInfo | null>(null);
+    const [calculatedDistance, setCalculatedDistance] = useState(0);
+    const [pendingRequestData, setPendingRequestData] = useState<any>(null);
+    const [logisticsStep, setLogisticsStep] = useState<'select_clinic' | 'confirm'>('select_clinic');
 
-    // Cross-Selling States
-    const [addLabToVisit, setAddLabToVisit] = useState(false);
-    const [addDoctorToLab, setAddDoctorToLab] = useState(false);
+    // Cargar Precios Dinámicos
+    const [prices] = useState<PriceItem[]>(() => {
+        const saved = localStorage.getItem('med_price_catalog_v1');
+        return saved ? JSON.parse(saved) : INITIAL_PRICES;
+    });
+
+    // Filtrar estudios disponibles a domicilio
+    const homeLabTests = useMemo(() => {
+        return prices.filter(p => p.category === 'Estudios / Auxiliares' && p.isHomeServiceAvailable);
+    }, [prices]);
 
     useEffect(() => {
         if (currentWaitingPatient) {
@@ -174,44 +210,130 @@ const PatientAppView: React.FC<{
         );
         setFlowStep('waiting');
     };
+    
+    const handleCancelClick = (id: string) => {
+        if (confirm("¿Está seguro que desea cancelar esta cita?")) {
+            onCancelAppointment(id);
+        }
+    };
 
-    // Service Actions
+    // --- SERVICE HANDLERS ---
+    
+    // Iniciar Flujo Logístico (Selección de Clínica)
+    const initiateLogisticsFlow = (data: any) => {
+        if (!homeConsent) return alert("Debe aceptar el consentimiento de servicio a domicilio.");
+        setPendingRequestData(data);
+        setLogisticsStep('select_clinic');
+        setActiveServiceModal('logistics'); // Cambiar a modal de logística
+    };
+
+    const selectClinicForService = (clinic: DoctorInfo) => {
+        const dist = calculateDistance(
+            PATIENT_MOCK_LOCATION.lat, PATIENT_MOCK_LOCATION.lng,
+            clinic.location?.lat || 0, clinic.location?.lng || 0
+        );
+        setCalculatedDistance(parseFloat(dist.toFixed(1)));
+        setSelectedClinic(clinic);
+    };
+
+    const confirmServiceRequest = () => {
+        if (!selectedClinic || !pendingRequestData) return alert("Seleccione una clínica proveedora.");
+        
+        const deliveryFee = BASE_DELIVERY_FEE + (calculatedDistance * COST_PER_KM);
+        let serviceTotal = 0;
+        let requestType: 'lab' | 'specialist' = 'specialist';
+        
+        if (pendingRequestData.type === 'lab') {
+            serviceTotal = pendingRequestData.selectedTests.reduce((acc: number, item: PriceItem) => acc + item.price, 0);
+            requestType = 'lab';
+        } else if (pendingRequestData.type === 'medical') {
+             serviceTotal = 1250; // Costo base visita médica
+        } else if (pendingRequestData.type === 'hospitalization') {
+             serviceTotal = 3500; // Costo base ambulancia traslado
+        }
+
+        const totalCost = serviceTotal + deliveryFee;
+
+        onRequestHomeService(requestType, {
+            ...pendingRequestData,
+            selectedClinicId: selectedClinic.id || selectedClinic.cedula,
+            selectedClinicName: selectedClinic.hospital || selectedClinic.name,
+            distanceKm: calculatedDistance,
+            deliveryFee: deliveryFee,
+            totalCost: totalCost,
+            isHospitalizationRequest: pendingRequestData.type === 'hospitalization',
+            consentSigned: true
+        });
+
+        alert(pendingRequestData.type === 'hospitalization' ? "SOLICITUD DE TRASLADO ENVIADA. Una ambulancia ha sido notificada." : "Solicitud enviada exitosamente. Un coordinador confirmará su servicio.");
+        setActiveServiceModal('none');
+        setPendingRequestData(null);
+        setSelectedClinic(null);
+        setHomeAddress('');
+        setSelectedLabTests([]);
+        setHomeConsent(false);
+    };
+
+    // Service Actions (Initial Steps)
     const handlePharmacyOrder = () => {
         if(cart.length === 0) return alert("El carrito está vacío");
         if(!pharmacyAddress) return alert("Por favor ingrese la dirección de entrega.");
         
-        onRequestHomeService('pharmacy', { items: cart, address: pharmacyAddress });
+        // Farmacia es directo (sin selección de clínica compleja por ahora, se asigna auto)
+        const dist = 3.5; // Mock dist
+        const fee = BASE_DELIVERY_FEE + (dist * COST_PER_KM);
+        const productsTotal = cart.reduce((a,b)=>a+b.price,0);
+
+        onRequestHomeService('pharmacy', { 
+            items: cart, 
+            address: pharmacyAddress,
+            distanceKm: dist,
+            deliveryFee: fee,
+            totalCost: productsTotal + fee
+        });
         alert("Pedido de farmacia enviado. Un repartidor se pondrá en contacto.");
         setCart([]);
         setPharmacyAddress('');
         setActiveServiceModal('none');
     };
 
-    const handleLabOrder = (pkg: any) => {
-        if(!labAddress) return alert("Por favor ingrese la dirección para la toma de muestra.");
-        
-        onRequestHomeService('lab', { 
-            package: pkg, 
-            address: labAddress,
-            includeDoctor: addDoctorToLab // Cross-sell
+    const handleUnifiedHomeCareOrder = () => {
+        if(!homeAddress) return alert("Ingrese su dirección");
+
+        if (homeCareType === 'lab' && selectedLabTests.length === 0) return alert("Seleccione al menos un estudio.");
+
+        initiateLogisticsFlow({ 
+            type: homeCareType,
+            address: homeAddress,
+            selectedTests: selectedLabTests,
+            notes: intakeForm.mainSymptom // Usar síntoma como nota si es visita médica
         });
-        alert(`Solicitud de ${pkg.name} enviada. ${addDoctorToLab ? 'Incluye valoración médica.' : ''}`);
-        setLabAddress('');
-        setAddDoctorToLab(false);
-        setActiveServiceModal('none');
     };
 
-    const handleHomeVisitOrder = () => {
-        if(!homeVisitAddress) return alert("Ingrese su dirección");
-        onRequestHomeService('specialist', { 
-            address: homeVisitAddress,
-            includeLab: addLabToVisit // Cross-sell
-        });
-        alert(`Solicitud de médico a domicilio enviada. ${addLabToVisit ? 'Incluye toma de muestras.' : ''}`);
-        setHomeVisitAddress('');
-        setAddLabToVisit(false);
-        setActiveServiceModal('none');
+    const toggleLabTest = (test: PriceItem) => {
+        if (selectedLabTests.find(t => t.id === test.id)) {
+            setSelectedLabTests(selectedLabTests.filter(t => t.id !== test.id));
+        } else {
+            setSelectedLabTests([...selectedLabTests, test]);
+        }
     };
+
+    // Filter upcoming appointments (exclude attended/cancelled)
+    const upcomingAppointments = myAppointments.filter(a => 
+        a.status !== PatientStatus.ATTENDED && 
+        a.agendaStatus !== AgendaStatus.CANCELLED
+    );
+
+    // Filter notes for Patient View: Only Prescriptions and Labs
+    const patientVisibleNotes = useMemo(() => {
+        return notes.filter(n => {
+            const t = n.type.toLowerCase();
+            return t.includes('receta') || 
+                   t.includes('solicitud de estudios') || 
+                   t.includes('reporte de resultados') || 
+                   t.includes('informe de imagenología');
+        });
+    }, [notes]);
 
     // --- RENDER CONTENT ---
     const renderContent = () => {
@@ -602,6 +724,100 @@ const PatientAppView: React.FC<{
         }
 
         // --- VISTA PRINCIPAL (HOME) ---
+        if (viewingNote) {
+            return (
+                <div className="min-h-screen bg-slate-100 flex flex-col items-center justify-center p-4 lg:p-8 animate-in fade-in z-[200] relative">
+                    <div className="bg-white w-full max-w-[215mm] shadow-2xl rounded-none md:rounded-lg overflow-hidden flex flex-col relative print:shadow-none print:w-full print:p-0 print:m-0 print:absolute print:top-0 print:left-0">
+                        {/* Toolbar (No Print) */}
+                        <div className="bg-slate-900 p-4 flex justify-between items-center no-print">
+                            <div className="text-white">
+                                <h3 className="text-sm font-black uppercase tracking-widest">{viewingNote.type}</h3>
+                                <p className="text-[10px] text-slate-400">{viewingNote.date}</p>
+                            </div>
+                            <div className="flex gap-2">
+                                <button onClick={() => window.print()} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-xs font-bold uppercase hover:bg-blue-500 transition-all flex items-center gap-2"><Printer size={16}/> Imprimir</button>
+                                <button onClick={() => setViewingNote(null)} className="px-4 py-2 bg-slate-700 text-white rounded-lg text-xs font-bold uppercase hover:bg-rose-600 transition-all">Cerrar</button>
+                            </div>
+                        </div>
+
+                        {/* Document Content */}
+                        <div className="p-[20mm] space-y-6 text-slate-900">
+                             <div className="border-b-4 border-slate-900 pb-6 mb-6 flex justify-between items-start">
+                                 <div>
+                                     <h1 className="text-2xl font-black uppercase tracking-tighter">Hospital General San Rafael</h1>
+                                     <p className="text-xs font-bold text-slate-500 uppercase tracking-[0.2em]">Servicios Médicos Integrales</p>
+                                 </div>
+                                 <div className="text-right">
+                                     <p className="text-xs font-black uppercase">{viewingNote.type}</p>
+                                     <p className="text-[10px] uppercase font-bold text-slate-500">Folio: {viewingNote.id}</p>
+                                     <p className="text-[10px] uppercase font-bold text-slate-500">{viewingNote.date}</p>
+                                 </div>
+                             </div>
+
+                             {/* Patient Header */}
+                             <div className="bg-slate-50 border border-slate-200 p-4 rounded-lg flex justify-between items-center text-xs uppercase font-bold">
+                                 <div>
+                                     <span className="text-slate-500 block text-[9px]">Paciente</span>
+                                     {currentUser.name} (Usuario App)
+                                 </div>
+                                 <div className="text-right">
+                                     <span className="text-slate-500 block text-[9px]">Médico Tratante</span>
+                                     {viewingNote.author}
+                                 </div>
+                             </div>
+
+                             {/* Dynamic Content Based on Note Type */}
+                             <div className="space-y-4">
+                                 {viewingNote.type.includes('Receta') && viewingNote.content.meds && (
+                                     <>
+                                        <div className="space-y-4">
+                                            {viewingNote.content.meds.map((m: any, i: number) => (
+                                                <div key={i} className="border-b border-dashed border-slate-300 pb-2">
+                                                    <p className="font-black text-sm uppercase">{m.name} <span className="font-normal text-slate-600">({m.genericName})</span></p>
+                                                    <p className="text-xs font-bold mt-1">{m.dosage} • {m.presentation}</p>
+                                                    <div className="bg-slate-100 p-2 mt-1 rounded text-[10px] font-mono font-bold uppercase">
+                                                        {m.instructions || `${m.dosage} via ${m.route} cada ${m.frequency} por ${m.duration}`}
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                        {viewingNote.content.instructions && (
+                                            <div className="mt-6 pt-4 border-t-2 border-slate-100">
+                                                <p className="text-[10px] font-black uppercase text-slate-400 mb-1">Indicaciones Generales</p>
+                                                <p className="text-xs font-medium uppercase leading-relaxed">{viewingNote.content.instructions}</p>
+                                            </div>
+                                        )}
+                                     </>
+                                 )}
+
+                                 {(viewingNote.type.includes('Estudios') || viewingNote.type.includes('Reporte') || viewingNote.type.includes('Imagen')) && (
+                                     <div className="space-y-4 text-xs font-medium uppercase leading-relaxed text-justify">
+                                         {Object.entries(viewingNote.content).map(([key, val]) => {
+                                             if (['meds', 'vitals', 'date', 'author'].includes(key) || typeof val === 'object') return null;
+                                             return (
+                                                 <div key={key} className="mb-2">
+                                                     <span className="font-black text-slate-500 block text-[10px] mb-1">{key.replace(/([A-Z])/g, ' $1')}</span>
+                                                     <span className="block border-l-2 border-slate-200 pl-3">{String(val)}</span>
+                                                 </div>
+                                             );
+                                         })}
+                                     </div>
+                                 )}
+                             </div>
+
+                             {/* Footer Signature */}
+                             <div className="mt-20 pt-10 border-t-2 border-slate-900 text-center">
+                                 <div className="w-64 mx-auto border-b border-slate-900 mb-2"></div>
+                                 <p className="font-black uppercase text-sm">{viewingNote.author}</p>
+                                 <p className="text-[9px] uppercase text-slate-500 font-bold">Firma Digital Certificada</p>
+                                 <div className="mt-4 opacity-50"><QrCode size={48} className="mx-auto"/></div>
+                             </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
         return (
             <div className="space-y-10 animate-in fade-in">
                 {/* Hero Banner */}
@@ -676,40 +892,25 @@ const PatientAppView: React.FC<{
                                 </div>
                             </button>
 
-                            {/* LABORATORIO */}
+                            {/* ATENCIÓN A DOMICILIO (UNIFICADO) */}
                             <button 
-                                onClick={() => setActiveServiceModal('lab')}
-                                className="relative overflow-hidden group p-6 h-48 rounded-[2.5rem] bg-gradient-to-br from-violet-600 to-purple-500 text-white shadow-xl hover:shadow-violet-300/50 transition-all hover:scale-[1.02] text-left"
-                            >
-                                <div className="absolute -right-6 -bottom-6 opacity-20 transform rotate-12 group-hover:scale-110 transition-transform duration-500">
-                                    <FlaskConical size={120} />
-                                </div>
-                                <div className="relative z-10 flex flex-col h-full justify-between">
-                                    <div className="bg-white/20 w-fit p-3 rounded-2xl backdrop-blur-sm border border-white/10">
-                                        <FlaskConical size={32} />
-                                    </div>
-                                    <div>
-                                        <h3 className="text-2xl font-black uppercase tracking-tight leading-none mb-1">Laboratorio</h3>
-                                        <p className="text-sm font-medium opacity-90">Toma a Domicilio</p>
-                                    </div>
-                                </div>
-                            </button>
-
-                            {/* VISITA MÉDICA */}
-                            <button 
-                                onClick={() => setActiveServiceModal('home_visit')}
+                                onClick={() => { 
+                                    setHomeCareType('medical');
+                                    setHomeCareStep('type');
+                                    setActiveServiceModal('home_care'); 
+                                }}
                                 className="relative overflow-hidden group p-6 h-48 rounded-[2.5rem] bg-gradient-to-br from-emerald-500 to-teal-400 text-white shadow-xl hover:shadow-emerald-300/50 transition-all hover:scale-[1.02] text-left"
                             >
                                 <div className="absolute -right-6 -bottom-6 opacity-20 transform rotate-12 group-hover:scale-110 transition-transform duration-500">
-                                    <Stethoscope size={120} />
+                                    <MapPinned size={120} />
                                 </div>
                                 <div className="relative z-10 flex flex-col h-full justify-between">
                                     <div className="bg-white/20 w-fit p-3 rounded-2xl backdrop-blur-sm border border-white/10">
                                         <MapPinned size={32} />
                                     </div>
                                     <div>
-                                        <h3 className="text-2xl font-black uppercase tracking-tight leading-none mb-1">Visita Médica</h3>
-                                        <p className="text-sm font-medium opacity-90">Doctor en Casa</p>
+                                        <h3 className="text-2xl font-black uppercase tracking-tight leading-none mb-1">Atención en Casa</h3>
+                                        <p className="text-sm font-medium opacity-90">Médico, Labs y Traslados</p>
                                     </div>
                                 </div>
                             </button>
@@ -732,15 +933,6 @@ const PatientAppView: React.FC<{
                                     </div>
                                 </div>
                             </button>
-
-                             {/* AMBULANCIA (Ejemplo adicional o espacio libre) */}
-                             <button 
-                                className="relative overflow-hidden group p-6 h-48 rounded-[2.5rem] bg-slate-100 border-2 border-dashed border-slate-300 text-slate-400 hover:bg-slate-50 transition-all hover:scale-[1.02] text-left flex flex-col items-center justify-center gap-4"
-                            >
-                                <Plus size={48} className="opacity-50"/>
-                                <p className="text-xs font-black uppercase tracking-widest">Más Servicios</p>
-                            </button>
-
                         </div>
                     </div>
 
@@ -763,54 +955,85 @@ const PatientAppView: React.FC<{
                         
                         <div className="bg-white border border-slate-200 rounded-[2.5rem] p-6 shadow-sm min-h-[200px]">
                             {appTab === 'history' ? (
-                                // HISTORIAL DE ATENCIONES Y RECETAS
+                                // HISTORIAL DE ATENCIONES Y RECETAS (FILTRADO Y CON BOTÓN VER)
                                 <div className="space-y-4 max-h-60 overflow-y-auto custom-scrollbar pr-2">
-                                    {notes.filter(n => n.patientId === 'DEMO-PATIENT' || n.type.includes('Teleconsulta') || n.type.includes('Receta')).map(note => (
+                                    {patientVisibleNotes.map(note => (
                                         <div key={note.id} className="p-4 bg-slate-50 rounded-2xl border border-slate-100 flex justify-between items-center group hover:bg-white hover:shadow-sm transition-all">
                                             <div>
                                                 <div className="flex items-center gap-2 mb-1">
-                                                    <span className="text-[9px] font-black uppercase bg-blue-100 text-blue-700 px-2 py-0.5 rounded">{note.type.split('(')[0]}</span>
+                                                    <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded ${note.type.toLowerCase().includes('receta') ? 'bg-emerald-100 text-emerald-700' : 'bg-blue-100 text-blue-700'}`}>
+                                                        {note.type.split('(')[0].replace('Receta Médica', 'Receta')}
+                                                    </span>
                                                     <span className="text-[9px] text-slate-400 font-bold">{note.date.split(',')[0]}</span>
                                                 </div>
                                                 <p className="text-xs font-bold text-slate-700 line-clamp-1">{note.author}</p>
                                             </div>
-                                            <button className="p-2 bg-white rounded-xl text-slate-400 hover:text-[#0057B8] shadow-sm"><Download size={16}/></button>
+                                            <div className="flex gap-2">
+                                                <button 
+                                                    onClick={() => setViewingNote(note)}
+                                                    className="p-2 bg-white rounded-xl text-slate-400 hover:text-[#0057B8] shadow-sm border border-slate-100 transition-all flex items-center gap-1"
+                                                    title="Ver / Imprimir"
+                                                >
+                                                    <Eye size={16}/> <span className="text-[9px] font-black uppercase hidden sm:inline">Ver</span>
+                                                </button>
+                                            </div>
                                         </div>
                                     ))}
-                                    {notes.length === 0 && (
+                                    {patientVisibleNotes.length === 0 && (
                                         <div className="text-center py-10 opacity-40">
                                             <History size={32} className="mx-auto mb-2 text-slate-300"/>
-                                            <p className="text-[10px] font-black text-slate-400 uppercase">Sin historial clínico</p>
+                                            <p className="text-[10px] font-black text-slate-400 uppercase">Sin documentos disponibles</p>
                                         </div>
                                     )}
                                 </div>
                             ) : (
                                 // CITAS PRÓXIMAS
-                                myAppointments.length > 0 ? (
+                                upcomingAppointments.length > 0 ? (
                                     <div className="space-y-4">
-                                        {myAppointments.map(appt => (
-                                            <div key={appt.id} className="flex items-center gap-4 p-4 bg-slate-50 rounded-2xl border border-slate-100 hover:bg-white hover:shadow-md transition-all cursor-pointer">
-                                                <div className="flex-shrink-0 w-14 h-14 bg-white rounded-xl flex flex-col items-center justify-center text-center shadow-sm border border-slate-100">
-                                                    <span className="text-[9px] font-black uppercase text-rose-500">{new Date(appt.scheduledDate || new Date()).toLocaleString('es-MX', {month:'short'})}</span>
-                                                    <span className="text-lg font-black text-slate-900">{new Date(appt.scheduledDate || new Date()).getDate()}</span>
+                                        {upcomingAppointments.map(appt => (
+                                            <div key={appt.id} className="flex flex-col gap-3 p-4 bg-slate-50 rounded-2xl border border-slate-100 hover:bg-white hover:shadow-md transition-all">
+                                                <div className="flex items-center gap-4">
+                                                    <div className="flex-shrink-0 w-14 h-14 bg-white rounded-xl flex flex-col items-center justify-center text-center shadow-sm border border-slate-100">
+                                                        <span className="text-[9px] font-black uppercase text-rose-500">{new Date(appt.scheduledDate || new Date()).toLocaleString('es-MX', {month:'short'})}</span>
+                                                        <span className="text-lg font-black text-slate-900">{new Date(appt.scheduledDate || new Date()).getDate()}</span>
+                                                    </div>
+                                                    <div className="flex-1 min-w-0">
+                                                        <p className="text-xs font-black text-slate-900 truncate">{appt.assignedDoctorName || 'Médico General'}</p>
+                                                        <p className="text-[10px] text-slate-500 font-medium truncate">{appt.appointmentTime || 'Pendiente'} • {appt.status}</p>
+                                                        {appt.status === PatientStatus.ONLINE_WAITING && (
+                                                            <span className="inline-block mt-1 px-2 py-0.5 bg-amber-100 text-amber-700 text-[8px] font-black uppercase rounded-md">
+                                                                En Espera
+                                                            </span>
+                                                        )}
+                                                        {appt.status === PatientStatus.ONLINE_REVIEWING && (
+                                                            <span className="inline-block mt-1 px-2 py-0.5 bg-indigo-100 text-indigo-700 text-[8px] font-black uppercase rounded-md animate-pulse">
+                                                                Médico Leyendo...
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                    <div className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center text-slate-500 cursor-pointer">
+                                                        <ChevronRight size={16}/>
+                                                    </div>
                                                 </div>
-                                                <div className="flex-1 min-w-0">
-                                                    <p className="text-xs font-black text-slate-900 truncate">{appt.assignedDoctorName || 'Médico General'}</p>
-                                                    <p className="text-[10px] text-slate-500 font-medium truncate">{appt.appointmentTime || 'Pendiente'} • {appt.status}</p>
-                                                    {appt.status === PatientStatus.ONLINE_WAITING && (
-                                                        <span className="inline-block mt-1 px-2 py-0.5 bg-amber-100 text-amber-700 text-[8px] font-black uppercase rounded-md">
-                                                            En Espera
-                                                        </span>
-                                                    )}
-                                                    {appt.status === PatientStatus.ONLINE_REVIEWING && (
-                                                        <span className="inline-block mt-1 px-2 py-0.5 bg-indigo-100 text-indigo-700 text-[8px] font-black uppercase rounded-md animate-pulse">
-                                                            Médico Leyendo...
-                                                        </span>
-                                                    )}
-                                                </div>
-                                                <div className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center text-slate-500">
-                                                    <ChevronRight size={16}/>
-                                                </div>
+
+                                                {/* Mensaje del Doctor */}
+                                                {appt.doctorMessage && (
+                                                    <div className="bg-amber-50 border border-amber-200 p-3 rounded-xl flex items-start gap-3">
+                                                        <MessageCircle size={16} className="text-amber-600 shrink-0 mt-0.5" />
+                                                        <div>
+                                                            <p className="text-[9px] font-black text-amber-700 uppercase">Mensaje del Médico:</p>
+                                                            <p className="text-xs text-amber-900 font-medium italic">"{appt.doctorMessage}"</p>
+                                                        </div>
+                                                    </div>
+                                                )}
+
+                                                {/* Botón Cancelar */}
+                                                <button 
+                                                    onClick={() => handleCancelClick(appt.id)}
+                                                    className="w-full py-2 bg-white border border-rose-100 text-rose-600 rounded-xl text-[9px] font-black uppercase hover:bg-rose-50 transition-all flex items-center justify-center gap-2"
+                                                >
+                                                    <X size={12}/> Cancelar Cita
+                                                </button>
                                             </div>
                                         ))}
                                     </div>
@@ -825,8 +1048,7 @@ const PatientAppView: React.FC<{
                     </div>
                 </div>
 
-                {/* --- MODALES DE SERVICIOS --- */}
-                
+                {/* ... (MODALES DE SERVICIOS - Mismo código que antes) ... */}
                 {/* 1. FARMACIA */}
                 {activeServiceModal === 'pharmacy' && (
                     <div className="fixed inset-0 z-50 bg-slate-900/90 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
@@ -917,127 +1139,249 @@ const PatientAppView: React.FC<{
                     </div>
                 )}
 
-                {/* 2. LABORATORIO */}
-                {activeServiceModal === 'lab' && (
+                {/* 2. ATENCIÓN DOMICILIARIA UNIFICADA (NUEVO) */}
+                {activeServiceModal === 'home_care' && (
                     <div className="fixed inset-0 z-50 bg-slate-900/90 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
-                        <div className="bg-white w-full max-w-2xl rounded-[3rem] shadow-2xl p-8 flex flex-col max-h-[85vh]">
-                            <div className="flex justify-between items-center mb-6">
+                        <div className="bg-white w-full max-w-3xl rounded-[3rem] shadow-2xl p-10 flex flex-col max-h-[90vh]">
+                            <div className="flex justify-between items-center mb-8 border-b border-slate-100 pb-4">
                                 <div>
-                                    <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tight flex items-center gap-2">
-                                        <FlaskConical size={24} className="text-rose-500"/> Laboratorio
+                                    <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tight flex items-center gap-3">
+                                        <MapPinned size={28} className="text-emerald-500"/> Atención en Casa
                                     </h3>
-                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Toma de muestras a domicilio</p>
+                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">
+                                        {homeCareStep === 'type' ? 'Seleccione tipo de servicio' : homeCareStep === 'details' ? 'Detalles de la solicitud' : 'Consentimiento y Envío'}
+                                    </p>
                                 </div>
                                 <button onClick={() => setActiveServiceModal('none')} className="p-2 hover:bg-slate-100 rounded-full"><X size={24}/></button>
                             </div>
                             
-                            <div className="space-y-4 mb-6">
-                                <div className="relative">
-                                    <MapPin size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"/>
-                                    <input 
-                                        className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold uppercase outline-none focus:ring-2 focus:ring-rose-200 transition-all"
-                                        placeholder="Dirección para toma de muestra..."
-                                        value={labAddress}
-                                        onChange={e => setLabAddress(e.target.value)}
-                                    />
-                                </div>
-                                <div className="relative">
-                                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={16}/>
-                                    <input 
-                                        className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold uppercase outline-none focus:ring-2 focus:ring-rose-200"
-                                        placeholder="Buscar estudios..."
-                                        value={labSearch}
-                                        onChange={(e) => setLabSearch(e.target.value)}
-                                    />
-                                </div>
-                                {/* Cross-sell: Add Doctor Visit */}
-                                <div onClick={() => setAddDoctorToLab(!addDoctorToLab)} className={`p-4 rounded-2xl border-2 cursor-pointer flex justify-between items-center transition-all ${addDoctorToLab ? 'bg-indigo-50 border-indigo-200' : 'bg-white border-slate-100'}`}>
-                                    <div className="flex items-center gap-3">
-                                        <Stethoscope size={18} className={addDoctorToLab ? 'text-indigo-600' : 'text-slate-400'}/>
-                                        <div>
-                                            <p className={`text-[10px] font-black uppercase ${addDoctorToLab ? 'text-indigo-900' : 'text-slate-500'}`}>Añadir Valoración Médica</p>
-                                            <p className="text-[8px] text-slate-400 font-bold">Un médico acompañará al técnico</p>
+                            <div className="flex-1 overflow-y-auto custom-scrollbar px-2">
+                                {/* STEP 1: SELECT TYPE */}
+                                {homeCareStep === 'type' && (
+                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                        <button onClick={() => { setHomeCareType('medical'); setHomeCareStep('details'); }} className="p-6 rounded-[2.5rem] border-2 border-emerald-100 bg-emerald-50 hover:bg-emerald-100 transition-all flex flex-col items-center text-center gap-4 group">
+                                            <div className="w-20 h-20 bg-white rounded-full flex items-center justify-center text-emerald-600 shadow-md group-hover:scale-110 transition-transform">
+                                                <Stethoscope size={32}/>
+                                            </div>
+                                            <div>
+                                                <h4 className="text-lg font-black text-emerald-800 uppercase">Consulta Médica</h4>
+                                                <p className="text-[10px] text-emerald-600 font-bold mt-1">Médico General o Especialista a Domicilio</p>
+                                            </div>
+                                        </button>
+
+                                        <button onClick={() => { setHomeCareType('lab'); setHomeCareStep('details'); }} className="p-6 rounded-[2.5rem] border-2 border-indigo-100 bg-indigo-50 hover:bg-indigo-100 transition-all flex flex-col items-center text-center gap-4 group">
+                                            <div className="w-20 h-20 bg-white rounded-full flex items-center justify-center text-indigo-600 shadow-md group-hover:scale-110 transition-transform">
+                                                <FlaskConical size={32}/>
+                                            </div>
+                                            <div>
+                                                <h4 className="text-lg font-black text-indigo-800 uppercase">Toma de Muestras</h4>
+                                                <p className="text-[10px] text-indigo-600 font-bold mt-1">Laboratorio Clínico sin salir de casa</p>
+                                            </div>
+                                        </button>
+
+                                        <button onClick={() => { setHomeCareType('hospitalization'); setHomeCareStep('details'); }} className="p-6 rounded-[2.5rem] border-2 border-rose-100 bg-rose-50 hover:bg-rose-100 transition-all flex flex-col items-center text-center gap-4 group">
+                                            <div className="w-20 h-20 bg-white rounded-full flex items-center justify-center text-rose-600 shadow-md group-hover:scale-110 transition-transform">
+                                                <Ambulance size={32}/>
+                                            </div>
+                                            <div>
+                                                <h4 className="text-lg font-black text-rose-800 uppercase">Internamiento / Traslado</h4>
+                                                <p className="text-[10px] text-rose-600 font-bold mt-1">Solicitar Ambulancia o Ingreso Hospitalario</p>
+                                            </div>
+                                        </button>
+                                    </div>
+                                )}
+
+                                {/* STEP 2: DETAILS */}
+                                {homeCareStep === 'details' && (
+                                    <div className="space-y-6 animate-in slide-in-from-right-4">
+                                        <div className="space-y-4">
+                                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2 flex items-center gap-2">
+                                                <MapPin size={12}/> Dirección de Visita
+                                            </label>
+                                            <textarea 
+                                                className="w-full p-4 bg-slate-50 border-2 border-slate-200 rounded-2xl text-sm font-medium resize-none h-24 outline-none focus:border-emerald-400 focus:bg-white transition-all shadow-inner"
+                                                placeholder="Calle, Número, Colonia, Referencias..."
+                                                value={homeAddress}
+                                                onChange={e => setHomeAddress(e.target.value)}
+                                            />
+                                        </div>
+
+                                        {homeCareType === 'lab' && (
+                                            <div className="space-y-4">
+                                                <div className="relative">
+                                                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={16}/>
+                                                    <input 
+                                                        className="w-full pl-10 pr-4 py-3 bg-white border border-slate-200 rounded-xl text-xs font-bold uppercase outline-none focus:ring-2 focus:ring-indigo-200"
+                                                        placeholder="Buscar estudios..."
+                                                        value={labSearch}
+                                                        onChange={(e) => setLabSearch(e.target.value)}
+                                                    />
+                                                </div>
+                                                <div className="max-h-60 overflow-y-auto custom-scrollbar space-y-2 pr-2 bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                                                    {homeLabTests.filter(t => t.name.toLowerCase().includes(labSearch.toLowerCase())).map(test => {
+                                                        const isSelected = selectedLabTests.some(t => t.id === test.id);
+                                                        return (
+                                                            <div 
+                                                                key={test.id} 
+                                                                onClick={() => toggleLabTest(test)}
+                                                                className={`p-3 border rounded-xl flex justify-between items-center cursor-pointer transition-all ${isSelected ? 'bg-indigo-50 border-indigo-500 shadow-sm' : 'bg-white border-slate-200 hover:border-indigo-200'}`}
+                                                            >
+                                                                <div>
+                                                                    <p className={`text-[10px] font-black uppercase ${isSelected ? 'text-indigo-900' : 'text-slate-700'}`}>{test.name}</p>
+                                                                    <p className="text-[8px] text-slate-400 font-bold uppercase mt-0.5">${test.price}</p>
+                                                                </div>
+                                                                {isSelected ? <CheckCircle2 size={16} className="text-indigo-600"/> : <Plus size={16} className="text-slate-300"/>}
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
+                                                <div className="flex justify-between items-center border-t border-slate-200 pt-4">
+                                                    <span className="text-xs font-black uppercase text-slate-500">Total Estudios</span>
+                                                    <span className="text-xl font-black text-indigo-700">${selectedLabTests.reduce((a,b)=>a+b.price,0)}</span>
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {(homeCareType === 'medical' || homeCareType === 'hospitalization') && (
+                                            <div className="space-y-4">
+                                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Motivo de Solicitud / Síntomas</label>
+                                                <textarea 
+                                                    className="w-full p-4 bg-slate-50 border-2 border-slate-200 rounded-2xl text-sm font-medium resize-none h-32 outline-none focus:border-emerald-400 transition-all"
+                                                    placeholder="Describa brevemente el motivo de la consulta o la urgencia..."
+                                                    value={intakeForm.mainSymptom}
+                                                    onChange={e => setIntakeForm({...intakeForm, mainSymptom: e.target.value})}
+                                                />
+                                            </div>
+                                        )}
+
+                                        {/* CONSENTIMIENTO INTEGRADO */}
+                                        <div className="bg-slate-50 p-6 rounded-3xl border border-slate-200 mt-6">
+                                            <div className="flex items-start gap-4">
+                                                <div className={`p-2 rounded-xl mt-1 ${homeConsent ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-200 text-slate-400'}`}>
+                                                    <FileCheck size={20}/>
+                                                </div>
+                                                <div className="flex-1">
+                                                    <h4 className="text-xs font-black uppercase text-slate-800 mb-1">Consentimiento de Servicio</h4>
+                                                    <p className="text-[10px] text-slate-500 leading-relaxed mb-3">
+                                                        Acepto que el servicio a domicilio tiene un costo adicional y que los tiempos de llegada pueden variar según tráfico y disponibilidad. Autorizo al personal de salud a ingresar a mi domicilio para la atención solicitada.
+                                                    </p>
+                                                    <button 
+                                                        onClick={() => setHomeConsent(!homeConsent)}
+                                                        className={`px-4 py-2 rounded-xl text-[9px] font-black uppercase border transition-all flex items-center gap-2 ${homeConsent ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white border-slate-300 text-slate-500 hover:border-emerald-400'}`}
+                                                    >
+                                                        {homeConsent ? <Check size={12}/> : <div className="w-3 h-3 rounded-full border-2 border-slate-300"></div>}
+                                                        {homeConsent ? 'Aceptado' : 'Aceptar Términos'}
+                                                    </button>
+                                                </div>
+                                            </div>
                                         </div>
                                     </div>
-                                    <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${addDoctorToLab ? 'bg-indigo-600 border-indigo-600 text-white' : 'border-slate-300'}`}>
-                                        {addDoctorToLab && <Check size={12}/>}
-                                    </div>
-                                </div>
+                                )}
                             </div>
 
-                            <div className="flex-1 overflow-y-auto custom-scrollbar space-y-4 pr-2">
-                                <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-2">Paquetes Recomendados</p>
-                                {LAB_PACKAGES.filter(p => p.name.toLowerCase().includes(labSearch.toLowerCase())).map(pkg => (
-                                    <div key={pkg.id} className="p-5 border border-slate-100 rounded-3xl flex justify-between items-center hover:shadow-lg hover:border-rose-200 transition-all bg-white group">
-                                        <div>
-                                            <div className="flex items-center gap-2">
-                                                <p className="text-sm font-black uppercase text-slate-900">{pkg.name}</p>
-                                                <span className="bg-rose-50 text-rose-600 text-[8px] px-2 py-0.5 rounded font-black uppercase">{pkg.time}</span>
-                                            </div>
-                                            <p className="text-[10px] text-slate-500 mt-1 font-medium">{pkg.includes}</p>
-                                        </div>
-                                        <div className="text-right">
-                                            <p className="text-xl font-black text-rose-600">${pkg.price}</p>
-                                            <button onClick={() => handleLabOrder(pkg)} className="mt-2 px-4 py-2 bg-slate-900 text-white rounded-xl text-[9px] font-black uppercase hover:bg-rose-600 transition-all shadow-md">Solicitar</button>
-                                        </div>
-                                    </div>
-                                ))}
+                            <div className="flex gap-4 mt-8 pt-6 border-t border-slate-100">
+                                {homeCareStep === 'details' ? (
+                                    <>
+                                        <button onClick={() => setHomeCareStep('type')} className="flex-1 py-4 bg-slate-100 text-slate-500 rounded-2xl font-black text-[10px] uppercase hover:bg-slate-200 transition-all">Atrás</button>
+                                        <button onClick={handleUnifiedHomeCareOrder} className="flex-[2] py-4 bg-slate-900 text-white rounded-2xl font-black text-[10px] uppercase shadow-xl hover:bg-blue-600 transition-all flex items-center justify-center gap-2">
+                                            Continuar <ArrowRight size={14}/>
+                                        </button>
+                                    </>
+                                ) : (
+                                    <button onClick={() => setActiveServiceModal('none')} className="w-full py-4 bg-slate-100 text-slate-500 rounded-2xl font-black text-[10px] uppercase hover:bg-slate-200 transition-all">Cerrar</button>
+                                )}
                             </div>
                         </div>
                     </div>
                 )}
-
-                {/* 3. VISITA MÉDICA */}
-                {activeServiceModal === 'home_visit' && (
+                
+                {/* 4. MODAL LOGÍSTICA INTELIGENTE */}
+                {activeServiceModal === 'logistics' && (
                     <div className="fixed inset-0 z-50 bg-slate-900/90 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
-                        <div className="bg-white w-full max-w-md rounded-[3rem] shadow-2xl p-8 flex flex-col border border-white/20">
-                            <div className="text-center mb-8 relative">
-                                <div className="w-20 h-20 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-4 animate-pulse">
-                                    <Stethoscope size={32}/>
+                        <div className="bg-white w-full max-w-lg rounded-[3rem] shadow-2xl p-8 flex flex-col max-h-[90vh]">
+                            <div className="flex justify-between items-center mb-6">
+                                <div>
+                                    <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight flex items-center gap-2">
+                                        <Route size={20} className="text-blue-600"/> Logística del Servicio
+                                    </h3>
+                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">
+                                        {logisticsStep === 'select_clinic' ? 'Seleccione Proveedor Cercano' : 'Confirmar Pedido'}
+                                    </p>
                                 </div>
-                                <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tight">Médico en Casa</h3>
-                                <p className="text-xs text-slate-500 font-bold mt-2 uppercase">Llegada estimada: 45-60 min</p>
+                                <button onClick={() => setActiveServiceModal('none')} className="p-2 hover:bg-slate-100 rounded-full"><X size={24}/></button>
                             </div>
                             
-                            <div className="space-y-6 mb-8">
-                                <div className="space-y-2">
-                                    <label className="text-[10px] font-black text-slate-400 uppercase ml-2 flex items-center gap-1"><MapPinned size={10}/> Dirección de Visita</label>
-                                    <div className="relative">
-                                        <textarea 
-                                            className="w-full p-4 bg-slate-50 border-2 border-slate-200 rounded-2xl text-sm font-medium resize-none h-24 outline-none focus:border-emerald-400 focus:bg-white transition-all shadow-inner"
-                                            placeholder="Calle, Número, Colonia, Referencias..."
-                                            value={homeVisitAddress}
-                                            onChange={e => setHomeVisitAddress(e.target.value)}
-                                        />
-                                    </div>
+                            {logisticsStep === 'select_clinic' ? (
+                                <div className="space-y-4 flex-1 overflow-y-auto custom-scrollbar">
+                                    <p className="text-xs font-medium text-slate-500 mb-2">Ordenado por cercanía a su domicilio:</p>
+                                    {doctors.map(clinic => {
+                                        const dist = calculateDistance(PATIENT_MOCK_LOCATION.lat, PATIENT_MOCK_LOCATION.lng, clinic.location?.lat || 0, clinic.location?.lng || 0);
+                                        return (
+                                            <button 
+                                                key={clinic.id} 
+                                                onClick={() => { selectClinicForService(clinic); setLogisticsStep('confirm'); }}
+                                                className="w-full bg-white border border-slate-200 p-4 rounded-2xl hover:border-blue-500 hover:shadow-md transition-all text-left group"
+                                            >
+                                                <div className="flex justify-between items-start">
+                                                    <div>
+                                                        <h4 className="text-xs font-black uppercase text-slate-900">{clinic.hospital || clinic.name}</h4>
+                                                        <p className="text-[9px] text-slate-400 uppercase mt-1">{clinic.address}</p>
+                                                    </div>
+                                                    <div className="text-right">
+                                                        <span className="bg-blue-50 text-blue-700 px-2 py-1 rounded text-[9px] font-black">{dist.toFixed(1)} km</span>
+                                                    </div>
+                                                </div>
+                                            </button>
+                                        );
+                                    })}
                                 </div>
+                            ) : (
+                                <div className="space-y-6 animate-in slide-in-from-right-4">
+                                    <div className="bg-slate-50 p-6 rounded-3xl border border-slate-100 space-y-4">
+                                        <div className="flex justify-between items-center pb-4 border-b border-slate-200">
+                                            <span className="text-[10px] font-bold text-slate-400 uppercase">Distancia Total</span>
+                                            <span className="text-sm font-black text-slate-900">{calculatedDistance} km</span>
+                                        </div>
+                                        
+                                        <div className="space-y-2">
+                                            <div className="flex justify-between text-xs">
+                                                <span className="text-slate-500">Servicios Médicos</span>
+                                                <span className="font-bold text-slate-900">
+                                                    ${(pendingRequestData?.type === 'lab' 
+                                                        ? pendingRequestData.selectedTests.reduce((a:number,b:any)=>a+b.price,0) 
+                                                        : (pendingRequestData?.type === 'hospitalization' ? 3500 : 1250)).toFixed(2)}
+                                                </span>
+                                            </div>
+                                            <div className="flex justify-between text-xs">
+                                                <span className="text-slate-500">Tarifa Base Domicilio</span>
+                                                <span className="font-bold text-slate-900">${BASE_DELIVERY_FEE.toFixed(2)}</span>
+                                            </div>
+                                            <div className="flex justify-between text-xs">
+                                                <span className="text-slate-500">Distancia ({calculatedDistance} km x ${COST_PER_KM})</span>
+                                                <span className="font-bold text-slate-900">${(calculatedDistance * COST_PER_KM).toFixed(2)}</span>
+                                            </div>
+                                        </div>
 
-                                {/* Cross-sell: Add Lab */}
-                                <div onClick={() => setAddLabToVisit(!addLabToVisit)} className={`p-4 rounded-2xl border-2 cursor-pointer flex justify-between items-center transition-all ${addLabToVisit ? 'bg-rose-50 border-rose-200' : 'bg-white border-slate-100'}`}>
-                                    <div className="flex items-center gap-3">
-                                        <FlaskConical size={18} className={addLabToVisit ? 'text-rose-600' : 'text-slate-400'}/>
-                                        <div>
-                                            <p className={`text-[10px] font-black uppercase ${addLabToVisit ? 'text-rose-900' : 'text-slate-500'}`}>Añadir Toma de Muestras</p>
-                                            <p className="text-[8px] text-slate-400 font-bold">El médico tomará muestras básicas</p>
+                                        <div className="pt-4 border-t border-slate-200 flex justify-between items-center">
+                                            <span className="text-xs font-black text-slate-900 uppercase">Total a Pagar</span>
+                                            <span className="text-xl font-black text-blue-600">
+                                                ${(
+                                                    (pendingRequestData?.type === 'lab' 
+                                                        ? pendingRequestData.selectedTests.reduce((a:number,b:any)=>a+b.price,0) 
+                                                        : (pendingRequestData?.type === 'hospitalization' ? 3500 : 1250)) + 
+                                                    BASE_DELIVERY_FEE + 
+                                                    (calculatedDistance * COST_PER_KM)
+                                                ).toFixed(2)}
+                                            </span>
                                         </div>
                                     </div>
-                                    <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${addLabToVisit ? 'bg-rose-600 border-rose-600 text-white' : 'border-slate-300'}`}>
-                                        {addLabToVisit && <Check size={12}/>}
+                                    
+                                    <div className="flex gap-4">
+                                        <button onClick={() => setLogisticsStep('select_clinic')} className="flex-1 py-4 bg-slate-100 rounded-2xl font-black text-xs uppercase text-slate-500 hover:bg-slate-200">Cambiar Clínica</button>
+                                        <button onClick={confirmServiceRequest} className="flex-[2] py-4 bg-slate-900 text-white rounded-2xl font-black text-xs uppercase shadow-xl hover:bg-blue-600">Confirmar Solicitud</button>
                                     </div>
                                 </div>
-
-                                <div className="bg-emerald-50 p-4 rounded-2xl flex items-center justify-between border border-emerald-100">
-                                    <span className="text-[10px] font-black uppercase text-emerald-800">Costo Estimado</span>
-                                    <span className="text-xl font-black text-emerald-600">${800 + (addLabToVisit ? 450 : 0)}.00</span>
-                                </div>
-                            </div>
-
-                            <div className="flex gap-4">
-                                <button onClick={() => setActiveServiceModal('none')} className="flex-1 py-4 bg-slate-100 text-slate-500 rounded-2xl font-black text-[10px] uppercase hover:bg-slate-200 transition-all">Cancelar</button>
-                                <button onClick={handleHomeVisitOrder} className="flex-[2] py-4 bg-emerald-600 text-white rounded-2xl font-black text-[10px] uppercase shadow-xl hover:bg-emerald-700 transition-all flex items-center justify-center gap-2">
-                                    Confirmar <ArrowRight size={14}/>
-                                </button>
-                            </div>
+                            )}
                         </div>
                     </div>
                 )}
@@ -1048,7 +1392,7 @@ const PatientAppView: React.FC<{
     return (
         <div className="min-h-screen bg-slate-50 flex flex-col">
             {/* Navbar Responsivo */}
-            <nav className="bg-white border-b border-slate-200 sticky top-0 z-50 px-4 md:px-8 py-4">
+            <nav className="bg-white border-b border-slate-200 sticky top-0 z-50 px-4 md:px-8 py-4 no-print">
                 <div className="max-w-7xl mx-auto flex justify-between items-center">
                     <div className="flex items-center gap-3">
                         <div className="w-10 h-10 bg-[#0057B8] rounded-xl flex items-center justify-center text-white shadow-lg">
@@ -1109,7 +1453,7 @@ const PatientAppView: React.FC<{
     );
 };
 
-const TelemedicineDashboard: React.FC<TelemedicineDashboardProps> = ({ patients, onUpdateStatus, onAddPatient, onAddHomeRequest, onUpdateHomeRequest, doctorsList = MOCK_DOCTORS, currentUser, homeRequests = [], staffList = [], notes = [] }) => {
+const TelemedicineDashboard: React.FC<TelemedicineDashboardProps> = ({ patients, onUpdateStatus, onAddPatient, onAddHomeRequest, onUpdateHomeRequest, doctorsList = MOCK_DOCTORS, currentUser, homeRequests = [], staffList = [], notes = [], onUpdatePatient }) => {
   const navigate = useNavigate();
   const [viewMode, setViewMode] = useState<'landing' | 'doctor' | 'patient_app'>('landing');
   
@@ -1120,7 +1464,11 @@ const TelemedicineDashboard: React.FC<TelemedicineDashboardProps> = ({ patients,
   // Doctor Availability Toggle
   const [isDoctorAvailable, setIsDoctorAvailable] = useState(true);
 
-  // ... (Doctor View Logic Remains Similar) ...
+  // Message Modal State
+  const [showMessageModal, setShowMessageModal] = useState(false);
+  const [messagePatient, setMessagePatient] = useState<Patient | null>(null);
+  const [messageText, setMessageText] = useState('');
+
   // --- FILTERS ---
   const waitingRoom = patients.filter(p => p.status === PatientStatus.ONLINE_QUEUE);
   const myScheduled = patients.filter(p => p.status === PatientStatus.ONLINE_WAITING && p.assignedDoctorId === currentUser?.cedula);
@@ -1154,6 +1502,21 @@ const TelemedicineDashboard: React.FC<TelemedicineDashboardProps> = ({ patients,
       }
   };
 
+  const handleSendMessage = () => {
+      if (!messagePatient || !onUpdatePatient) return;
+      const updatedPatient = { ...messagePatient, doctorMessage: messageText };
+      onUpdatePatient(updatedPatient);
+      setShowMessageModal(false);
+      setMessageText('');
+      setMessagePatient(null);
+  };
+
+  const handleOpenMessage = (p: Patient) => {
+      setMessagePatient(p);
+      setMessageText(p.doctorMessage || '');
+      setShowMessageModal(true);
+  };
+
   // --- ACTIONS (PATIENT) ---
   const handlePatientBook = (doc: DoctorInfo | null, time: string, intake: TeleIntakeForm, date?: string) => {
       if (onAddPatient) {
@@ -1177,12 +1540,27 @@ const TelemedicineDashboard: React.FC<TelemedicineDashboardProps> = ({ patients,
       }
   };
 
+  const handlePatientCancel = (id: string) => {
+      onUpdateStatus(id, PatientStatus.ATTENDED, AgendaStatus.CANCELLED);
+  };
+
   const handlePatientRequestHome = (type: 'lab' | 'specialist' | 'pharmacy', details?: any) => {
       if (onAddHomeRequest) {
           let reason = '';
-          if (type === 'lab') reason = `Solicitud de Lab: ${details.package?.name}`;
-          else if (type === 'pharmacy') reason = `Pedido Farmacia: ${details.items?.length} items`;
-          else reason = 'Visita Médica a Domicilio';
+          let studyNames = [];
+          let status: any = 'Pendiente';
+          
+          if (type === 'lab') {
+              studyNames = details.selectedTests?.map((t:any) => t.name) || [];
+              reason = `Solicitud de Lab: ${studyNames.join(', ')}`;
+          } else if (type === 'pharmacy') {
+              reason = `Pedido Farmacia: ${details.items?.length} items`;
+          } else if (details.isHospitalizationRequest) {
+              reason = 'SOLICITUD DE TRASLADO / INTERNAMIENTO';
+              status = 'Pendiente';
+          } else {
+              reason = 'Visita Médica a Domicilio';
+          }
 
           onAddHomeRequest({
               id: `REQ-${Date.now()}`,
@@ -1191,12 +1569,20 @@ const TelemedicineDashboard: React.FC<TelemedicineDashboardProps> = ({ patients,
               patientAddress: details?.address || 'Dirección Registrada en App',
               requestedBy: 'Paciente (App)',
               requestedDate: new Date().toISOString(),
-              status: 'Pendiente',
-              studies: type === 'lab' ? [details.package.name] : [],
+              status: status,
+              studies: studyNames,
               notes: reason,
               hasDoctorVisit: details?.includeDoctor || type === 'specialist',
               hasLabCollection: details?.includeLab || type === 'lab',
-              hasPharmacyDelivery: type === 'pharmacy'
+              hasPharmacyDelivery: type === 'pharmacy',
+              isHospitalizationRequest: details.isHospitalizationRequest,
+              // New Logic fields
+              selectedClinicId: details.selectedClinicId,
+              selectedClinicName: details.selectedClinicName,
+              distanceKm: details.distanceKm,
+              deliveryFee: details.deliveryFee,
+              totalCost: details.totalCost,
+              consentSigned: details.consentSigned
           });
       }
   };
@@ -1252,20 +1638,34 @@ const TelemedicineDashboard: React.FC<TelemedicineDashboardProps> = ({ patients,
 
   // --- PATIENT APP VIEW ---
   if (viewMode === 'patient_app') {
-      const myActive = patients.find(p => p.name === 'Paciente Demo' && (p.status === PatientStatus.ONLINE_QUEUE || p.status === PatientStatus.ONLINE_WAITING || p.status === PatientStatus.ONLINE_REVIEWING || p.status === PatientStatus.ONLINE_IN_CALL));
+      const myPatientRecords = patients.filter(p => p.name === 'Paciente Demo');
+      const myPatientIds = myPatientRecords.map(p => p.id);
       
-      const patientNotes = notes.filter(n => n.patientId === 'DEMO-PATIENT' || (myActive && n.patientId === myActive.id));
+      // Active one for flow state (waiting room)
+      const myActive = myPatientRecords.find(p => 
+        p.status === PatientStatus.ONLINE_QUEUE || 
+        p.status === PatientStatus.ONLINE_WAITING || 
+        p.status === PatientStatus.ONLINE_REVIEWING || 
+        p.status === PatientStatus.ONLINE_IN_CALL
+      );
+      
+      // Filter notes: Include DEMO-PATIENT (legacy/static) OR any note belonging to one of the patient's records
+      const patientNotes = notes.filter(n => 
+         n.patientId === 'DEMO-PATIENT' || 
+         myPatientIds.includes(n.patientId)
+      ).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
       return (
           <PatientAppView 
               currentUser={currentUser || MOCK_DOCTORS[0]} 
-              doctors={doctorsList}
-              myAppointments={patients.filter(p => p.name === 'Paciente Demo')} 
+              doctors={doctorsList || []}
+              myAppointments={myPatientRecords} 
               notes={patientNotes}
               onBookAppointment={handlePatientBook}
               onRequestHomeService={handlePatientRequestHome}
               onGoBack={() => setViewMode('landing')}
               currentWaitingPatient={myActive}
+              onCancelAppointment={handlePatientCancel}
           />
       );
   }
@@ -1343,13 +1743,22 @@ const TelemedicineDashboard: React.FC<TelemedicineDashboardProps> = ({ patients,
                                         </div>
                                     </div>
                                 </div>
-                                <button 
-                                    onClick={() => handleReviewIntake(p)}
-                                    disabled={!isDoctorAvailable}
-                                    className={`px-6 py-3 text-white rounded-xl text-[9px] font-black uppercase tracking-widest shadow-lg transition-all flex items-center gap-2 group-hover:scale-105 ${isDoctorAvailable ? 'bg-[#0057B8] hover:bg-slate-900' : 'bg-slate-300 cursor-not-allowed'}`}
-                                >
-                                    <FileText size={14}/> Atender
-                                </button>
+                                <div className="flex gap-2">
+                                    <button 
+                                        onClick={() => handleOpenMessage(p)}
+                                        className="p-3 bg-white border border-slate-200 rounded-xl text-slate-400 hover:text-blue-600 hover:border-blue-200 shadow-sm transition-all"
+                                        title="Notificar Paciente"
+                                    >
+                                        <Bell size={16}/>
+                                    </button>
+                                    <button 
+                                        onClick={() => handleReviewIntake(p)}
+                                        disabled={!isDoctorAvailable}
+                                        className={`px-6 py-3 text-white rounded-xl text-[9px] font-black uppercase tracking-widest shadow-lg transition-all flex items-center gap-2 group-hover:scale-105 ${isDoctorAvailable ? 'bg-[#0057B8] hover:bg-slate-900' : 'bg-slate-300 cursor-not-allowed'}`}
+                                    >
+                                        <FileText size={14}/> Atender
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     ))}
@@ -1500,6 +1909,26 @@ const TelemedicineDashboard: React.FC<TelemedicineDashboardProps> = ({ patients,
                               )}
                           </tbody>
                       </table>
+                  </div>
+              </div>
+          </div>
+      )}
+
+      {/* MESSAGE MODAL */}
+      {showMessageModal && messagePatient && (
+          <div className="fixed inset-0 z-[300] bg-slate-900/90 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
+              <div className="bg-white w-full max-w-md rounded-[2.5rem] p-8 shadow-2xl space-y-6">
+                  <h3 className="text-lg font-black text-slate-900 uppercase">Mensaje para {messagePatient.name}</h3>
+                  <textarea 
+                    className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl h-32 text-sm outline-none resize-none"
+                    placeholder="Ej: Hola, entraré 10 min tarde. / Por favor ten a la mano tus estudios."
+                    value={messageText}
+                    onChange={e => setMessageText(e.target.value)}
+                    autoFocus
+                  />
+                  <div className="flex gap-4">
+                      <button onClick={() => setShowMessageModal(false)} className="flex-1 py-3 bg-slate-100 text-slate-500 rounded-xl font-bold text-xs uppercase hover:bg-slate-200">Cancelar</button>
+                      <button onClick={handleSendMessage} className="flex-1 py-3 bg-blue-600 text-white rounded-xl font-bold text-xs uppercase hover:bg-blue-700 shadow-lg">Enviar</button>
                   </div>
               </div>
           </div>

@@ -1,10 +1,12 @@
-import React, { useState, useMemo, useEffect } from 'react';
+
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { 
   User, Activity, FileText, ChevronRight, HeartPulse, Plus, X, 
   Search, Printer, Lock, CheckCircle2, Edit3, AlertOctagon, 
   Thermometer, Droplet, Scale, Ruler, FilePlus2, ClipboardList,
-  LogOut, Globe, Accessibility, QrCode
+  LogOut, Globe, Accessibility, QrCode, Upload, Paperclip, FileImage, 
+  FileBox, Download, Save
 } from 'lucide-react';
 import { 
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer 
@@ -19,6 +21,38 @@ interface PatientProfileProps {
   onSaveNote: (n: ClinicalNote) => void;
   doctorInfo: DoctorInfo;
 }
+
+// COPIA LOCAL DE LA CONFIGURACIÓN DE CAMPOS SUIVE (Misma que Telemedicine)
+const PROGRAM_SPECIFICS: Record<string, { label: string; type: 'select' | 'text' | 'number'; options?: string[] }[]> = {
+    'Planificación Familiar': [
+        { label: 'Método Elegido', type: 'select', options: ['Oral', 'Inyectable Mensual', 'Inyectable Bimensual', 'Implante Subdérmico', 'DIU T Cobre', 'DIU Medicado', 'Parche', 'Preservativo', 'OTB', 'Vasectomía', 'Ninguno'] },
+        { label: 'Tipo Usuario', type: 'select', options: ['Activo', 'Nuevo Aceptante', 'Reingreso', 'Cambio de Método'] },
+        { label: 'Insumos Entregados', type: 'number' }
+    ],
+    'Control Prenatal': [
+        { label: 'Trimestre', type: 'select', options: ['1ero', '2do', '3ero'] },
+        { label: 'Riesgo Obstétrico', type: 'select', options: ['Bajo', 'Alto'] },
+        { label: 'Enfoque', type: 'select', options: ['Primera Vez', 'Subsecuente', 'Puerperio'] }
+    ],
+    'Control Niño Sano': [
+        { label: 'Estado Nutricional', type: 'select', options: ['Normal', 'Desnutrición Leve', 'Desnutrición Mod/Sev', 'Sobrepeso', 'Obesidad'] },
+        { label: 'Desarrollo', type: 'select', options: ['Normal', 'Rezago', 'Retardo'] },
+        { label: 'Tamiz Realizado', type: 'select', options: ['Ninguno', 'Metabólico', 'Auditivo', 'Visual', 'Cardiaco'] }
+    ],
+    'Crónico-Degenerativas': [
+        { label: 'Patología', type: 'select', options: ['Diabetes', 'Hipertensión', 'Obesidad', 'Dislipidemia', 'Síndrome Metabólico'] },
+        { label: 'Estatus Control', type: 'select', options: ['Controlado', 'No Controlado'] },
+        { label: 'Complicaciones', type: 'select', options: ['Sin Complicaciones', 'Renales', 'Visuales', 'Neuropatía', 'Cardiovasculares'] }
+    ],
+    'Salud Mental': [
+        { label: 'Trastorno Principal', type: 'select', options: ['Depresión', 'Ansiedad', 'Adicciones', 'Violencia', 'Esquizofrenia', 'Otro'] },
+        { label: 'Intervención', type: 'select', options: ['Psicoterapia', 'Farmacológico', 'Mixto', 'Referencia'] }
+    ],
+    'Detección Cáncer': [
+        { label: 'Tipo Detección', type: 'select', options: ['Cérvico-Uterino (PCR/Pap)', 'Mama (Exploración)', 'Mama (Mastografía)', 'Próstata (Ag/Tacto)'] },
+        { label: 'Resultado (Si aplica)', type: 'select', options: ['Pendiente', 'Negativo', 'Anormal/Positivo'] }
+    ]
+};
 
 const PatientProfile: React.FC<PatientProfileProps> = ({ patients, notes, onUpdatePatient, onSaveNote, doctorInfo }) => {
   const { id } = useParams();
@@ -37,12 +71,23 @@ const PatientProfile: React.FC<PatientProfileProps> = ({ patients, notes, onUpda
       diagnosis: '',
       consultationType: 'Subsecuente',
       program: 'Consulta Externa',
-      specifics: {},
+      specifics: {} as Record<string, any>,
       isIndigenous: false,
       isDisability: false,
       isMigrant: false,
       referral: 'Ninguna',
       notes: ''
+  });
+
+  // --- UPLOAD DOCUMENT STATES ---
+  const [showUploadModal, setShowUploadModal] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploadForm, setUploadForm] = useState({
+      title: '',
+      category: 'Resultados de Laboratorio',
+      fileUrl: '',
+      fileType: '', // 'image/png', 'application/pdf', etc.
+      fileName: ''
   });
 
   useEffect(() => {
@@ -117,9 +162,89 @@ const PatientProfile: React.FC<PatientProfileProps> = ({ patients, notes, onUpda
      navigate('/');
   };
 
+  // --- DOCUMENT UPLOAD HANDLERS ---
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (file) {
+          if (file.size > 5 * 1024 * 1024) return alert("El archivo es demasiado grande (Máx 5MB).");
+          
+          const reader = new FileReader();
+          reader.onload = (ev) => {
+              setUploadForm(prev => ({
+                  ...prev,
+                  fileUrl: ev.target?.result as string,
+                  fileType: file.type,
+                  fileName: file.name
+              }));
+          };
+          reader.readAsDataURL(file);
+      }
+  };
+
+  const handleSaveDocument = () => {
+      if (!uploadForm.title || !uploadForm.fileUrl) return alert("Debe seleccionar un archivo y asignar un título.");
+
+      const newDocNote: ClinicalNote = {
+          id: `DOC-${Date.now()}`,
+          patientId: patient.id,
+          type: uploadForm.category, // Usamos la categoría como el 'type' principal para visualización
+          date: new Date().toLocaleString('es-MX'),
+          author: `${doctorInfo.name} (Carga Manual)`,
+          content: {
+              ...uploadForm,
+              isAttachment: true, // Flag para identificar que es un adjunto
+              notes: `Documento cargado externamente: ${uploadForm.fileName}`
+          },
+          isSigned: true, // Se asume validado al subir
+          hash: `EXT-DOC-${Math.random().toString(36).substr(2, 8).toUpperCase()}`
+      };
+
+      onSaveNote(newDocNote);
+      setShowUploadModal(false);
+      setUploadForm({ title: '', category: 'Resultados de Laboratorio', fileUrl: '', fileType: '', fileName: '' });
+  };
+
+  // ... (Existing handlers and renders remain same) ...
+  const handleSpecificChange = (key: string, value: any) => {
+      setFinalizeData(prev => ({
+          ...prev,
+          specifics: { ...prev.specifics, [key]: value }
+      }));
+  };
+
   const renderProgramSpecificFields = () => {
-     // Optional logic to render specific fields based on program selection
-     return null; 
+     const fields = PROGRAM_SPECIFICS[finalizeData.program];
+     if (!fields) return null;
+
+     return (
+         <div className="bg-blue-50 border border-blue-100 p-4 rounded-2xl space-y-4 animate-in slide-in-from-top-2">
+             <h4 className="text-[10px] font-black text-blue-700 uppercase tracking-widest border-b border-blue-200 pb-2 mb-2 flex items-center gap-2">
+                 <ClipboardList size={12}/> Detalles del Programa: {finalizeData.program}
+             </h4>
+             <div className="grid grid-cols-2 gap-4">
+                 {fields.map((field) => (
+                     <div key={field.label} className="space-y-1">
+                         <label className="text-[9px] font-black text-slate-500 uppercase">{field.label}</label>
+                         {field.type === 'select' ? (
+                             <select 
+                                 className="w-full p-2 bg-white border border-blue-200 rounded-lg text-xs font-bold outline-none"
+                                 onChange={(e) => handleSpecificChange(field.label, e.target.value)}
+                             >
+                                 <option value="">Seleccione...</option>
+                                 {field.options?.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                             </select>
+                         ) : (
+                             <input 
+                                 type={field.type}
+                                 className="w-full p-2 bg-white border border-blue-200 rounded-lg text-xs font-bold outline-none"
+                                 onChange={(e) => handleSpecificChange(field.label, e.target.value)}
+                             />
+                         )}
+                     </div>
+                 ))}
+             </div>
+         </div>
+     );
   };
 
   const renderDynamicChart = (history: Vitals[] | null) => {
@@ -158,7 +283,7 @@ const PatientProfile: React.FC<PatientProfileProps> = ({ patients, notes, onUpda
     const typeMap: any = { 
       'Historia Clínica Medica': `/patient/${id}/history`, 
       'Nota de Evolución': `/patient/${id}/note/evolution`, 
-      'Nota de Ingreso a Hospitalización': `/patient/${id}/note/admission`, 
+      'Nota de Ingreso a Hospitalización': `/patient/${id}/note/admission`, // Already mapped
       'Nota Pre-operatoria': `/patient/${id}/note/preoperative`, 
       'Nota Pre-anestésica': `/patient/${id}/note/preanesthetic`,
       'Hoja de Registro Anestésico': `/patient/${id}/note/anesthetic-record`, 
@@ -204,6 +329,33 @@ const PatientProfile: React.FC<PatientProfileProps> = ({ patients, notes, onUpda
   const patientAllergies = patient.allergies || [];
   const patientChronic = patient.chronicDiseases || [];
 
+  // Helper para mostrar edad detallada
+  const getDisplayAge = () => {
+    if (patient.age >= 2 || !patient.birthDate) {
+        return `${patient.age} ${patient.ageUnit ? patient.ageUnit.toUpperCase() : 'AÑOS'}`;
+    }
+    
+    const birth = new Date(patient.birthDate);
+    const now = new Date();
+    let years = now.getFullYear() - birth.getFullYear();
+    let months = now.getMonth() - birth.getMonth();
+    let days = now.getDate() - birth.getDate();
+    
+    if (days < 0) {
+        months--;
+        const lastMonthDate = new Date(now.getFullYear(), now.getMonth(), 0);
+        days += lastMonthDate.getDate();
+    }
+    if (months < 0) {
+        years--;
+        months += 12;
+    }
+    
+    if (years > 0) return `${years} AÑOS ${months} MESES`;
+    if (months > 0) return `${months} MESES ${days} DÍAS`;
+    return `${days} DÍAS`;
+  };
+
   return (
     <div className="max-w-full mx-auto space-y-6 pb-20 animate-in fade-in">
       {/* BANNER DE BLOQUEO SI ESTÁ FINALIZADO */}
@@ -235,7 +387,7 @@ const PatientProfile: React.FC<PatientProfileProps> = ({ patients, notes, onUpda
                <div>
                   <div className="flex items-center gap-3 mb-1">
                       <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">ID: {patient.id}</span>
-                      <span className="text-[9px] font-black text-blue-600 uppercase bg-blue-50 px-3 py-1 rounded-full border border-blue-100">{patient.age} AÑOS • {patient.sex === 'M' ? 'MASCULINO' : 'FEMENINO'}</span>
+                      <span className="text-[9px] font-black text-blue-600 uppercase bg-blue-50 px-3 py-1 rounded-full border border-blue-100">{getDisplayAge()} • {patient.sex === 'M' ? 'MASCULINO' : 'FEMENINO'}</span>
                   </div>
                   <h1 className="text-4xl font-black text-slate-900 uppercase tracking-tighter leading-none">{patient.name}</h1>
                </div>
@@ -278,7 +430,8 @@ const PatientProfile: React.FC<PatientProfileProps> = ({ patients, notes, onUpda
             </div>
          </div>
       </div>
-
+      
+      {/* ... Rest of component ... */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
         <div className="lg:col-span-8 space-y-8">
            {renderDynamicChart(patient.vitalsHistory || null)}
@@ -289,31 +442,44 @@ const PatientProfile: React.FC<PatientProfileProps> = ({ patients, notes, onUpda
                     <ClipboardList className="text-blue-600 w-5 h-5" /> HISTORIAL DE ATENCIONES
                  </h3>
                  {!isAttended && (
-                   <button onClick={() => setShowMenu(true)} className="px-8 py-3 bg-blue-600 text-white rounded-[1.5rem] font-black text-[9px] uppercase shadow-lg hover:bg-slate-900 transition-all flex items-center gap-2 tracking-widest"><FilePlus2 size={14} /> NUEVA NOTA</button>
+                   <div className="flex gap-2">
+                       {/* BOTÓN SUBIR DOCUMENTO */}
+                       <button onClick={() => setShowUploadModal(true)} className="px-6 py-3 bg-slate-100 text-slate-600 border border-slate-200 rounded-[1.5rem] font-black text-[9px] uppercase hover:bg-slate-200 transition-all flex items-center gap-2 tracking-widest">
+                           <Upload size={14}/> Subir Documento
+                       </button>
+                       <button onClick={() => setShowMenu(true)} className="px-8 py-3 bg-blue-600 text-white rounded-[1.5rem] font-black text-[9px] uppercase shadow-lg hover:bg-slate-900 transition-all flex items-center gap-2 tracking-widest">
+                           <FilePlus2 size={14} /> NUEVA NOTA
+                       </button>
+                   </div>
                  )}
               </div>
               <div className="divide-y divide-slate-50 max-h-[500px] overflow-y-auto custom-scrollbar">
-                 {patientNotes.map(note => (
-                    <button 
-                        key={note.id} 
-                        onClick={() => note.isSigned ? setSelectedNote(note) : navigate(getNoteRoute(note.type, note.id))} 
-                        className="w-full text-left p-6 hover:bg-slate-50 transition-all group flex items-start justify-between"
-                    >
-                       <div className="flex gap-5 items-center">
-                          <div className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all ${!note.isSigned ? 'bg-amber-50 text-amber-600 border border-amber-100' : 'bg-white border-2 border-slate-100 text-slate-400'}`}>
-                              <FileText size={20} />
-                          </div>
-                          <div>
-                             <p className="text-xs font-black text-slate-900 uppercase group-hover:text-blue-700 tracking-tight flex items-center gap-2">
-                                 {note.type}
-                                 {!note.isSigned && <span className="bg-amber-100 text-amber-700 px-2 py-0.5 rounded text-[7px] font-black uppercase border border-amber-200">Borrador</span>}
-                             </p>
-                             <p className="text-[9px] font-bold text-slate-400 uppercase mt-1">{note.date} • {note.author}</p>
-                          </div>
-                       </div>
-                       <ChevronRight size={18} className="text-slate-300 group-hover:text-blue-600 transition-all self-center" />
-                    </button>
-                 ))}
+                 {patientNotes.map(note => {
+                    const isAttachment = note.content?.isAttachment;
+                    
+                    return (
+                        <button 
+                            key={note.id} 
+                            onClick={() => note.isSigned ? setSelectedNote(note) : navigate(getNoteRoute(note.type, note.id))} 
+                            className="w-full text-left p-6 hover:bg-slate-50 transition-all group flex items-start justify-between"
+                        >
+                        <div className="flex gap-5 items-center">
+                            <div className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all ${isAttachment ? 'bg-indigo-50 text-indigo-600 border border-indigo-100' : (!note.isSigned ? 'bg-amber-50 text-amber-600 border border-amber-100' : 'bg-white border-2 border-slate-100 text-slate-400')}`}>
+                                {isAttachment ? <Paperclip size={20} /> : <FileText size={20} />}
+                            </div>
+                            <div>
+                                <p className="text-xs font-black text-slate-900 uppercase group-hover:text-blue-700 tracking-tight flex items-center gap-2">
+                                    {note.content?.title || note.type}
+                                    {!note.isSigned && <span className="bg-amber-100 text-amber-700 px-2 py-0.5 rounded text-[7px] font-black uppercase border border-amber-200">Borrador</span>}
+                                    {isAttachment && <span className="bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded text-[7px] font-black uppercase border border-indigo-200">Adjunto</span>}
+                                </p>
+                                <p className="text-[9px] font-bold text-slate-400 uppercase mt-1">{note.date} • {note.author}</p>
+                            </div>
+                        </div>
+                        <ChevronRight size={18} className="text-slate-300 group-hover:text-blue-600 transition-all self-center" />
+                        </button>
+                    );
+                 })}
                  {patientNotes.length === 0 && <div className="p-20 text-center opacity-30 font-black uppercase text-[10px] tracking-widest text-slate-400">Sin registros previos</div>}
               </div>
            </div>
@@ -370,8 +536,7 @@ const PatientProfile: React.FC<PatientProfileProps> = ({ patients, notes, onUpda
            </div>
         </div>
       </div>
-
-      {/* MODAL NUEVA NOTA (MENU) - UNIFICADO Y ESTILIZADO */}
+      {/* ... Modals (New Note, Vitals, Finalize, Upload, View Note) ... */}
       {showMenu && !isAttended && (
         <div className="fixed inset-0 z-[250] flex items-center justify-center p-8 bg-slate-900/90 backdrop-blur-xl animate-in fade-in">
           <div className="bg-white w-full max-w-5xl max-h-[90vh] rounded-[3rem] shadow-2xl flex flex-col overflow-hidden border border-white/20">
@@ -430,7 +595,82 @@ const PatientProfile: React.FC<PatientProfileProps> = ({ patients, notes, onUpda
           </div>
         </div>
       )}
+
+      {/* MODAL UPLOAD DOCUMENT */}
+      {showUploadModal && (
+          <div className="fixed inset-0 z-[300] bg-slate-900/90 backdrop-blur-sm flex items-center justify-center p-6 animate-in fade-in">
+              <div className="bg-white w-full max-w-lg rounded-[3rem] p-10 shadow-2xl space-y-8">
+                  <div className="flex justify-between items-center">
+                      <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tight">Adjuntar Documento</h3>
+                      <button onClick={() => setShowUploadModal(false)} className="p-2 hover:bg-slate-100 rounded-full"><X size={24}/></button>
+                  </div>
+                  
+                  <div className="space-y-4">
+                      <div className="space-y-2">
+                          <label className="text-[9px] font-black text-slate-400 uppercase ml-2">Título del Documento</label>
+                          <input 
+                            className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold outline-none" 
+                            placeholder="Ej: Análisis de Sangre Chopo, Rx Tórax..."
+                            value={uploadForm.title}
+                            onChange={e => setUploadForm({...uploadForm, title: e.target.value})}
+                            autoFocus
+                          />
+                      </div>
+                      
+                      <div className="space-y-2">
+                          <label className="text-[9px] font-black text-slate-400 uppercase ml-2">Categoría / Tipo</label>
+                          <select 
+                             className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-bold outline-none uppercase"
+                             value={uploadForm.category}
+                             onChange={e => setUploadForm({...uploadForm, category: e.target.value})}
+                          >
+                             <option>Resultados de Laboratorio</option>
+                             <option>Imagenología (Rx/TAC/USG)</option>
+                             <option>Receta Externa</option>
+                             <option>Resumen Clínico Externo</option>
+                             <option>Documento Legal</option>
+                             <option>Otro</option>
+                          </select>
+                      </div>
+
+                      <div 
+                         onClick={() => fileInputRef.current?.click()}
+                         className={`h-40 border-2 border-dashed border-slate-300 rounded-[2rem] flex flex-col items-center justify-center cursor-pointer hover:bg-slate-50 transition-all ${uploadForm.fileUrl ? 'bg-emerald-50 border-emerald-300' : ''}`}
+                      >
+                         <input 
+                            type="file" 
+                            ref={fileInputRef} 
+                            className="hidden" 
+                            accept="image/*,.pdf" 
+                            onChange={handleFileSelect} 
+                         />
+                         {uploadForm.fileUrl ? (
+                             <div className="text-center space-y-2">
+                                 <CheckCircle2 size={32} className="text-emerald-600 mx-auto"/>
+                                 <p className="text-[10px] font-black uppercase text-emerald-700 max-w-[200px] truncate">{uploadForm.fileName}</p>
+                                 <p className="text-[8px] text-slate-400 font-bold uppercase">Click para cambiar</p>
+                             </div>
+                         ) : (
+                             <div className="text-center space-y-2 text-slate-400">
+                                 <Upload size={32} className="mx-auto"/>
+                                 <p className="text-[10px] font-black uppercase">Click para seleccionar archivo</p>
+                                 <p className="text-[8px]">PDF o Imágenes (Máx 5MB)</p>
+                             </div>
+                         )}
+                      </div>
+                  </div>
+
+                  <button 
+                    onClick={handleSaveDocument}
+                    className="w-full py-5 bg-slate-900 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl hover:bg-blue-600 transition-all flex items-center justify-center gap-2"
+                  >
+                      <Save size={16}/> Guardar en Historial
+                  </button>
+              </div>
+          </div>
+      )}
       
+      {/* MODAL SIGNOS VITALES */}
       {showVitalsModal && (
         <div className="fixed inset-0 z-[300] bg-slate-900/90 backdrop-blur-md flex items-center justify-center p-6 animate-in fade-in">
            <div className="bg-white w-full max-w-lg rounded-[3rem] p-10 shadow-2xl space-y-8">
@@ -514,15 +754,14 @@ const PatientProfile: React.FC<PatientProfileProps> = ({ patients, notes, onUpda
                                   value={finalizeData.program}
                                   onChange={e => setFinalizeData({...finalizeData, program: e.target.value, specifics: {}})}
                               >
-                                  <option>Consulta Externa</option>
-                                  <option>Urgencias</option>
-                                  <option>Planificación Familiar</option>
-                                  <option>Control Prenatal</option>
-                                  <option>Control Niño Sano</option>
-                                  <option>Crónico-Degenerativas</option>
-                                  <option>Salud Mental</option>
-                                  <option>Detección Cáncer</option>
-                                  <option>Dental / Estomatología</option>
+                                  <option value="Consulta General">Consulta General</option>
+                                  <option value="Planificación Familiar">Planificación Familiar</option>
+                                  <option value="Control Prenatal">Control Prenatal</option>
+                                  <option value="Control Niño Sano">Control Niño Sano</option>
+                                  <option value="Crónico-Degenerativas">Crónico-Degenerativas</option>
+                                  <option value="Salud Mental">Salud Mental</option>
+                                  <option value="Detección Cáncer">Detección Cáncer</option>
+                                  <option value="Telemedicina">Telemedicina</option>
                               </select>
                            </div>
                       </div>
@@ -603,42 +842,56 @@ const PatientProfile: React.FC<PatientProfileProps> = ({ patients, notes, onUpda
               <div className="p-8 bg-slate-50 border-b border-slate-200 flex justify-between items-center no-print">
                  <div className="flex items-center gap-4">
                     <div className="w-12 h-12 rounded-2xl flex items-center justify-center text-white bg-blue-600 shadow-lg">
-                        <FileText size={24} />
+                        {selectedNote.content?.isAttachment ? <Paperclip size={24}/> : <FileText size={24} />}
                     </div>
                     <div>
-                        <p className="text-xs font-black text-slate-900 uppercase tracking-widest">{selectedNote.type}</p>
+                        <p className="text-xs font-black text-slate-900 uppercase tracking-widest">{selectedNote.content?.title || selectedNote.type}</p>
                         <p className="text-[10px] text-slate-400 font-bold uppercase">Folio: {selectedNote.id}</p>
                     </div>
                  </div>
                  <div className="flex gap-4">
-                    <button onClick={() => window.print()} className="px-8 py-3 bg-slate-900 text-white rounded-2xl font-black text-[10px] uppercase shadow-sm flex items-center gap-3 hover:bg-blue-600 transition-all"><Printer size={18} /> Imprimir</button>
+                    {!selectedNote.content?.isAttachment && <button onClick={() => window.print()} className="px-8 py-3 bg-slate-900 text-white rounded-2xl font-black text-[10px] uppercase shadow-sm flex items-center gap-3 hover:bg-blue-600 transition-all"><Printer size={18} /> Imprimir</button>}
+                    {selectedNote.content?.isAttachment && <a href={selectedNote.content.fileUrl} download={selectedNote.content.fileName || 'documento'} className="px-8 py-3 bg-slate-900 text-white rounded-2xl font-black text-[10px] uppercase shadow-sm flex items-center gap-3 hover:bg-blue-600 transition-all"><Download size={18} /> Descargar</a>}
                     <button onClick={() => setSelectedNote(null)} className="p-3 bg-white rounded-xl border border-slate-200 hover:bg-rose-50 transition-all"><X size={24}/></button>
                  </div>
               </div>
-              <div className="flex-1 overflow-y-auto p-20 bg-white">
-                 <div className="max-w-4xl mx-auto space-y-12 text-slate-900 print:text-black">
-                    {/* Re-render note content structured for printing */}
-                    <div className="flex justify-between border-b-4 border-slate-900 pb-10">
-                       <div className="space-y-4">
-                          <h1 className="text-3xl font-black text-slate-900 uppercase leading-none">{doctorInfo.hospital}</h1>
-                          <p className="text-[10px] font-bold text-slate-500 uppercase tracking-[0.2em] mt-2">Expediente Clínico Electrónico Certificado</p>
-                       </div>
-                       <div className="text-right"><QrCode size={80} className="text-slate-900 inline-block mb-2" /><p className="text-xs font-black text-rose-600 uppercase tracking-tighter">FOLIO: {selectedNote.id}</p></div>
-                    </div>
-                    <div className="space-y-10">
-                       {Object.entries(selectedNote.content).map(([key, val]) => {
-                         if (key === 'vitals') return null;
-                         return (
-                           <div key={key} className="space-y-2">
-                             <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest border-l-2 border-blue-600 pl-3">{key}</h4>
-                             <div className="text-sm font-medium text-slate-800 italic uppercase leading-relaxed print:text-black">
-                                {typeof val === 'string' ? val : JSON.stringify(val, null, 2)}
-                             </div>
+              
+              <div className="flex-1 overflow-y-auto p-10 bg-white">
+                 {/* Lógica de Renderizado Diferenciada */}
+                 {selectedNote.content?.isAttachment ? (
+                     <div className="flex flex-col items-center justify-center space-y-4 h-full">
+                         {selectedNote.content.fileType?.startsWith('image/') ? (
+                             <img src={selectedNote.content.fileUrl} alt="Adjunto" className="max-w-full max-h-[70vh] rounded-xl shadow-lg object-contain" />
+                         ) : (
+                             <iframe src={selectedNote.content.fileUrl} title="Documento PDF" className="w-full h-[70vh] rounded-xl border border-slate-200 shadow-sm" />
+                         )}
+                         <p className="text-xs font-bold text-slate-500 uppercase">{selectedNote.content.fileName}</p>
+                     </div>
+                 ) : (
+                     <div className="max-w-4xl mx-auto space-y-12 text-slate-900 print:text-black">
+                        {/* Re-render note content structured for printing */}
+                        <div className="flex justify-between border-b-4 border-slate-900 pb-10">
+                           <div className="space-y-4">
+                              <h1 className="text-3xl font-black text-slate-900 uppercase leading-none">{doctorInfo.hospital}</h1>
+                              <p className="text-[10px] font-bold text-slate-500 uppercase tracking-[0.2em] mt-2">Expediente Clínico Electrónico Certificado</p>
                            </div>
-                         );
-                       })}
-                    </div>
-                 </div>
+                           <div className="text-right"><QrCode size={80} className="text-slate-900 inline-block mb-2" /><p className="text-xs font-black text-rose-600 uppercase tracking-tighter">FOLIO: {selectedNote.id}</p></div>
+                        </div>
+                        <div className="space-y-10">
+                           {Object.entries(selectedNote.content).map(([key, val]) => {
+                             if (key === 'vitals') return null;
+                             return (
+                               <div key={key} className="space-y-2">
+                                 <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest border-l-2 border-blue-600 pl-3">{key}</h4>
+                                 <div className="text-sm font-medium text-slate-800 italic uppercase leading-relaxed print:text-black">
+                                    {typeof val === 'string' ? val : JSON.stringify(val, null, 2)}
+                                 </div>
+                               </div>
+                             );
+                           })}
+                        </div>
+                     </div>
+                 )}
               </div>
            </div>
         </div>

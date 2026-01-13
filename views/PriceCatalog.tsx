@@ -7,10 +7,12 @@ import {
   FlaskConical, Beaker, Pill, Droplets, Info,
   Save, Activity, CheckCircle2, ArrowRight, Layers,
   Laptop, Armchair, Box, Monitor, Scissors, Stethoscope,
-  Microscope, ImageIcon
+  Microscope, ImageIcon, MapPin
 } from 'lucide-react';
 import { PriceItem, PriceType, MedicationStock, MedicationCategory, SupplyType, MedicationBatch, LinkedSupply } from '../types';
 import { INITIAL_PRICES, INITIAL_STOCK } from '../constants';
+
+const generateId = (prefix: string) => `${prefix}-${Date.now()}-${Math.floor(Math.random() * 100000)}`;
 
 const PriceCatalog: React.FC = () => {
   const [prices, setPrices] = useState<PriceItem[]>(() => {
@@ -65,7 +67,7 @@ const PriceCatalog: React.FC = () => {
   const NewCatalogItemModal = () => {
       const [form, setForm] = useState<Partial<PriceItem>>(() => {
           if (catalogItemToEdit) return { ...catalogItemToEdit };
-          return { name: '', code: '', price: 0, cost: 0, taxPercent: 16, category: 'General', type: PriceType.SERVICE, linkedSupplies: [] };
+          return { name: '', code: '', price: 0, cost: 0, taxPercent: 16, category: 'General', type: PriceType.SERVICE, linkedSupplies: [], isHomeServiceAvailable: false };
       });
       
       // Inventory Creation State
@@ -168,7 +170,8 @@ const PriceCatalog: React.FC = () => {
               type: form.type || PriceType.SERVICE,
               linkedInventoryId: linkedInvId,
               linkedSupplies: linkedSuppliesList,
-              cost: Number(form.cost) || 0 // Save the operational cost
+              cost: Number(form.cost) || 0, // Save the operational cost
+              isHomeServiceAvailable: form.isHomeServiceAvailable
           };
 
           if (catalogItemToEdit) {
@@ -213,6 +216,26 @@ const PriceCatalog: React.FC = () => {
                                     <input type="number" className="w-full p-5 bg-slate-50 border border-slate-200 rounded-3xl font-black text-center" value={form.taxPercent} onChange={e => setForm({...form, taxPercent: parseFloat(e.target.value)})} />
                                 </div>
                             </div>
+                            
+                            {/* HOME SERVICE TOGGLE */}
+                            {form.type === PriceType.SERVICE && (
+                                <div 
+                                    onClick={() => setForm({...form, isHomeServiceAvailable: !form.isHomeServiceAvailable})}
+                                    className={`p-4 rounded-2xl border-2 cursor-pointer flex items-center justify-between transition-all ${form.isHomeServiceAvailable ? 'bg-emerald-50 border-emerald-400 text-emerald-800' : 'bg-slate-50 border-slate-100 text-slate-400'}`}
+                                >
+                                    <div className="flex items-center gap-3">
+                                        <MapPin size={18} className={form.isHomeServiceAvailable ? 'text-emerald-600' : 'text-slate-300'}/>
+                                        <div>
+                                            <p className="text-[10px] font-black uppercase tracking-widest">Servicio a Domicilio</p>
+                                            <p className="text-[9px] opacity-70">Habilitar para App de Paciente</p>
+                                        </div>
+                                    </div>
+                                    <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${form.isHomeServiceAvailable ? 'bg-emerald-500 border-emerald-500 text-white' : 'border-slate-300'}`}>
+                                        {form.isHomeServiceAvailable && <CheckCircle2 size={12}/>}
+                                    </div>
+                                </div>
+                            )}
+
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="space-y-1.5">
                                     <label className="text-[9px] font-black uppercase text-slate-400 ml-2">Tipo de Activo</label>
@@ -230,6 +253,7 @@ const PriceCatalog: React.FC = () => {
                                         <option>Farmacia</option>
                                         <option>Insumos Médicos</option>
                                         <option>Estudios / Auxiliares</option>
+                                        <option>Logística</option>
                                     </select>
                                 </div>
                             </div>
@@ -479,6 +503,7 @@ const PriceCatalog: React.FC = () => {
                      <th className="px-6 py-8">Clasificación</th>
                      <th className="px-6 py-8 text-center">Tipo Activo</th>
                      <th className="px-6 py-8 text-center">Vínculo Stock</th>
+                     <th className="px-6 py-8 text-center">Domicilio</th>
                      <th className="px-6 py-8 text-right">Precio Público</th>
                      <th className="px-10 py-8 text-right no-print">Acciones</th>
                   </tr>
@@ -512,6 +537,13 @@ const PriceCatalog: React.FC = () => {
                               <div className="text-[9px] font-black text-rose-400 uppercase italic">Desvinculado</div>
                            ) : (
                               <span className="text-[9px] text-slate-300 font-black uppercase opacity-30">---</span>
+                           )}
+                        </td>
+                        <td className="px-6 py-8 text-center">
+                           {item.isHomeServiceAvailable ? (
+                               <span className="inline-flex items-center gap-1 bg-violet-50 text-violet-700 px-3 py-1 rounded-lg text-[8px] font-black uppercase border border-violet-100"><MapPin size={10}/> Sí</span>
+                           ) : (
+                               <span className="text-[9px] text-slate-300">-</span>
                            )}
                         </td>
                         <td className="px-6 py-8 text-right">

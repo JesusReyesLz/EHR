@@ -1,12 +1,15 @@
 
 import React, { useState, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { 
   Ambulance, MapPin, Clock, User, FileText, CheckCircle2, 
   AlertCircle, Truck, Phone, ChevronRight, Filter, Search, Calendar,
   UserPlus, X, MapPinned, LayoutList, Navigation, UserCheck, Timer, Wallet, DollarSign,
-  ArrowRight, Pill, FlaskConical, Stethoscope, ShoppingBag, Activity, Syringe
+  ArrowRight, Pill, FlaskConical, Stethoscope, ShoppingBag, Activity, Syringe, Route,
+  CreditCard, FilePlus2, Siren, Bed, FolderPlus
 } from 'lucide-react';
-import { HomeServiceRequest, StaffMember, DoctorInfo } from '../types';
+import { HomeServiceRequest, StaffMember, DoctorInfo, PatientStatus } from '../types';
+import { NOTE_CATEGORIES } from '../constants';
 
 interface HomeServicesProps {
     requests: HomeServiceRequest[];
@@ -16,6 +19,7 @@ interface HomeServicesProps {
 }
 
 const HomeServices: React.FC<HomeServicesProps> = ({ requests, onUpdateRequest, staffList, currentUser }) => {
+    const navigate = useNavigate();
     // Mode Switcher: Dispatch (Admin) vs Field (Nurse/Uber Mode)
     const [viewMode, setViewMode] = useState<'dispatch' | 'field'>('dispatch');
     
@@ -29,12 +33,18 @@ const HomeServices: React.FC<HomeServicesProps> = ({ requests, onUpdateRequest, 
     // Field View State (My Jobs)
     const [fieldTab, setFieldTab] = useState<'available' | 'active' | 'wallet'>('active');
 
+    // Menu Modal State for Clinical Actions
+    const [showMenu, setShowMenu] = useState(false);
+    const [menuSearchTerm, setMenuSearchTerm] = useState('');
+    const [currentRequestForMenu, setCurrentRequestForMenu] = useState<HomeServiceRequest | null>(null);
+
     // --- SHARED HELPERS ---
     const getStatusColor = (status: string) => {
         switch(status) {
             case 'Pendiente': return 'bg-rose-100 text-rose-700 border-rose-200';
             case 'Asignado': return 'bg-blue-100 text-blue-700 border-blue-200';
             case 'En Camino': return 'bg-amber-100 text-amber-700 border-amber-200';
+            case 'En Proceso': return 'bg-indigo-100 text-indigo-700 border-indigo-200 animate-pulse';
             case 'Recolectado': return 'bg-purple-100 text-purple-700 border-purple-200';
             case 'Finalizado': return 'bg-emerald-100 text-emerald-700 border-emerald-200';
             default: return 'bg-slate-100 text-slate-500';
@@ -44,13 +54,23 @@ const HomeServices: React.FC<HomeServicesProps> = ({ requests, onUpdateRequest, 
     // Helper para identificar el tipo de servicio basado en los datos
     const getRequestTypeConfig = (req: HomeServiceRequest) => {
         // Lógica de detección basada en el contenido
+        if (req.isHospitalizationRequest) {
+            return { 
+                type: 'Traslado/Ingreso', 
+                icon: <Siren size={18} />, 
+                color: 'text-rose-600', 
+                bg: 'bg-rose-50', 
+                border: 'border-rose-200',
+                label: 'Solicitud de Ambulancia'
+            };
+        }
         if (req.studies && req.studies.length > 0) {
             return { 
                 type: 'Laboratorio', 
                 icon: <FlaskConical size={18} />, 
-                color: 'text-rose-600', 
-                bg: 'bg-rose-50', 
-                border: 'border-rose-200',
+                color: 'text-indigo-600', 
+                bg: 'bg-indigo-50', 
+                border: 'border-indigo-200',
                 label: 'Toma de Muestras'
             };
         }
@@ -152,6 +172,44 @@ const HomeServices: React.FC<HomeServicesProps> = ({ requests, onUpdateRequest, 
         }
     };
 
+    // --- ACCIONES CLÍNICAS MÓVILES (DOCTOR EN SITIO) ---
+    const handleClinicalAction = (action: 'note' | 'prescription' | 'billing' | 'hospitalize' | 'menu', req: HomeServiceRequest) => {
+        if (action === 'menu') {
+            setCurrentRequestForMenu(req);
+            setShowMenu(true);
+        } else if (action === 'hospitalize') {
+            if (confirm("¿SOLICITAR INGRESO HOSPITALARIO?\n\nSe notificará a la clínica receptora para preparar cama en Urgencias.")) {
+                 onUpdateRequest({
+                    ...req,
+                    status: 'Asignado', // O un estado especial de 'Traslado'
+                    notes: req.notes + " \n[ALERTA] Médico solicita internamiento urgente."
+                });
+                alert("Solicitud de ingreso enviada a Coordinación Médica.");
+            }
+        } else if (action === 'note') {
+            navigate(`/patient/${req.patientId}/note/evolution`);
+        } else if (action === 'prescription') {
+            navigate(`/patient/${req.patientId}/prescription`);
+        } else if (action === 'billing') {
+            navigate('/billing', { state: { patientId: req.patientId } });
+        }
+    };
+
+    const getNoteRoute = (type: string, patientId: string) => {
+        const typeMap: any = { 
+          'Historia Clínica Medica': `/patient/${patientId}/history`, 
+          'Nota de Evolución': `/patient/${patientId}/note/evolution`, 
+          'Receta Médica': `/patient/${patientId}/prescription`,
+          'Carnet Perinatal / Control Prenatal': `/patient/${patientId}/perinatal-card`,
+          'Tarjeta de Control de Enfermedades Crónicas': `/patient/${patientId}/chronic-card`,
+          'Carnet de Salud Integral / Niño Sano': `/patient/${patientId}/health-control`,
+          'Certificado Médico': `/patient/${patientId}/note/medical-certificate`,
+          'Solicitud de Estudios': `/patient/${patientId}/auxiliary-order`,
+          'Carta de Consentimiento Informado': `/patient/${patientId}/consent`
+        };
+        return typeMap[type] || `/patient/${patientId}/note/generic/${type}`;
+    };
+
     return (
         <div className="max-w-[98%] mx-auto space-y-6 animate-in fade-in pb-20 h-[calc(100vh-100px)] flex flex-col">
             {/* Header with Mode Switcher */}
@@ -246,8 +304,10 @@ const HomeServices: React.FC<HomeServicesProps> = ({ requests, onUpdateRequest, 
                                     /* MY ACTIVE JOBS */
                                     myActiveJobs.length > 0 ? myActiveJobs.map(job => {
                                         const typeConfig = getRequestTypeConfig(job);
+                                        const isMedicalVisit = typeConfig.type === 'Visita Médica' && job.status === 'En Proceso';
+
                                         return (
-                                            <div key={job.id} className={`bg-white rounded-[2.5rem] p-6 shadow-xl border-l-8 ${typeConfig.type === 'Laboratorio' ? 'border-rose-500' : typeConfig.type === 'Farmacia' ? 'border-amber-500' : 'border-emerald-500'} animate-in slide-in-from-bottom-4`}>
+                                            <div key={job.id} className={`bg-white rounded-[2.5rem] p-6 shadow-xl border-l-8 ${typeConfig.type === 'Laboratorio' ? 'border-indigo-500' : typeConfig.type === 'Traslado/Ingreso' ? 'border-rose-500' : 'border-emerald-500'} animate-in slide-in-from-bottom-4`}>
                                                 <div className="flex justify-between items-start mb-4">
                                                     <div>
                                                         <div className="flex items-center gap-2 mb-1">
@@ -265,6 +325,7 @@ const HomeServices: React.FC<HomeServicesProps> = ({ requests, onUpdateRequest, 
                                                         <MapPin className="text-rose-500 shrink-0 mt-0.5" size={16}/>
                                                         <p className="text-xs font-bold text-slate-600 uppercase">{job.patientAddress}</p>
                                                     </div>
+                                                    
                                                     {/* REQUEST DETAILS */}
                                                     <div className={`p-4 rounded-2xl border ${typeConfig.bg} ${typeConfig.border}`}>
                                                         <p className="text-[9px] font-black uppercase opacity-60 mb-2">Requerimientos:</p>
@@ -278,6 +339,38 @@ const HomeServices: React.FC<HomeServicesProps> = ({ requests, onUpdateRequest, 
                                                             <p className="text-xs font-bold text-slate-700">{job.notes || 'Revisión General'}</p>
                                                         )}
                                                     </div>
+                                                    
+                                                    {/* INFO LOGÍSTICA SI EXISTE */}
+                                                    {job.distanceKm && (
+                                                        <div className="flex justify-between items-center text-[10px] font-bold text-slate-500 border-t border-slate-100 pt-2">
+                                                            <span className="flex items-center gap-1"><Route size={12}/> {job.distanceKm.toFixed(1)} km</span>
+                                                            <span className="flex items-center gap-1"><DollarSign size={12}/> Cobro: ${job.totalCost}</span>
+                                                        </div>
+                                                    )}
+
+                                                    {/* --- MÓDULO CLÍNICO MÓVIL (SOLO MÉDICOS EN SITIO) --- */}
+                                                    {isMedicalVisit && (
+                                                        <div className="mt-4 p-4 bg-slate-900 rounded-3xl animate-in fade-in">
+                                                            <h4 className="text-[10px] font-black uppercase text-white mb-3 flex items-center gap-2"><Stethoscope size={14}/> Acciones Clínicas en Sitio</h4>
+                                                            <div className="grid grid-cols-2 gap-2">
+                                                                <button onClick={() => navigate(`/patient/${job.patientId}`)} className="p-3 bg-white/10 hover:bg-white/20 rounded-xl text-white text-[9px] font-bold uppercase flex items-center gap-2 justify-center">
+                                                                    <FileText size={14}/> Ver Expediente
+                                                                </button>
+                                                                <button onClick={() => handleClinicalAction('note', job)} className="p-3 bg-white/10 hover:bg-white/20 rounded-xl text-white text-[9px] font-bold uppercase flex items-center gap-2 justify-center">
+                                                                    <FilePlus2 size={14}/> Crear Nota
+                                                                </button>
+                                                                <button onClick={() => handleClinicalAction('menu', job)} className="p-3 bg-white/10 hover:bg-white/20 rounded-xl text-white text-[9px] font-bold uppercase flex items-center gap-2 justify-center col-span-2">
+                                                                    <FolderPlus size={14}/> Menú Clínico Completo
+                                                                </button>
+                                                                <button onClick={() => handleClinicalAction('billing', job)} className="p-3 bg-emerald-600 hover:bg-emerald-500 rounded-xl text-white text-[9px] font-bold uppercase flex items-center gap-2 justify-center">
+                                                                    <CreditCard size={14}/> Cobrar
+                                                                </button>
+                                                                <button onClick={() => handleClinicalAction('hospitalize', job)} className="p-3 bg-rose-600 hover:bg-rose-500 rounded-xl text-white text-[9px] font-black uppercase flex items-center gap-2 justify-center border border-rose-500 animate-pulse">
+                                                                    <Bed size={14}/> Internar
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                    )}
                                                 </div>
 
                                                 <div className="grid grid-cols-2 gap-3">
@@ -425,6 +518,9 @@ const HomeServices: React.FC<HomeServicesProps> = ({ requests, onUpdateRequest, 
                                                     <UserCheck size={10}/> {req.assignedStaff}
                                                 </div>
                                             )}
+                                            {req.selectedClinicName && (
+                                                <p className="text-[8px] text-slate-400 font-bold uppercase mt-1">Prov: {req.selectedClinicName}</p>
+                                            )}
                                         </div>
                                     </div>
                                 );
@@ -486,6 +582,9 @@ const HomeServices: React.FC<HomeServicesProps> = ({ requests, onUpdateRequest, 
                                         </div>
                                         <p className="text-[10px] font-bold text-slate-500 uppercase flex items-center gap-1"><MapPin size={10}/> {selectedRequest.patientAddress}</p>
                                         {selectedRequest.assignedStaff && <p className="text-[10px] font-bold text-blue-600 uppercase mt-1">Asignado a: {selectedRequest.assignedStaff}</p>}
+                                        {selectedRequest.selectedClinicName && (
+                                            <p className="text-[9px] font-bold text-slate-400 uppercase mt-1">Proveedor: {selectedRequest.selectedClinicName}</p>
+                                        )}
                                     </div>
 
                                     <div className="flex items-center gap-3 shrink-0">
@@ -523,6 +622,12 @@ const HomeServices: React.FC<HomeServicesProps> = ({ requests, onUpdateRequest, 
                                             <p className="text-xs font-bold text-slate-800 uppercase italic">"{selectedRequest.notes || 'Sin detalles específicos'}"</p>
                                         )}
                                     </div>
+                                    {selectedRequest.totalCost && (
+                                        <div className="text-right pl-4 border-l border-slate-200">
+                                            <p className="text-[8px] font-bold text-slate-400 uppercase">Total + Envío</p>
+                                            <p className="text-lg font-black text-slate-900">${selectedRequest.totalCost.toFixed(2)}</p>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         )}
@@ -573,6 +678,69 @@ const HomeServices: React.FC<HomeServicesProps> = ({ requests, onUpdateRequest, 
                             Confirmar Asignación
                         </button>
                     </div>
+                </div>
+            )}
+
+            {/* MODAL MENÚ CLÍNICO (Igual al de Telemedicina) */}
+            {showMenu && currentRequestForMenu && (
+                <div className="fixed inset-0 z-[250] flex items-center justify-center p-8 bg-slate-900/90 backdrop-blur-xl animate-in fade-in">
+                  <div className="bg-white w-full max-w-5xl max-h-[90vh] rounded-[3rem] shadow-2xl flex flex-col overflow-hidden border border-white/20">
+                    <div className="p-8 bg-slate-50 border-b border-slate-200 flex justify-between items-center">
+                      <div>
+                          <h4 className="text-2xl font-black uppercase tracking-tighter text-slate-900">Menú Clínico</h4>
+                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Paciente: {currentRequestForMenu.patientName}</p>
+                      </div>
+                      <button onClick={() => setShowMenu(false)} className="p-3 hover:bg-rose-50 rounded-2xl transition-all"><X size={32} className="text-slate-400" /></button>
+                    </div>
+                    
+                    <div className="px-10 pb-6 bg-slate-50 border-b border-slate-200">
+                       <div className="relative">
+                          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5" />
+                          <input 
+                            type="text"
+                            autoFocus
+                            placeholder="BUSCAR DOCUMENTO..."
+                            className="w-full pl-12 pr-4 py-4 bg-white border border-slate-200 rounded-2xl text-base font-black uppercase outline-none focus:ring-4 focus:ring-blue-100 transition-all placeholder:text-slate-300"
+                            value={menuSearchTerm}
+                            onChange={(e) => setMenuSearchTerm(e.target.value)}
+                          />
+                       </div>
+                    </div>
+
+                    <div className="flex-1 overflow-y-auto p-10 grid grid-cols-1 md:grid-cols-3 gap-10 bg-white">
+                        {NOTE_CATEGORIES.map(cat => {
+                          const filteredNotes = cat.notes.filter(note => 
+                              note.toLowerCase().includes(menuSearchTerm.toLowerCase())
+                          );
+                          
+                          if (filteredNotes.length === 0) return null;
+
+                          return (
+                            <div key={cat.title} className="space-y-6">
+                              <h5 className="text-[11px] font-black text-blue-600 uppercase tracking-[0.25em] border-b-2 border-blue-50 pb-2">{cat.title}</h5>
+                              <div className="grid grid-cols-1 gap-4">
+                                {filteredNotes.map(note => {
+                                  return (
+                                    <button 
+                                      key={note} 
+                                      onClick={() => {
+                                           const route = getNoteRoute(note, currentRequestForMenu.patientId);
+                                           navigate(route);
+                                           setShowMenu(false);
+                                      }} 
+                                      className="w-full text-left p-5 rounded-2xl text-xs font-black uppercase transition-all shadow-sm border border-slate-200 bg-slate-50 text-slate-900 hover:bg-blue-600 hover:text-white hover:border-blue-600 hover:shadow-lg flex items-center justify-between group"
+                                    >
+                                      <span>{note}</span>
+                                      <ChevronRight size={16} className="opacity-0 group-hover:opacity-100 transition-opacity" />
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          );
+                        })}
+                    </div>
+                  </div>
                 </div>
             )}
         </div>

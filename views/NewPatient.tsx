@@ -33,7 +33,8 @@ import {
   AlertOctagon,
   FilePenLine,
   CalendarCheck,
-  Video
+  Video,
+  Baby
 } from 'lucide-react';
 import { Patient, PatientStatus, ModuleType, PriorityLevel, AgendaStatus } from '../types';
 import { LAB_CATALOG, IMAGING_CATALOG } from '../constants';
@@ -43,7 +44,7 @@ interface NewPatientProps {
   patients: Patient[];
 }
 
-const QUICK_TAGS = ["Control Crónicos", "Certificado Médico", "Seguimiento", "Interpretación Labs", "Urgencia Menor"];
+const QUICK_TAGS = ["Control Crónicos", "Certificado Médico", "Seguimiento", "Interpretación Labs", "Urgencia Menor", "Control Niño Sano"];
 
 // Función auxiliar para normalizar texto (quitar acentos y pasar a minúsculas)
 const cleanStr = (str: string) => 
@@ -74,24 +75,25 @@ const NewPatient: React.FC<NewPatientProps> = ({ onAdd, patients }) => {
   const [activeTab, setActiveTab] = useState<'id' | 'scheduling'>('id');
   const [labSearch, setLabSearch] = useState('');
   const [selectedStudies, setSelectedStudies] = useState<string[]>([]);
-  // CAMBIO: Por defecto es Ingreso Inmediato (true)
   const [isImmediate, setIsImmediate] = useState(true);
   const [showCalendarDropdown, setShowCalendarDropdown] = useState(false);
   
-  // Estado para alergias
   const [allergyInput, setAllergyInput] = useState('');
-  
-  // Estado para el buscador de Base de Datos
   const [dbSearchTerm, setDbSearchTerm] = useState('');
   const [showDbResults, setShowDbResults] = useState(false);
-  const [isDbMode, setIsDbMode] = useState(!isEditing); // Si no es edición directa, empieza en modo búsqueda DB
+  const [isDbMode, setIsDbMode] = useState(!isEditing);
 
   const [viewDate, setViewDate] = useState(new Date());
+
+  // Estado para visualización detallada de edad
+  const [ageDetails, setAgeDetails] = useState({ years: 0, months: 0, days: 0 });
 
   const [form, setForm] = useState<Partial<Patient>>({
     name: '',
     curp: '',
     age: 0,
+    ageUnit: 'Años', 
+    birthDate: '', 
     sex: 'M',
     bloodType: '', 
     allergies: [],
@@ -111,26 +113,61 @@ const NewPatient: React.FC<NewPatientProps> = ({ onAdd, patients }) => {
     civilStatus: ''
   });
 
+  // Function to calculate precise age from birthdate
+  const calculateAgeFromDate = (birthDateString: string) => {
+      if (!birthDateString) return;
+      
+      const birth = new Date(birthDateString);
+      const now = new Date();
+      
+      let years = now.getFullYear() - birth.getFullYear();
+      let months = now.getMonth() - birth.getMonth();
+      let days = now.getDate() - birth.getDate();
+      
+      if (days < 0) {
+          months--;
+          const lastMonthDate = new Date(now.getFullYear(), now.getMonth(), 0);
+          days += lastMonthDate.getDate();
+      }
+      if (months < 0) {
+          years--;
+          months += 12;
+      }
+      
+      setAgeDetails({ years, months, days });
+
+      // Lógica para guardar la unidad principal en el form (para compatibilidad con filtros)
+      if (years > 0) {
+          setForm(prev => ({ ...prev, birthDate: birthDateString, age: years, ageUnit: 'Años' }));
+      } else if (months > 0) {
+          setForm(prev => ({ ...prev, birthDate: birthDateString, age: months, ageUnit: 'Meses' }));
+      } else {
+          setForm(prev => ({ ...prev, birthDate: birthDateString, age: days, ageUnit: 'Días' }));
+      }
+  };
+
   // Resultados de búsqueda en base de datos
   const dbResults = useMemo(() => {
     if (dbSearchTerm.length < 2) return [];
     const search = cleanStr(dbSearchTerm);
-    // Filtramos para mostrar coincidencias, excluyendo registros "fantasma" del historial (OLD-)
     return patients
       .filter(p => !p.id.startsWith('OLD-'))
       .filter(p => cleanStr(p.name).includes(search) || cleanStr(p.curp).includes(search));
   }, [patients, dbSearchTerm]);
 
-  // Cargar datos al montar si es edición directa (desde botón editar en agenda)
+  // Cargar datos al montar si es edición directa
   useEffect(() => {
     if (existingPatient) {
       setForm(existingPatient);
+      // Recalcular detalle si hay fecha de nacimiento
+      if (existingPatient.birthDate) {
+          calculateAgeFromDate(existingPatient.birthDate);
+      }
       if (existingPatient.assignedModule === ModuleType.AUXILIARY) {
         setSelectedStudies(existingPatient.reason?.split(', ').filter(s => s) || []);
       }
-      // Si el paciente ya existe y su estado NO es 'SCHEDULED', es un ingreso inmediato o ya atendido
       setIsImmediate(existingPatient.status !== PatientStatus.SCHEDULED);
-      setIsDbMode(false); // Ocultar buscador si ya venimos a editar a alguien específico
+      setIsDbMode(false); 
     }
   }, [existingPatient]);
 
@@ -138,7 +175,7 @@ const NewPatient: React.FC<NewPatientProps> = ({ onAdd, patients }) => {
   const timeConflict = useMemo(() => {
     if (!form.scheduledDate || !form.appointmentTime) return false;
     return patients.some(p => 
-      p.id !== form.id && // No conflicto con uno mismo
+      p.id !== form.id && 
       p.scheduledDate === form.scheduledDate && 
       p.appointmentTime === form.appointmentTime &&
       p.status !== PatientStatus.ATTENDED &&
@@ -178,34 +215,33 @@ const NewPatient: React.FC<NewPatientProps> = ({ onAdd, patients }) => {
   };
 
   const selectPatientFromDb = (p: Patient) => {
-    // Precargar datos del paciente existente PERO preparar para nueva visita
-    // IMPORTANTE: MANTENEMOS EL ID ORIGINAL PARA HISTORIAL CONTINUO
     setForm({
-      ...p, // Copia todos los datos demográficos (Nombre, CURP, Alergias, ID original...)
-      // Reseteamos datos de la visita actual para reactivar
+      ...p,
       status: PatientStatus.SCHEDULED,
       priority: PriorityLevel.NONE,
       scheduledDate: getLocalDateString(),
       appointmentTime: getCurrentTime(),
-      reason: '', // Motivo en blanco para la nueva consulta
+      reason: '',
       agendaStatus: AgendaStatus.PENDING,
       transitTargetBed: undefined,
       transitTargetModule: undefined,
-      bedNumber: undefined, // Quitamos cama si tenía una asignada antes
-      paymentStatus: 'Pendiente', // Resetear pago
+      bedNumber: undefined,
+      paymentStatus: 'Pendiente', 
       pendingCharges: []
     });
-    setIsDbMode(false); // Cerrar buscador
+    if (p.birthDate) calculateAgeFromDate(p.birthDate);
+    setIsDbMode(false); 
     setDbSearchTerm('');
   };
 
   const createNewPatient = () => {
-    // Formulario limpio con ID nuevo
     setForm({
       id: Math.random().toString(36).substr(2, 7).toUpperCase(),
-      name: dbSearchTerm.toUpperCase(), // Usamos lo que escribió como nombre inicial
+      name: dbSearchTerm.toUpperCase(),
       curp: '',
       age: 0,
+      ageUnit: 'Años',
+      birthDate: '',
       sex: 'M',
       bloodType: '',
       allergies: [],
@@ -224,6 +260,7 @@ const NewPatient: React.FC<NewPatientProps> = ({ onAdd, patients }) => {
       education: '',
       civilStatus: ''
     });
+    setAgeDetails({years:0, months:0, days:0});
     setIsDbMode(false);
     setDbSearchTerm('');
   };
@@ -242,32 +279,25 @@ const NewPatient: React.FC<NewPatientProps> = ({ onAdd, patients }) => {
     setForm({ ...form, allergies: (form.allergies || []).filter(a => a !== allergy) });
   };
 
-  // --- NUEVA LÓGICA: Guardado Solo de Identificación ---
   const handleSaveIdentity = () => {
     if (!form.name) {
       alert("El nombre completo del paciente es el único campo obligatorio.");
       return;
     }
 
-    // Al guardar solo identidad, preservamos la programación original si existe (no reagendamos)
-    // Si es un paciente nuevo, se guardará con la fecha default pero no "cuenta" como reagenda
     const patientData: Patient = {
       ...form as Patient,
-      // Si ya existe, usamos su ID y su estatus actual para no afectar la operación
       id: form.id || Math.random().toString(36).substr(2, 7).toUpperCase(),
       name: form.name?.toUpperCase() || '',
       curp: form.curp?.toUpperCase() || '',
-      // IMPORTANTE: Si estamos editando solo identidad, NO cambiamos el status ni creamos logs
       status: existingPatient ? existingPatient.status : PatientStatus.SCHEDULED,
       modifiedBy: "ACTUALIZACION_DATOS"
     };
 
     onAdd(patientData);
-    // Regresamos a la vista anterior (ej. Agenda)
     navigate(-1);
   };
 
-  // --- NUEVA LÓGICA: Guardado de Programación (Reagenda/Ingreso) ---
   const handleSaveScheduling = () => {
     if (!form.name) {
       alert("El nombre es requerido para programar.");
@@ -278,25 +308,21 @@ const NewPatient: React.FC<NewPatientProps> = ({ onAdd, patients }) => {
       ? selectedStudies.join(', ') 
       : form.reason;
 
-    // Detectar si hubo cambio de fecha (Reagenda real)
-    // Solo aplica si estamos EDITANDO una cita existente
     const dateChanged = isEditing && existingPatient && existingPatient.scheduledDate !== form.scheduledDate;
 
     if (dateChanged && existingPatient) {
-        // En caso de reagenda, SÍ creamos un registro fantasma para dejar rastro de la cita original cancelada/movida
         const ghostRecord: Patient = {
             ...existingPatient,
             id: `OLD-${existingPatient.id}-${Date.now()}`,
             scheduledDate: existingPatient.scheduledDate,
             appointmentTime: existingPatient.appointmentTime,
             agendaStatus: AgendaStatus.RESCHEDULED,
-            status: PatientStatus.ATTENDED, // Lo marcamos como atendido/histórico
+            status: PatientStatus.ATTENDED, 
             modifiedBy: "SISTEMA_REAGENDA_HISTORICO"
         };
         onAdd(ghostRecord);
     }
 
-    // Configurar estado final operativo
     let finalStatus = form.status || PatientStatus.SCHEDULED;
     let finalAgendaStatus = form.agendaStatus || AgendaStatus.PENDING;
     let lastVisitDate = getLocalDateString();
@@ -309,18 +335,15 @@ const NewPatient: React.FC<NewPatientProps> = ({ onAdd, patients }) => {
        }
        finalAgendaStatus = AgendaStatus.ARRIVED_ON_TIME;
     } else {
-        // Cita Programada
         finalStatus = PatientStatus.SCHEDULED;
     }
 
-    // Construcción final del objeto con datos de agenda actualizados
-    // NOTA: Si era un paciente recuperado de DB, usamos su mismo ID para mantener historial
     const patientData: Patient = {
       ...form as Patient,
       id: form.id || Math.random().toString(36).substr(2, 7).toUpperCase(),
       name: form.name?.toUpperCase() || '',
       curp: form.curp?.toUpperCase() || '',
-      lastVisit: lastVisitDate, // Actualizamos última visita a hoy
+      lastVisit: lastVisitDate, 
       reason: finalReason || 'Ingreso a sistema',
       priority: form.priority || PriorityLevel.NONE,
       status: finalStatus,
@@ -347,10 +370,11 @@ const NewPatient: React.FC<NewPatientProps> = ({ onAdd, patients }) => {
     '5': 'bg-blue-100 text-blue-600 border-blue-200'
   };
 
-  // VISTA DE BUSCADOR DE BASE DE DATOS
+  // VISTA DE BUSCADOR (IDÉNTICA)
   if (isDbMode) {
     return (
       <div className="max-w-4xl mx-auto pt-10 pb-20 animate-in fade-in">
+         {/* ... (Search UI kept identical for brevity) ... */}
          <div className="flex items-center gap-4 mb-8">
             <button onClick={() => navigate(-1)} className="p-3 bg-white border border-slate-200 rounded-2xl hover:bg-slate-50 transition-all shadow-sm">
                <ChevronLeft size={24} className="text-slate-600" />
@@ -422,9 +446,10 @@ const NewPatient: React.FC<NewPatientProps> = ({ onAdd, patients }) => {
     );
   }
 
-  // VISTA DE FORMULARIO (Si no está en modo DB o ya seleccionó paciente)
+  // VISTA DE FORMULARIO
   return (
     <div className="max-w-7xl mx-auto pb-20 animate-in fade-in">
+      {/* ... Header and Tabs (Identical) ... */}
       <div className="flex flex-col md:flex-row items-center justify-between mb-8 gap-6">
         <div className="flex items-center gap-6">
           <button onClick={() => isEditing ? navigate(-1) : setIsDbMode(true)} className="p-3 bg-white border border-slate-200 rounded-2xl hover:bg-slate-50 shadow-sm transition-all">
@@ -445,8 +470,6 @@ const NewPatient: React.FC<NewPatientProps> = ({ onAdd, patients }) => {
            <button onClick={() => setActiveTab('id')} className={`px-8 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'id' ? 'bg-slate-900 text-white shadow-lg' : 'text-slate-500 hover:bg-slate-50'}`}>1. Identificación</button>
            <button onClick={() => setActiveTab('scheduling')} className={`px-8 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'scheduling' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-500 hover:bg-slate-50'}`}>2. Programación</button>
         </div>
-
-        {/* El botón genérico superior ha sido eliminado para usar botones específicos en cada tab */}
         <div className="w-16"></div> 
       </div>
 
@@ -454,6 +477,7 @@ const NewPatient: React.FC<NewPatientProps> = ({ onAdd, patients }) => {
         <div className="lg:col-span-8 space-y-8">
           {activeTab === 'id' ? (
             <div className="bg-white border border-slate-200 rounded-[3rem] p-12 shadow-sm space-y-10 animate-in slide-in-from-left-4">
+              {/* ... Basic info ... */}
               <div className="flex justify-between items-center">
                  <h3 className="text-xs font-black text-slate-900 uppercase tracking-widest flex items-center gap-4">
                     <div className="w-10 h-10 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center"><User size={20} /></div>
@@ -467,7 +491,6 @@ const NewPatient: React.FC<NewPatientProps> = ({ onAdd, patients }) => {
               </div>
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                {/* Datos Críticos */}
                 <div className="col-span-full space-y-2">
                   <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-2">Nombre Completo del Paciente <span className="text-rose-500">*</span></label>
                   <input type="text" className="w-full p-5 bg-slate-50 border border-slate-200 rounded-2xl font-black uppercase text-sm outline-none focus:bg-white focus:border-blue-400 transition-all" value={form.name} onChange={e => setForm({...form, name: e.target.value})} placeholder="APELLIDOS NOMBRE(S)" />
@@ -476,20 +499,56 @@ const NewPatient: React.FC<NewPatientProps> = ({ onAdd, patients }) => {
                   <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-2">CURP (Opcional)</label>
                   <input type="text" className="w-full p-5 bg-slate-50 border border-slate-200 rounded-2xl font-mono uppercase text-sm font-bold outline-none focus:bg-white focus:border-blue-400" value={form.curp} onChange={e => setForm({...form, curp: e.target.value.toUpperCase()})} maxLength={18} placeholder="Puede registrarse posteriormente" />
                 </div>
+                
+                {/* --- CONTROL DE EDAD AVANZADO (UPDATED) --- */}
                 <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-2">Edad</label>
-                    <input type="number" className="w-full p-5 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold" value={form.age} onChange={e => setForm({...form, age: parseInt(e.target.value)})}/>
+                  <div className="space-y-2 col-span-2">
+                       <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-2 flex items-center gap-2"><CalendarIcon size={12}/> Fecha de Nacimiento</label>
+                       <input 
+                         type="date" 
+                         className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold uppercase text-sm outline-none focus:bg-white transition-all"
+                         value={form.birthDate}
+                         onChange={(e) => calculateAgeFromDate(e.target.value)}
+                       />
+                       {/* DISPLAY DETAILED AGE */}
+                       {form.birthDate && (
+                           <div className="flex items-center gap-2 px-3 py-2 bg-blue-50 border border-blue-100 rounded-xl text-[10px] font-bold text-blue-700 mt-2">
+                               <Baby size={12}/>
+                               <span>Edad Calculada: {ageDetails.years} Años, {ageDetails.months} Meses, {ageDetails.days} Días</span>
+                           </div>
+                       )}
                   </div>
                   <div className="space-y-2">
-                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-2">Sexo</label>
-                    <select className="w-full p-5 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-black uppercase" value={form.sex} onChange={e => setForm({...form, sex: e.target.value as any})}>
-                      <option value="M">MASCULINO</option><option value="F">FEMENINO</option>
+                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-2">Edad (Manual)</label>
+                    <input 
+                        type="number" 
+                        className="w-full p-5 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold" 
+                        value={form.age} 
+                        onChange={e => setForm({...form, age: parseInt(e.target.value) || 0, birthDate: ''})} // Clear birth date on manual edit
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-2">Unidad</label>
+                    <select 
+                        className="w-full p-5 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-black uppercase outline-none" 
+                        value={form.ageUnit} 
+                        onChange={e => setForm({...form, ageUnit: e.target.value as any, birthDate: ''})} 
+                    >
+                      <option value="Años">Años</option>
+                      <option value="Meses">Meses</option>
+                      <option value="Días">Días</option>
                     </select>
                   </div>
                 </div>
 
-                {/* Datos Médicos Básicos (Sangre y Alergias) */}
+                {/* ... Rest of fields (Sex, Blood, etc) ... */}
+                <div className="space-y-2">
+                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-2">Sexo</label>
+                    <select className="w-full p-5 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-black uppercase" value={form.sex} onChange={e => setForm({...form, sex: e.target.value as any})}>
+                      <option value="M">MASCULINO</option><option value="F">FEMENINO</option>
+                    </select>
+                </div>
+                {/* ... (Allergies, Contact info - kept same) ... */}
                 <div className="space-y-2">
                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-2 flex items-center gap-1"><Droplet size={10} className="text-rose-500" /> Grupo Sanguíneo</label>
                    <select className="w-full p-5 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-black uppercase outline-none" value={form.bloodType} onChange={e => setForm({...form, bloodType: e.target.value})}>
@@ -525,7 +584,6 @@ const NewPatient: React.FC<NewPatientProps> = ({ onAdd, patients }) => {
                    </div>
                 </div>
 
-                {/* Datos de Contacto y Sociodemográficos */}
                 <div className="space-y-2">
                   <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-2">Teléfono de Contacto</label>
                   <input type="tel" className="w-full p-5 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold" value={form.phone} onChange={e => setForm({...form, phone: e.target.value})} placeholder="55 0000 0000" />
@@ -568,7 +626,8 @@ const NewPatient: React.FC<NewPatientProps> = ({ onAdd, patients }) => {
               </div>
             </div>
           ) : (
-            <div className="space-y-8 animate-in slide-in-from-right-4">
+             /* ... Schedule Tab Content (Same as before) ... */
+             <div className="space-y-8 animate-in slide-in-from-right-4">
               <div className="bg-white border border-slate-200 rounded-[3rem] p-12 shadow-sm space-y-10">
                 <div className="flex justify-between items-center">
                   <h3 className="text-xs font-black text-slate-900 uppercase tracking-widest flex items-center gap-4">
@@ -576,7 +635,6 @@ const NewPatient: React.FC<NewPatientProps> = ({ onAdd, patients }) => {
                      Detalles de la Cita
                   </h3>
                   
-                  {/* CAMBIO: Se invierte el orden, primero Ingreso Inmediato */}
                   <div className="flex bg-slate-100 p-1 rounded-2xl gap-1 border border-slate-200 shadow-inner">
                     <button onClick={() => { setIsImmediate(true); setForm({...form, scheduledDate: getLocalDateString(), appointmentTime: getCurrentTime()}); }} className={`px-6 py-2.5 rounded-xl text-[9px] font-black uppercase transition-all flex items-center gap-2 ${isImmediate ? 'bg-emerald-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-600'}`}>
                       <Zap size={12} /> Ingreso Inmediato
@@ -588,6 +646,7 @@ const NewPatient: React.FC<NewPatientProps> = ({ onAdd, patients }) => {
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
+                   {/* ... Date/Time Pickers ... */}
                    <div className="space-y-4 relative" ref={calendarRef}>
                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2 flex items-center gap-2">
                         <CalendarIcon size={14} className="text-blue-600" /> Fecha Programada
@@ -648,6 +707,7 @@ const NewPatient: React.FC<NewPatientProps> = ({ onAdd, patients }) => {
                    </div>
                 </div>
 
+                {/* ... Module and Priority Selectors ... */}
                 <div className="pt-8 border-t border-slate-50 space-y-6">
                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Selección de Módulo / Destino</label>
                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
@@ -671,7 +731,7 @@ const NewPatient: React.FC<NewPatientProps> = ({ onAdd, patients }) => {
                      ))}
                    </div>
                 </div>
-
+                {/* ... Priority and Reason ... */}
                 <div className="space-y-4 pt-8 border-t border-slate-50">
                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Nivel de Prioridad (Triage Inicial)</label>
                    <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
@@ -733,6 +793,7 @@ const NewPatient: React.FC<NewPatientProps> = ({ onAdd, patients }) => {
           )}
         </div>
 
+        {/* ... Right Column (Operational Summary) ... */}
         <div className="lg:col-span-4 space-y-8">
            <div className="bg-slate-900 text-white rounded-[3rem] p-10 shadow-2xl space-y-8 relative overflow-hidden border-b-8 border-blue-600">
               <div className="absolute -right-8 -top-8 w-48 h-48 bg-blue-600/10 rounded-full blur-3xl"></div>
@@ -772,6 +833,7 @@ const NewPatient: React.FC<NewPatientProps> = ({ onAdd, patients }) => {
               </div>
            </div>
 
+           {/* ... Alerts ... */}
            {timeConflict && (
               <div className="bg-rose-50 border border-rose-200 rounded-[2.5rem] p-8 flex items-start gap-5 shadow-sm animate-bounce">
                 <AlertTriangle className="w-6 h-6 text-rose-600 mt-1 flex-shrink-0" />

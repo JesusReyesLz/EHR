@@ -32,7 +32,9 @@ import {
   ToggleLeft,
   ToggleRight,
   Server,
-  Briefcase
+  Briefcase,
+  Calendar,
+  Clock
 } from 'lucide-react';
 import { DoctorInfo, ClinicDocument } from '../types';
 
@@ -56,7 +58,7 @@ const SettingsView: React.FC<SettingsProps> = ({ doctorInfo, onUpdateDoctor }) =
       allowReviews: doctorInfo.allowReviews !== undefined ? doctorInfo.allowReviews : true // Default to true if undefined
   });
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'success'>('idle');
-  const [activeTab, setActiveTab] = useState<'profile' | 'clinic' | 'docs' | 'security' | 'public_profile'>('profile');
+  const [activeTab, setActiveTab] = useState<'profile' | 'clinic' | 'docs' | 'security' | 'public_profile' | 'schedule'>('profile');
 
   // New state for public profile
   const [newService, setNewService] = useState('');
@@ -67,6 +69,14 @@ const SettingsView: React.FC<SettingsProps> = ({ doctorInfo, onUpdateDoctor }) =
   // State for adding a specific clinic document
   const [clinicDocName, setClinicDocName] = useState('');
 
+  // Initial Schedule State
+  const [scheduleForm, setScheduleForm] = useState({
+      days: profile.schedule?.days || [1, 2, 3, 4, 5],
+      startHour: profile.schedule?.startHour || '09:00',
+      endHour: profile.schedule?.endHour || '17:00',
+      slotDuration: profile.schedule?.slotDuration || 30
+  });
+
   useEffect(() => {
       if (location.state && (location.state as any).initialTab) {
           setActiveTab((location.state as any).initialTab);
@@ -75,8 +85,19 @@ const SettingsView: React.FC<SettingsProps> = ({ doctorInfo, onUpdateDoctor }) =
 
   const handleSave = () => {
     setSaveStatus('saving');
+    // Actualizar schedule en el perfil antes de guardar
+    const updatedProfile = {
+        ...profile,
+        schedule: {
+            days: scheduleForm.days,
+            startHour: scheduleForm.startHour,
+            endHour: scheduleForm.endHour,
+            slotDuration: scheduleForm.slotDuration
+        }
+    };
+
     setTimeout(() => {
-      onUpdateDoctor(profile);
+      onUpdateDoctor(updatedProfile);
       setSaveStatus('success');
       setTimeout(() => setSaveStatus('idle'), 3000);
     }, 800);
@@ -149,6 +170,24 @@ const SettingsView: React.FC<SettingsProps> = ({ doctorInfo, onUpdateDoctor }) =
           <Star key={i} size={12} className={i < rating ? "fill-amber-400 text-amber-400" : "text-slate-300"} />
       ));
   };
+  
+  const toggleDay = (day: number) => {
+      if (scheduleForm.days.includes(day)) {
+          setScheduleForm(prev => ({...prev, days: prev.days.filter(d => d !== day)}));
+      } else {
+          setScheduleForm(prev => ({...prev, days: [...prev.days, day]}));
+      }
+  };
+
+  const WEEKDAYS = [
+      { id: 1, label: 'Lun' },
+      { id: 2, label: 'Mar' },
+      { id: 3, label: 'Mié' },
+      { id: 4, label: 'Jue' },
+      { id: 5, label: 'Vie' },
+      { id: 6, label: 'Sáb' },
+      { id: 0, label: 'Dom' },
+  ];
 
   return (
     <div className="max-w-6xl mx-auto space-y-10 animate-in fade-in duration-500 pb-20">
@@ -177,6 +216,7 @@ const SettingsView: React.FC<SettingsProps> = ({ doctorInfo, onUpdateDoctor }) =
         <div className="lg:col-span-3 space-y-3">
           {[
             { id: 'profile', label: 'Identidad Médica', icon: <User className="w-4 h-4" /> },
+            { id: 'schedule', label: 'Agenda y Horarios', icon: <Calendar className="w-4 h-4" /> },
             { id: 'clinic', label: 'Práctica / Establecimiento', icon: <Building2 className="w-4 h-4" /> },
             { id: 'docs', label: 'Documentación Legal', icon: <FileText className="w-4 h-4" /> },
             { id: 'public_profile', label: 'Perfil Público / Muro', icon: <Globe className="w-4 h-4" /> },
@@ -225,6 +265,59 @@ const SettingsView: React.FC<SettingsProps> = ({ doctorInfo, onUpdateDoctor }) =
                 </div>
               </div>
             </div>
+          )}
+
+          {activeTab === 'schedule' && (
+             <div className="bg-white border border-slate-200 rounded-[3rem] p-12 shadow-sm space-y-12 animate-in slide-in-from-right-4">
+                 <h3 className="text-xs font-black uppercase tracking-[0.2em] text-blue-600 flex items-center">
+                    <Clock className="w-5 h-5 mr-3" /> Configuración de Agenda y Disponibilidad
+                 </h3>
+                 
+                 <div className="space-y-6">
+                     <div>
+                         <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest ml-2 mb-2">Días Laborales</label>
+                         <div className="flex gap-2 flex-wrap">
+                             {WEEKDAYS.map(day => (
+                                 <button
+                                     key={day.id}
+                                     onClick={() => toggleDay(day.id)}
+                                     className={`w-12 h-12 rounded-xl flex items-center justify-center text-xs font-black uppercase transition-all ${scheduleForm.days.includes(day.id) ? 'bg-blue-600 text-white shadow-lg' : 'bg-slate-50 text-slate-400 hover:bg-slate-100'}`}
+                                 >
+                                     {day.label}
+                                 </button>
+                             ))}
+                         </div>
+                     </div>
+
+                     <div className="grid grid-cols-3 gap-6">
+                         <div className="space-y-2">
+                             <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest ml-2">Hora Inicio</label>
+                             <input type="time" className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-lg font-black text-center" value={scheduleForm.startHour} onChange={e => setScheduleForm({...scheduleForm, startHour: e.target.value})} />
+                         </div>
+                         <div className="space-y-2">
+                             <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest ml-2">Hora Fin</label>
+                             <input type="time" className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-lg font-black text-center" value={scheduleForm.endHour} onChange={e => setScheduleForm({...scheduleForm, endHour: e.target.value})} />
+                         </div>
+                         <div className="space-y-2">
+                             <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest ml-2">Duración (Min)</label>
+                             <select className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold text-center outline-none" value={scheduleForm.slotDuration} onChange={e => setScheduleForm({...scheduleForm, slotDuration: parseInt(e.target.value)})}>
+                                 <option value={15}>15 Min</option>
+                                 <option value={20}>20 Min</option>
+                                 <option value={30}>30 Min</option>
+                                 <option value={45}>45 Min</option>
+                                 <option value={60}>60 Min</option>
+                             </select>
+                         </div>
+                     </div>
+                     
+                     <div className="bg-blue-50 border border-blue-100 p-6 rounded-2xl">
+                         <p className="text-[10px] text-blue-800 font-medium uppercase leading-relaxed">
+                            <Info size={14} className="inline mr-2 -mt-0.5"/>
+                            Estos horarios definen los espacios disponibles para que los pacientes agenden citas desde su aplicación móvil. Asegúrese de mantener esta información actualizada.
+                         </p>
+                     </div>
+                 </div>
+             </div>
           )}
 
           {activeTab === 'clinic' && (
