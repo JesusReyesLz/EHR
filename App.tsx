@@ -20,6 +20,7 @@ import {
 import Dashboard from './views/Dashboard';
 import PatientProfile from './views/PatientProfile';
 import AdminLogs from './views/AdminLogs';
+import Admin from './views/Admin';
 import Telemedicine from './views/Telemedicine';
 import Prescription from './views/Prescription';
 import NewPatient from './views/NewPatient';
@@ -257,7 +258,7 @@ function Layout({ children, currentModule, onModuleChange, doctorInfo }: any) {
                 aria-current={location.pathname === item.path ? 'page' : undefined}
                 className={`flex items-center justify-center lg:justify-start px-0 lg:px-3 py-2.5 rounded-xl transition-all group focus:outline-none focus:ring-2 focus:ring-blue-500 ${location.pathname === item.path ? 'bg-slate-900 text-white shadow-md' : 'text-slate-600 hover:bg-slate-50'}`}
               >
-                <div className={`shrink-0 ${location.pathname === item.path ? 'text-blue-400' : 'text-slate-50'}`} aria-hidden="true">{item.icon}</div>
+                <div className={`shrink-0 ${location.pathname === item.path ? 'text-blue-400' : 'text-slate-500'}`} aria-hidden="true">{item.icon}</div>
                 <span className="ml-3 font-black text-[10px] uppercase tracking-widest hidden lg:block whitespace-nowrap overflow-hidden text-ellipsis">{item.label}</span>
               </Link>
             ))}
@@ -624,6 +625,7 @@ const App: React.FC = () => {
           <Route path="/inventory" element={<Inventory />} />
           <Route path="/staff" element={<StaffManagement staffList={staffList} onUpdateStaffList={handleUpdateStaffList} />} />
           <Route path="/legal-documents" element={<LegalDocuments doctorInfo={doctorInfo} />} />
+          <Route path="/admin" element={<Admin />} />
           <Route path="/settings" element={<Settings doctorInfo={doctorInfo} onUpdateDoctor={(newInfo) => {
             // Settings update logic
           }} />} />
