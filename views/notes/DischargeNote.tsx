@@ -120,7 +120,7 @@ const DischargeNote: React.FC<{ patients: Patient[], notes: ClinicalNote[], onSa
       patientId: patient.id,
       type: 'Nota de Egreso / Alta',
       date: new Date().toLocaleString('es-MX'),
-      author: doctorInfo?.name || 'Dr. Alejandro Méndez',
+      author: doctorInfo?.name || 'Dr. Médico',
       content: { ...form },
       isSigned: finalize,
       hash: finalize ? `CERT-EGR-${Math.random().toString(36).substr(2, 9).toUpperCase()}` : undefined

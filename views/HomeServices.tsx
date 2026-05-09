@@ -202,7 +202,7 @@ const HomeServices: React.FC<HomeServicesProps> = ({ requests, onUpdateRequest, 
           'Receta Médica': `/patient/${patientId}/prescription`,
           'Carnet Perinatal / Control Prenatal': `/patient/${patientId}/perinatal-card`,
           'Tarjeta de Control de Enfermedades Crónicas': `/patient/${patientId}/chronic-card`,
-          'Carnet de Salud Integral / Niño Sano': `/patient/${patientId}/health-control`,
+          'Carnet de Salud Integral': `/patient/${patientId}/health-control`,
           'Certificado Médico': `/patient/${patientId}/note/medical-certificate`,
           'Solicitud de Estudios': `/patient/${patientId}/auxiliary-order`,
           'Carta de Consentimiento Informado': `/patient/${patientId}/consent`

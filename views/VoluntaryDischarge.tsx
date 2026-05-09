@@ -6,16 +6,17 @@ import {
   Lock, PenTool, ShieldAlert, Info, Clock, LogOut,
   FileSignature, AlertTriangle, Syringe, Activity
 } from 'lucide-react';
-import { Patient, ClinicalNote, DoctorInfo } from '../types';
+import { Patient, ClinicalNote, DoctorInfo, PatientStatus, ModuleType } from '../types';
 
 interface VoluntaryDischargeProps {
   patients: Patient[];
   onSaveNote: (note: ClinicalNote) => void;
+  onUpdatePatient?: (p: Patient) => void;
   doctorInfo?: DoctorInfo;
   notes?: ClinicalNote[];
 }
 
-const VoluntaryDischarge: React.FC<VoluntaryDischargeProps> = ({ patients, onSaveNote, doctorInfo }) => {
+const VoluntaryDischarge: React.FC<VoluntaryDischargeProps> = ({ patients, onSaveNote, onUpdatePatient, doctorInfo }) => {
   const { id } = useParams();
   const navigate = useNavigate();
   const patient = patients.find(p => p.id === id);
@@ -121,6 +122,25 @@ const VoluntaryDischarge: React.FC<VoluntaryDischargeProps> = ({ patients, onSav
       hash: `CERT-EV-${Math.random().toString(36).substr(2, 9).toUpperCase()}`
     };
     onSaveNote(newNote);
+
+    if (onUpdatePatient) {
+      onUpdatePatient({
+        ...patient,
+        status: PatientStatus.ATTENDED,
+        bedNumber: undefined,
+        transitTargetModule: undefined,
+        history: {
+          ...patient.history,
+          dischargeData: {
+            program: patient.assignedModule === ModuleType.EMERGENCY ? 'Urgencias' : 'Hospitalización',
+            diagnosticos: [{ name: form.diagnoses, status: 'Confirmado' }],
+            medico: form.doctorInforming,
+            timestamp: new Date().toISOString()
+          }
+        }
+      });
+    }
+
     // Ir a vista previa de impresión
     setShowPrintPreview(true);
   };
@@ -150,6 +170,19 @@ const VoluntaryDischarge: React.FC<VoluntaryDischargeProps> = ({ patients, onSav
   if (showPrintPreview) {
       return (
           <div className="min-h-screen bg-slate-100 flex justify-center p-8 animate-in fade-in">
+              <style>{`
+                @media print {
+                  .no-print, nav, aside, button { display: none !important; }
+                  body { background: white !important; margin: 0 !important; }
+                  main { margin: 0 !important; padding: 0 !important; width: 100% !important; left: 0 !important; top: 0 !important; }
+                  .min-h-screen { min-height: auto !important; background: white !important; padding: 0 !important; }
+                  .max-w-\\[215mm\\] { max-width: 100% !important; width: 100% !important; padding: 0.5cm !important; margin: 0 !important; box-shadow: none !important; }
+                  .bg-slate-900 { background: #000 !important; color: #fff !important; -webkit-print-color-adjust: exact; }
+                  .border { border: 1px solid #000 !important; }
+                  .shadow-sm, .shadow-md, .shadow-lg, .shadow-xl, .shadow-2xl { box-shadow: none !important; }
+                  @page { margin: 0.5cm; size: portrait; }
+                }
+              `}</style>
               <div className="w-full max-w-[215mm] bg-white shadow-2xl p-[20mm] text-slate-900 print:shadow-none print:w-full print:p-0 print:m-0">
                   
                   {/* PRINT HEADER */}
@@ -239,6 +272,15 @@ const VoluntaryDischarge: React.FC<VoluntaryDischargeProps> = ({ patients, onSav
                       <button onClick={() => window.print()} className="px-6 py-2 bg-slate-900 text-white rounded-xl font-bold uppercase text-xs">Imprimir</button>
                       <button onClick={() => navigate(`/patient/${id}`)} className="px-6 py-2 bg-slate-100 text-slate-600 rounded-xl font-bold uppercase text-xs">Cerrar</button>
                   </div>
+                  <style>{`
+                    @media print {
+                      .no-print { display: none !important; }
+                      body { background: white !important; margin: 0 !important; padding: 0 !important; }
+                      .fixed { position: absolute !important; inset: 0 !important; background: white !important; }
+                      .min-h-screen { min-height: auto !important; }
+                      @page { margin: 1.5cm; size: letter portrait; }
+                    }
+                  `}</style>
               </div>
           </div>
       );

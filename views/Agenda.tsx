@@ -237,21 +237,24 @@ const Agenda: React.FC<AgendaProps> = ({ onUpdateStatus, patients }) => {
           <div className="bg-slate-100 p-1.5 rounded-2xl flex items-center gap-1 shadow-inner">
               <button 
                 onClick={() => setModalityFilter('all')}
-                className={`px-4 py-2.5 rounded-xl text-[10px] font-black uppercase transition-all ${modalityFilter === 'all' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                aria-pressed={modalityFilter === 'all'}
+                className={`px-4 py-2.5 rounded-xl text-[10px] font-black uppercase transition-all focus:outline-none focus:ring-2 focus:ring-blue-500 ${modalityFilter === 'all' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
               >
                   Todos
               </button>
               <button 
                 onClick={() => setModalityFilter('physical')}
-                className={`px-4 py-2.5 rounded-xl text-[10px] font-black uppercase transition-all flex items-center gap-2 ${modalityFilter === 'physical' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                aria-pressed={modalityFilter === 'physical'}
+                className={`px-4 py-2.5 rounded-xl text-[10px] font-black uppercase transition-all flex items-center gap-2 focus:outline-none focus:ring-2 focus:ring-blue-500 ${modalityFilter === 'physical' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
               >
-                  <MapPin size={12}/> Consultorio
+                  <MapPin size={12} aria-hidden="true" /> Consultorio
               </button>
               <button 
                 onClick={() => setModalityFilter('digital')}
-                className={`px-4 py-2.5 rounded-xl text-[10px] font-black uppercase transition-all flex items-center gap-2 ${modalityFilter === 'digital' ? 'bg-white text-violet-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                aria-pressed={modalityFilter === 'digital'}
+                className={`px-4 py-2.5 rounded-xl text-[10px] font-black uppercase transition-all flex items-center gap-2 focus:outline-none focus:ring-2 focus:ring-blue-500 ${modalityFilter === 'digital' ? 'bg-white text-violet-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
               >
-                  <Video size={12}/> Telemedicina
+                  <Video size={12} aria-hidden="true" /> Telemedicina
               </button>
           </div>
 
@@ -265,7 +268,9 @@ const Agenda: React.FC<AgendaProps> = ({ onUpdateStatus, patients }) => {
         <div className="absolute left-8 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-500 transition-colors">
           <Search size={24} />
         </div>
+        <label htmlFor="search-agenda" className="sr-only">Buscar paciente en el histórico</label>
         <input 
+          id="search-agenda"
           className="w-full pl-20 pr-8 py-7 bg-white border border-slate-200 rounded-[2.5rem] shadow-xl outline-none focus:ring-4 focus:ring-blue-50 focus:border-blue-400 transition-all text-xl font-black uppercase placeholder-slate-300" 
           placeholder="Buscar paciente en el histórico..." 
           value={searchTerm}
@@ -313,7 +318,7 @@ const Agenda: React.FC<AgendaProps> = ({ onUpdateStatus, patients }) => {
                  const d = new Date(selectedDate + 'T12:00:00');
                  d.setMonth(d.getMonth() - 1);
                  setSelectedDate(getLocalDateString(d));
-               }} className="p-3 bg-slate-50 hover:bg-blue-50 rounded-xl transition-all"><ChevronLeft size={18} /></button>
+               }} aria-label="Mes anterior" className="p-3 bg-slate-50 hover:bg-blue-50 rounded-xl transition-all focus:outline-none focus:ring-2 focus:ring-blue-500"><ChevronLeft size={18} aria-hidden="true" /></button>
                <h3 className="text-lg font-black text-slate-900 uppercase tracking-tight">
                   {new Date(selectedDate + 'T12:00:00').toLocaleDateString('es-MX', { month: 'long', year: 'numeric' })}
                </h3>
@@ -321,11 +326,11 @@ const Agenda: React.FC<AgendaProps> = ({ onUpdateStatus, patients }) => {
                  const d = new Date(selectedDate + 'T12:00:00');
                  d.setMonth(d.getMonth() + 1);
                  setSelectedDate(getLocalDateString(d));
-               }} className="p-3 bg-slate-50 hover:bg-blue-50 rounded-xl transition-all"><ChevronRight size={18} /></button>
+               }} aria-label="Mes siguiente" className="p-3 bg-slate-50 hover:bg-blue-50 rounded-xl transition-all focus:outline-none focus:ring-2 focus:ring-blue-500"><ChevronRight size={18} aria-hidden="true" /></button>
             </div>
 
             <div className="grid grid-cols-7 gap-3 text-center relative z-10">
-              {['D', 'L', 'M', 'M', 'J', 'V', 'S'].map(d => <span key={d} className="text-[9px] font-black text-slate-300 uppercase mb-2">{d}</span>)}
+              {['D', 'L', 'M', 'M', 'J', 'V', 'S'].map((d, index) => <span key={`day-header-${index}`} className="text-[9px] font-black text-slate-300 uppercase mb-2">{d}</span>)}
               {Array.from({ length: new Date(new Date(selectedDate + 'T12:00:00').getFullYear(), new Date(selectedDate + 'T12:00:00').getMonth(), 1).getDay() }).map((_, i) => <div key={`e-${i}`} />)}
               {Array.from({ length: new Date(new Date(selectedDate + 'T12:00:00').getFullYear(), new Date(selectedDate + 'T12:00:00').getMonth() + 1, 0).getDate() }).map((_, i) => {
                 const d = i + 1;
@@ -334,9 +339,9 @@ const Agenda: React.FC<AgendaProps> = ({ onUpdateStatus, patients }) => {
                 const isT = today === ds;
                 const hasA = patients.some(p => p.scheduledDate === ds && !p.id.startsWith('OLD-'));
                 return (
-                  <button key={d} onClick={() => setSelectedDate(ds)} className={`aspect-square flex items-center justify-center rounded-2xl text-[11px] font-black transition-all relative ${isSel ? 'bg-blue-600 text-white shadow-xl scale-110' : isT ? 'bg-amber-100 text-amber-700 ring-2 ring-amber-400' : 'hover:bg-slate-50 text-slate-700'}`}>
+                  <button key={d} onClick={() => setSelectedDate(ds)} aria-label={`Seleccionar fecha ${ds}`} aria-pressed={isSel} className={`aspect-square flex items-center justify-center rounded-2xl text-[11px] font-black transition-all relative focus:outline-none focus:ring-2 focus:ring-blue-500 ${isSel ? 'bg-blue-600 text-white shadow-xl scale-110' : isT ? 'bg-amber-100 text-amber-700 ring-2 ring-amber-400' : 'hover:bg-slate-50 text-slate-700'}`}>
                     {d}
-                    {hasA && !isSel && <div className="absolute bottom-1 w-1 h-1 bg-blue-400 rounded-full" />}
+                    {hasA && !isSel && <div className="absolute bottom-1 w-1 h-1 bg-blue-400 rounded-full" aria-hidden="true" />}
                   </button>
                 );
               })}
@@ -360,11 +365,11 @@ const Agenda: React.FC<AgendaProps> = ({ onUpdateStatus, patients }) => {
                         <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">Sincronizado con Monitor Activo</p>
                      </div>
                   </div>
-                  <div className="flex flex-wrap bg-slate-50 border border-slate-100 p-1.5 rounded-2xl shadow-inner gap-1">
-                     <button onClick={() => setActiveTab('pending')} className={`px-5 py-2.5 rounded-xl text-[10px] font-black uppercase transition-all ${activeTab === 'pending' ? 'bg-white text-blue-600 shadow-md' : 'text-slate-400'}`}>Pendientes</button>
-                     <button onClick={() => setActiveTab('arrived')} className={`px-5 py-2.5 rounded-xl text-[10px] font-black uppercase transition-all ${activeTab === 'arrived' ? 'bg-white text-emerald-600 shadow-md' : 'text-slate-400'}`}>Arribados</button>
-                     <button onClick={() => setActiveTab('noshow')} className={`px-5 py-2.5 rounded-xl text-[10px] font-black uppercase transition-all ${activeTab === 'noshow' ? 'bg-white text-rose-600 shadow-md' : 'text-slate-400'}`}>Faltas</button>
-                     <button onClick={() => setActiveTab('modified')} className={`px-5 py-2.5 rounded-xl text-[10px] font-black uppercase transition-all ${activeTab === 'modified' ? 'bg-white text-amber-600 shadow-md' : 'text-slate-400'}`}>Modificados</button>
+                  <div className="flex flex-wrap bg-slate-50 border border-slate-100 p-1.5 rounded-2xl shadow-inner gap-1" role="tablist" aria-label="Filtros de estado">
+                     <button role="tab" aria-selected={activeTab === 'pending'} onClick={() => setActiveTab('pending')} className={`px-5 py-2.5 rounded-xl text-[10px] font-black uppercase transition-all focus:outline-none focus:ring-2 focus:ring-blue-500 ${activeTab === 'pending' ? 'bg-white text-blue-600 shadow-md' : 'text-slate-400'}`}>Pendientes</button>
+                     <button role="tab" aria-selected={activeTab === 'arrived'} onClick={() => setActiveTab('arrived')} className={`px-5 py-2.5 rounded-xl text-[10px] font-black uppercase transition-all focus:outline-none focus:ring-2 focus:ring-blue-500 ${activeTab === 'arrived' ? 'bg-white text-emerald-600 shadow-md' : 'text-slate-400'}`}>Arribados</button>
+                     <button role="tab" aria-selected={activeTab === 'noshow'} onClick={() => setActiveTab('noshow')} className={`px-5 py-2.5 rounded-xl text-[10px] font-black uppercase transition-all focus:outline-none focus:ring-2 focus:ring-blue-500 ${activeTab === 'noshow' ? 'bg-white text-rose-600 shadow-md' : 'text-slate-400'}`}>Faltas</button>
+                     <button role="tab" aria-selected={activeTab === 'modified'} onClick={() => setActiveTab('modified')} className={`px-5 py-2.5 rounded-xl text-[10px] font-black uppercase transition-all focus:outline-none focus:ring-2 focus:ring-blue-500 ${activeTab === 'modified' ? 'bg-white text-amber-600 shadow-md' : 'text-slate-400'}`}>Modificados</button>
                   </div>
                </div>
             </div>
@@ -429,8 +434,8 @@ const Agenda: React.FC<AgendaProps> = ({ onUpdateStatus, patients }) => {
                     <div className="flex gap-3 shrink-0">
                        {!arrived && !isMod && appt.agendaStatus !== AgendaStatus.NO_SHOW && (
                          <div className="flex gap-2 items-center">
-                            <button onClick={() => handleCancel(appt)} className="p-5 text-slate-300 hover:text-rose-600 hover:bg-rose-50 rounded-2xl transition-all" title="Cancelar Cita"><XCircle size={24} /></button>
-                            <button onClick={() => navigate(`/edit-patient/${appt.id}`)} className="p-5 text-slate-300 hover:text-blue-600 hover:bg-blue-50 rounded-2xl transition-all" title="Modificar Datos"><Edit3 size={24} /></button>
+                            <button onClick={() => handleCancel(appt)} aria-label="Cancelar Cita" className="p-5 text-slate-300 hover:text-rose-600 hover:bg-rose-50 rounded-2xl transition-all focus:outline-none focus:ring-2 focus:ring-rose-500" title="Cancelar Cita"><XCircle size={24} aria-hidden="true" /></button>
+                            <button onClick={() => navigate(`/edit-patient/${appt.id}`)} aria-label="Modificar Datos" className="p-5 text-slate-300 hover:text-blue-600 hover:bg-blue-50 rounded-2xl transition-all focus:outline-none focus:ring-2 focus:ring-blue-500" title="Modificar Datos"><Edit3 size={24} aria-hidden="true" /></button>
                             
                             <button 
                               onClick={() => handleOpenArrivalModal(appt)}

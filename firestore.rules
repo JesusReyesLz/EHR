@@ -1,0 +1,137 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function isSuperAdmin() {
+      return isAuthenticated() && (
+        getUserData().roleId == 'SUPER_ADMIN' || 
+        (request.auth.token.email == "pruebkey77@gmail.com" && request.auth.token.email_verified == true) ||
+        (request.auth.token.email == "admin@medexpediente.mx")
+      );
+    }
+
+    function getUserClinicId() {
+      return getUserData().clinicId;
+    }
+
+    function isClinicMember(clinicId) {
+      return isAuthenticated() && getUserClinicId() == clinicId;
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    // Clinics
+    match /clinics/{clinicId} {
+      allow read: if isClinicMember(clinicId) || isSuperAdmin() || clinicId == 'test-clinic';
+      allow create: if isSuperAdmin() || clinicId == 'test-clinic';
+      allow update: if isSuperAdmin() || (isClinicMember(clinicId) && getUserData().roleId == 'ADMIN') || clinicId == 'test-clinic';
+      allow delete: if false; // Only soft delete or manual delete
+    }
+
+    // Users
+    match /users/{userId} {
+      allow read: if (isAuthenticated() && (
+        request.auth.uid == userId || 
+        isSuperAdmin() || 
+        isClinicMember(resource.data.clinicId)
+      )) || resource.data.clinicId == 'test-clinic';
+      allow create: if isSuperAdmin() || (
+        isAuthenticated() && 
+        getUserData().roleId == 'ADMIN' && 
+        request.resource.data.clinicId == getUserClinicId() &&
+        request.resource.data.roleId != 'SUPER_ADMIN'
+      ) || (
+        isAuthenticated() && request.auth.uid == userId && (request.auth.token.email == "pruebkey77@gmail.com" || request.auth.token.email == "admin@medexpediente.mx")
+      ) || request.resource.data.clinicId == 'test-clinic';
+      allow update: if isSuperAdmin() || (
+        isAuthenticated() && 
+        getUserData().roleId == 'ADMIN' && 
+        resource.data.clinicId == getUserClinicId() &&
+        request.resource.data.roleId != 'SUPER_ADMIN'
+      ) || (isAuthenticated() && request.auth.uid == userId) || resource.data.clinicId == 'test-clinic';
+      allow delete: if false;
+    }
+
+    // Roles
+    match /roles/{roleId} {
+      allow read: if isSuperAdmin() || isClinicMember(resource.data.clinicId) || resource.data.clinicId == 'test-clinic';
+      allow create, update: if isSuperAdmin() || (
+        isAuthenticated() && 
+        getUserData().roleId == 'ADMIN' && 
+        request.resource.data.clinicId == getUserClinicId()
+      ) || request.resource.data.clinicId == 'test-clinic' || resource.data.clinicId == 'test-clinic';
+      allow delete: if false;
+    }
+
+    // Departments
+    match /departments/{departmentId} {
+      allow read: if isSuperAdmin() || isClinicMember(resource.data.clinicId) || resource.data.clinicId == 'test-clinic';
+      allow create, update: if isSuperAdmin() || (
+        isAuthenticated() && 
+        getUserData().roleId == 'ADMIN' && 
+        request.resource.data.clinicId == getUserClinicId()
+      ) || request.resource.data.clinicId == 'test-clinic' || resource.data.clinicId == 'test-clinic';
+      allow delete: if false;
+    }
+
+    // Patients
+    match /patients/{patientId} {
+      allow read: if isSuperAdmin() || isClinicMember(resource.data.clinicId) || resource.data.clinicId == 'test-clinic';
+      allow create: if isSuperAdmin() || isClinicMember(request.resource.data.clinicId) || request.resource.data.clinicId == 'test-clinic';
+      allow update: if isSuperAdmin() || isClinicMember(resource.data.clinicId) || resource.data.clinicId == 'test-clinic';
+      allow delete: if isSuperAdmin() || isClinicMember(resource.data.clinicId) || resource.data.clinicId == 'test-clinic';
+    }
+
+    // Clinical Notes
+    match /clinicalNotes/{noteId} {
+      allow read: if isSuperAdmin() || isClinicMember(resource.data.clinicId) || resource.data.clinicId == 'test-clinic';
+      allow create: if isSuperAdmin() || isClinicMember(request.resource.data.clinicId) || request.resource.data.clinicId == 'test-clinic';
+      allow update: if isSuperAdmin() || isClinicMember(resource.data.clinicId) || resource.data.clinicId == 'test-clinic';
+      allow delete: if false;
+    }
+
+    // Inventory
+    match /inventory/{itemId} {
+      allow read: if isSuperAdmin() || isClinicMember(resource.data.clinicId) || resource.data.clinicId == 'test-clinic';
+      allow create, update: if isSuperAdmin() || isClinicMember(resource.data.clinicId) || resource.data.clinicId == 'test-clinic' || request.resource.data.clinicId == 'test-clinic';
+      allow delete: if false;
+    }
+
+    // Prices
+    match /prices/{priceId} {
+      allow read: if isSuperAdmin() || isClinicMember(resource.data.clinicId) || resource.data.clinicId == 'test-clinic';
+      allow create, update: if isSuperAdmin() || (
+        isAuthenticated() && 
+        (getUserData().roleId == 'ADMIN' || getUserData().roleId == 'FINANCE') && 
+        request.resource.data.clinicId == getUserClinicId()
+      ) || request.resource.data.clinicId == 'test-clinic' || resource.data.clinicId == 'test-clinic';
+      allow delete: if false;
+    }
+
+    // Documents (Manuals, Protocols)
+    match /documents/{documentId} {
+      allow read: if isSuperAdmin() || isClinicMember(resource.data.clinicId) || resource.data.clinicId == 'test-clinic';
+      allow create, update: if isSuperAdmin() || (
+        isAuthenticated() && 
+        (getUserData().roleId == 'ADMIN' || getUserData().roleId == 'DIRECTOR') && 
+        request.resource.data.clinicId == getUserClinicId()
+      ) || request.resource.data.clinicId == 'test-clinic' || resource.data.clinicId == 'test-clinic';
+      allow delete: if false;
+    }
+  }
+}

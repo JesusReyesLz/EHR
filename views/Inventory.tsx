@@ -295,30 +295,43 @@ const Inventory: React.FC = () => {
 
   return (
     <div className="max-w-7xl mx-auto pb-20 animate-in fade-in space-y-8">
+      <style>{`
+        @media print {
+          .no-print, nav, aside, button { display: none !important; }
+          body { background: white !important; margin: 0 !important; }
+          main { margin: 0 !important; padding: 0.5cm !important; width: 100% !important; left: 0 !important; top: 0 !important; }
+          .max-w-7xl { max-width: 100% !important; }
+          .bg-slate-900 { background: #000 !important; color: #fff !important; -webkit-print-color-adjust: exact; }
+          .border { border: 1px solid #000 !important; }
+          .shadow-sm, .shadow-md, .shadow-lg, .shadow-xl, .shadow-2xl { box-shadow: none !important; }
+          @page { margin: 0.5cm; size: landscape; }
+        }
+      `}</style>
       <div className="flex flex-col md:flex-row justify-between items-end gap-6 no-print">
         <div className="space-y-1">
           <h1 className="text-4xl font-black text-slate-900 uppercase tracking-tight">Gestión de Activos e Insumos</h1>
           <p className="text-slate-500 text-sm font-bold uppercase">Control de Existencias e Inventario Físico Integral</p>
         </div>
         <div className="flex gap-4">
-           <div className="flex bg-white p-1.5 rounded-2xl shadow-sm border border-slate-200">
-              <button onClick={() => setActiveTab('stock')} className={`px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'stock' ? 'bg-slate-900 text-white shadow-lg' : 'text-slate-500 hover:bg-slate-50'}`}>Existencias</button>
-              <button onClick={() => setActiveTab('movements')} className={`px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'movements' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-500 hover:bg-slate-50'}`}>Historial (Kardex)</button>
+           <div className="flex bg-white p-1.5 rounded-2xl shadow-sm border border-slate-200" role="tablist" aria-label="Vistas de inventario">
+              <button role="tab" aria-selected={activeTab === 'stock'} onClick={() => setActiveTab('stock')} className={`px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all focus:outline-none focus:ring-2 focus:ring-slate-400 ${activeTab === 'stock' ? 'bg-slate-900 text-white shadow-lg' : 'text-slate-500 hover:bg-slate-50'}`}>Existencias</button>
+              <button role="tab" aria-selected={activeTab === 'movements'} onClick={() => setActiveTab('movements')} className={`px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all focus:outline-none focus:ring-2 focus:ring-blue-500 ${activeTab === 'movements' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-500 hover:bg-slate-50'}`}>Historial (Kardex)</button>
            </div>
-           <button onClick={() => { setIsEditingMed(false); resetForms(); setShowAddModal(true); }} className="px-8 py-3 bg-emerald-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl hover:bg-emerald-700 transition-all flex items-center gap-2">
-              <Plus size={16} /> Nuevo Insumo Integral
+           <button onClick={() => { setIsEditingMed(false); resetForms(); setShowAddModal(true); }} className="px-8 py-3 bg-emerald-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl hover:bg-emerald-700 transition-all flex items-center gap-2 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2">
+              <Plus size={16} aria-hidden="true" /> Nuevo Insumo Integral
            </button>
         </div>
       </div>
 
       {activeTab === 'stock' && (
         <div className="bg-white border border-slate-200 rounded-[2.5rem] shadow-sm overflow-hidden min-h-[600px] animate-in slide-in-from-bottom-4">
-            <div className="p-8 border-b border-slate-100 flex items-center gap-6 bg-slate-50/50">
+            <div className="p-8 border-b border-slate-100 flex items-center gap-6 bg-slate-50/50 no-print">
                 <div className="relative flex-1">
-                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                <input className="w-full pl-12 pr-4 py-4 bg-white border border-slate-200 rounded-2xl text-xs font-bold outline-none uppercase placeholder-slate-300 shadow-sm focus:ring-4 focus:ring-emerald-50 focus:border-emerald-200 transition-all" placeholder="Buscar medicamento, equipo, mobiliario o activo..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} aria-hidden="true" />
+                <label htmlFor="search-inventory" className="sr-only">Buscar medicamento, equipo, mobiliario o activo</label>
+                <input id="search-inventory" className="w-full pl-12 pr-4 py-4 bg-white border border-slate-200 rounded-2xl text-xs font-bold outline-none uppercase placeholder-slate-300 shadow-sm focus:ring-4 focus:ring-emerald-50 focus:border-emerald-200 transition-all" placeholder="Buscar medicamento, equipo, mobiliario o activo..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
                 </div>
-                <button className="p-4 bg-white border border-slate-200 text-slate-400 rounded-2xl hover:text-slate-900 transition-all"><Printer size={20}/></button>
+                <button onClick={() => window.print()} className="p-4 bg-white border border-slate-200 text-slate-400 rounded-2xl hover:text-slate-900 transition-all focus:outline-none focus:ring-2 focus:ring-slate-400" aria-label="Imprimir inventario"><Printer size={20} aria-hidden="true" /></button>
             </div>
 
             <div className="overflow-x-auto">
@@ -329,8 +342,8 @@ const Inventory: React.FC = () => {
                         <th className="px-4 py-5">Tipo</th>
                         <th className="px-4 py-5 text-center">Stock Actual</th>
                         <th className="px-4 py-5 text-center">Caducidad Prox.</th>
-                        <th className="px-4 py-5 text-center">Vínculo Venta</th>
-                        <th className="px-8 py-5 text-right">Acciones</th>
+                        <th className="px-4 py-5 text-center no-print">Vínculo Venta</th>
+                        <th className="px-8 py-5 text-right no-print">Acciones</th>
                     </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -377,14 +390,14 @@ const Inventory: React.FC = () => {
                                     <td className="px-4 py-5 text-center">
                                         <span className={`px-2.5 py-1 rounded-lg text-[9px] font-black border ${expStatus.color}`}>{nextExp || 'N/A'}</span>
                                     </td>
-                                    <td className="px-4 py-5 text-center">
+                                    <td className="px-4 py-5 text-center no-print">
                                         {isForSale ? <div className="inline-flex items-center gap-1.5 text-emerald-600 font-black text-[9px] uppercase"><CheckCircle2 size={14}/> Activo</div> : <div className="text-slate-300 font-black text-[9px] uppercase">No Publicado</div>}
                                     </td>
-                                    <td className="px-8 py-5 text-right" onClick={(e) => e.stopPropagation()}>
+                                    <td className="px-8 py-5 text-right no-print" onClick={(e) => e.stopPropagation()}>
                                         <div className="flex justify-end gap-2">
-                                            <button onClick={() => handleOpenMovement('IN', item)} className="p-2.5 bg-emerald-50 border border-emerald-100 rounded-xl text-emerald-600 hover:bg-emerald-600 hover:text-white transition-all shadow-sm" title="Entrada Rápida"><Plus size={16}/></button>
-                                            <button onClick={() => handleEditItem(item)} className="p-2.5 bg-white border border-slate-200 rounded-xl text-slate-400 hover:text-blue-600 hover:border-blue-200 transition-all shadow-sm"><Edit2 size={16}/></button>
-                                            <button onClick={() => handleDeleteItem(item.id)} className="p-2.5 bg-white border border-slate-200 rounded-xl text-slate-400 hover:text-rose-600 hover:border-rose-200 transition-all shadow-sm"><Trash2 size={16}/></button>
+                                            <button onClick={() => handleOpenMovement('IN', item)} className="p-2.5 bg-emerald-50 border border-emerald-100 rounded-xl text-emerald-600 hover:bg-emerald-600 hover:text-white transition-all shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-500" aria-label={`Entrada rápida para ${item.name}`} title="Entrada Rápida"><Plus size={16} aria-hidden="true" /></button>
+                                            <button onClick={() => handleEditItem(item)} className="p-2.5 bg-white border border-slate-200 rounded-xl text-slate-400 hover:text-blue-600 hover:border-blue-200 transition-all shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500" aria-label={`Editar ${item.name}`}><Edit2 size={16} aria-hidden="true" /></button>
+                                            <button onClick={() => handleDeleteItem(item.id)} className="p-2.5 bg-white border border-slate-200 rounded-xl text-slate-400 hover:text-rose-600 hover:border-rose-200 transition-all shadow-sm focus:outline-none focus:ring-2 focus:ring-rose-500" aria-label={`Eliminar ${item.name}`}><Trash2 size={16} aria-hidden="true" /></button>
                                         </div>
                                     </td>
                                 </tr>
@@ -427,17 +440,19 @@ const Inventory: React.FC = () => {
                                                                         <div className="flex justify-end gap-2">
                                                                             <button 
                                                                                 onClick={() => handleOpenMovement('IN', item, batch)} 
-                                                                                className="p-1.5 rounded-lg bg-emerald-50 text-emerald-600 hover:bg-emerald-600 hover:text-white transition-all border border-emerald-100" 
+                                                                                className="p-1.5 rounded-lg bg-emerald-50 text-emerald-600 hover:bg-emerald-600 hover:text-white transition-all border border-emerald-100 focus:outline-none focus:ring-2 focus:ring-emerald-500" 
                                                                                 title="Agregar a este Lote"
+                                                                                aria-label={`Agregar a lote ${batch.batchNumber}`}
                                                                             >
-                                                                                <Plus size={14}/>
+                                                                                <Plus size={14} aria-hidden="true" />
                                                                             </button>
                                                                             <button 
                                                                                 onClick={() => handleOpenMovement('OUT', item, batch)} 
-                                                                                className="p-1.5 rounded-lg bg-rose-50 text-rose-600 hover:bg-rose-600 hover:text-white transition-all border border-rose-100" 
+                                                                                className="p-1.5 rounded-lg bg-rose-50 text-rose-600 hover:bg-rose-600 hover:text-white transition-all border border-rose-100 focus:outline-none focus:ring-2 focus:ring-rose-500" 
                                                                                 title="Salida / Merma"
+                                                                                aria-label={`Salida de lote ${batch.batchNumber}`}
                                                                             >
-                                                                                <MinusCircle size={14}/>
+                                                                                <MinusCircle size={14} aria-hidden="true" />
                                                                             </button>
                                                                         </div>
                                                                     </td>
@@ -465,9 +480,9 @@ const Inventory: React.FC = () => {
       {activeTab === 'movements' && (
           <div className="bg-white border border-slate-200 rounded-[2.5rem] shadow-sm overflow-hidden min-h-[600px] animate-in slide-in-from-bottom-4">
               {/* ... (Contenido del Kardex igual al anterior) ... */}
-              <div className="p-8 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+              <div className="p-8 border-b border-slate-100 flex items-center justify-between bg-slate-50/50 no-print">
                   <h3 className="text-lg font-black text-slate-900 uppercase tracking-tight flex items-center gap-3"><History size={20}/> Kardex de Movimientos</h3>
-                  <button className="p-3 bg-white border border-slate-200 rounded-xl hover:bg-slate-100 transition-all"><Printer size={18} className="text-slate-500"/></button>
+                  <button onClick={() => window.print()} className="p-3 bg-white border border-slate-200 rounded-xl hover:bg-slate-100 transition-all"><Printer size={18} className="text-slate-500"/></button>
               </div>
               <div className="overflow-x-auto">
                   <table className="w-full text-left">
@@ -551,12 +566,12 @@ const Inventory: React.FC = () => {
                                   <label className="text-[9px] font-black uppercase text-slate-400 ml-1">Caducidad</label>
                                   <div className="flex gap-2">
                                       {!noExpiry ? (
-                                          <input type="date" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold" value={movementForm.newExpiryDate} onChange={e => setMovementForm({...movementForm, newExpiryDate: e.target.value})} />
+                                          <input type="date" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:outline-none focus:ring-2 focus:ring-blue-500" value={movementForm.newExpiryDate} onChange={e => setMovementForm({...movementForm, newExpiryDate: e.target.value})} />
                                       ) : (
                                           <div className="w-full p-3 bg-slate-100 border border-slate-200 rounded-xl text-[9px] font-black text-slate-400 flex items-center justify-center uppercase">No Aplica</div>
                                       )}
-                                      <button onClick={() => setNoExpiry(!noExpiry)} className={`p-3 rounded-xl transition-all shadow-sm ${noExpiry ? 'bg-blue-600 text-white' : 'bg-slate-50 border border-slate-200 text-blue-600'}`} title="No Perecedero">
-                                          <CalendarOff size={16}/>
+                                      <button onClick={() => setNoExpiry(!noExpiry)} aria-pressed={noExpiry} className={`p-3 rounded-xl transition-all shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${noExpiry ? 'bg-blue-600 text-white' : 'bg-slate-50 border border-slate-200 text-blue-600'}`} title="Marcar como No Perecedero" aria-label="Marcar como producto no perecedero">
+                                          <CalendarOff size={16} aria-hidden="true" />
                                       </button>
                                   </div>
                               </div>
@@ -564,19 +579,19 @@ const Inventory: React.FC = () => {
                       )}
 
                       <div className="space-y-1.5">
-                          <label className="text-[9px] font-black uppercase text-slate-400 ml-1">Cantidad</label>
-                          <input type="number" autoFocus={!!movementConfig.batchId} className="w-full p-5 bg-white border-2 border-slate-100 rounded-2xl text-3xl font-black text-center outline-none focus:border-blue-500 transition-all shadow-inner" placeholder="0" value={movementForm.quantity || ''} onChange={e => setMovementForm({...movementForm, quantity: parseInt(e.target.value)})} />
+                          <label htmlFor="movement-quantity" className="text-[9px] font-black uppercase text-slate-400 ml-1">Cantidad</label>
+                          <input id="movement-quantity" type="number" autoFocus={!!movementConfig.batchId} className="w-full p-5 bg-white border-2 border-slate-100 rounded-2xl text-3xl font-black text-center outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500 transition-all shadow-inner" placeholder="0" value={movementForm.quantity || ''} onChange={e => setMovementForm({...movementForm, quantity: parseInt(e.target.value)})} />
                       </div>
 
                       <div className="space-y-1.5">
-                          <label className="text-[9px] font-black uppercase text-slate-400 ml-1">Motivo / Referencia</label>
-                          <input className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold uppercase" placeholder={movementConfig.type === 'IN' ? 'Ej: Compra Fact. 123' : 'Ej: Consumo Interno / Merma'} value={movementForm.reason} onChange={e => setMovementForm({...movementForm, reason: e.target.value})} />
+                          <label htmlFor="movement-reason" className="text-[9px] font-black uppercase text-slate-400 ml-1">Motivo / Referencia</label>
+                          <input id="movement-reason" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold uppercase focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder={movementConfig.type === 'IN' ? 'Ej: Compra Fact. 123' : 'Ej: Consumo Interno / Merma'} value={movementForm.reason} onChange={e => setMovementForm({...movementForm, reason: e.target.value})} />
                       </div>
                   </div>
 
                   <div className="flex gap-3 pt-4">
-                      <button onClick={() => setShowMovementModal(false)} className="flex-1 py-4 bg-slate-100 text-slate-500 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-200 transition-all">Cancelar</button>
-                      <button onClick={confirmMovement} className={`flex-1 py-4 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl transition-all ${movementConfig.type === 'IN' ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-rose-600 hover:bg-rose-700'}`}>Confirmar</button>
+                      <button onClick={() => setShowMovementModal(false)} className="flex-1 py-4 bg-slate-100 text-slate-500 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-200 transition-all focus:outline-none focus:ring-2 focus:ring-slate-400">Cancelar</button>
+                      <button onClick={confirmMovement} className={`flex-1 py-4 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl transition-all focus:outline-none focus:ring-2 focus:ring-offset-2 ${movementConfig.type === 'IN' ? 'bg-emerald-600 hover:bg-emerald-700 focus:ring-emerald-500' : 'bg-rose-600 hover:bg-rose-700 focus:ring-rose-500'}`}>Confirmar</button>
                   </div>
               </div>
           </div>
@@ -588,9 +603,10 @@ const Inventory: React.FC = () => {
            <div className="bg-white w-full max-w-5xl rounded-[3.5rem] p-12 space-y-10 animate-in zoom-in-95 max-h-[95vh] overflow-y-auto custom-scrollbar border border-white/20 relative">
               <button 
                 onClick={() => { setShowAddModal(false); resetForms(); }} 
-                className="absolute top-8 right-8 p-3 hover:bg-slate-100 rounded-full transition-all text-slate-400"
+                className="absolute top-8 right-8 p-3 hover:bg-slate-100 rounded-full transition-all text-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-400"
+                aria-label="Cerrar modal de insumo"
               >
-                <X size={28} />
+                <X size={28} aria-hidden="true" />
               </button>
 
               <div className="flex items-center gap-6 border-b border-slate-100 pb-8">
@@ -614,8 +630,9 @@ const Inventory: React.FC = () => {
                        <div className="space-y-6">
                           <div className="grid grid-cols-2 gap-6">
                               <div className="space-y-2">
-                                 <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Tipo de Insumo / Suministro</label>
+                                 <label htmlFor="supply-type" className="text-[10px] font-black uppercase text-slate-400 ml-1">Tipo de Insumo / Suministro</label>
                                  <select 
+                                    id="supply-type"
                                     className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-black uppercase outline-none focus:ring-4 focus:ring-emerald-50 transition-all"
                                     value={medForm.supplyType}
                                     onChange={e => setMedForm({...medForm, supplyType: e.target.value as any})}
@@ -631,34 +648,34 @@ const Inventory: React.FC = () => {
                                  </select>
                               </div>
                               <div className="space-y-2">
-                                 <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Nombre Comercial / Identificación</label>
-                                 <input className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-black uppercase outline-none focus:bg-white" value={medForm.name} onChange={e => setMedForm({...medForm, name: e.target.value})} placeholder="EJ: TEMPRA, TIJERAS MAYO, SILLA EJECUTIVA" />
+                                 <label htmlFor="med-name" className="text-[10px] font-black uppercase text-slate-400 ml-1">Nombre Comercial / Identificación</label>
+                                 <input id="med-name" className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-black uppercase outline-none focus:bg-white focus:ring-2 focus:ring-emerald-500" value={medForm.name} onChange={e => setMedForm({...medForm, name: e.target.value})} placeholder="EJ: TEMPRA, TIJERAS MAYO, SILLA EJECUTIVA" />
                               </div>
                           </div>
 
                           <div className="grid grid-cols-2 gap-6">
                              <div className="space-y-2">
-                                <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Sustancia Activa (Genérico)</label>
-                                <input className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-bold uppercase" value={medForm.genericName} onChange={e => setMedForm({...medForm, genericName: e.target.value})} placeholder="EJ: PARACETAMOL" />
+                                <label htmlFor="med-generic" className="text-[10px] font-black uppercase text-slate-400 ml-1">Sustancia Activa (Genérico)</label>
+                                <input id="med-generic" className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-bold uppercase focus:outline-none focus:ring-2 focus:ring-emerald-500" value={medForm.genericName} onChange={e => setMedForm({...medForm, genericName: e.target.value})} placeholder="EJ: PARACETAMOL" />
                              </div>
                              <div className="space-y-2">
-                                <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Concentración</label>
-                                <input className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-bold uppercase" value={medForm.concentration} onChange={e => setMedForm({...medForm, concentration: e.target.value})} placeholder="EJ: 500 MG, 10% / 100ML" />
+                                <label htmlFor="med-concentration" className="text-[10px] font-black uppercase text-slate-400 ml-1">Concentración</label>
+                                <input id="med-concentration" className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-bold uppercase focus:outline-none focus:ring-2 focus:ring-emerald-500" value={medForm.concentration} onChange={e => setMedForm({...medForm, concentration: e.target.value})} placeholder="EJ: 500 MG, 10% / 100ML" />
                              </div>
                           </div>
 
                           <div className="grid grid-cols-3 gap-4">
                               <div className="space-y-2">
-                                 <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Presentación / Formato</label>
-                                 <input className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-bold uppercase" value={medForm.presentation} onChange={e => setMedForm({...medForm, presentation: e.target.value})} placeholder="EJ: CAJA C/10" />
+                                 <label htmlFor="med-presentation" className="text-[10px] font-black uppercase text-slate-400 ml-1">Presentación / Formato</label>
+                                 <input id="med-presentation" className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-bold uppercase focus:outline-none focus:ring-2 focus:ring-emerald-500" value={medForm.presentation} onChange={e => setMedForm({...medForm, presentation: e.target.value})} placeholder="EJ: CAJA C/10" />
                               </div>
                               <div className="space-y-2">
-                                 <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Stock Mínimo</label>
-                                 <input type="number" className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-bold text-center" value={medForm.minStock} onChange={e => setMedForm({...medForm, minStock: parseInt(e.target.value)})} />
+                                 <label htmlFor="med-min-stock" className="text-[10px] font-black uppercase text-slate-400 ml-1">Stock Mínimo</label>
+                                 <input id="med-min-stock" type="number" className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-bold text-center focus:outline-none focus:ring-2 focus:ring-emerald-500" value={medForm.minStock} onChange={e => setMedForm({...medForm, minStock: parseInt(e.target.value)})} />
                               </div>
                               <div className="space-y-2">
-                                 <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Unidad Med.</label>
-                                 <input className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-bold text-center uppercase" value={medForm.unit} onChange={e => setMedForm({...medForm, unit: e.target.value})} placeholder="PIEZA" />
+                                 <label htmlFor="med-unit" className="text-[10px] font-black uppercase text-slate-400 ml-1">Unidad Med.</label>
+                                 <input id="med-unit" className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-bold text-center uppercase focus:outline-none focus:ring-2 focus:ring-emerald-500" value={medForm.unit} onChange={e => setMedForm({...medForm, unit: e.target.value})} placeholder="PIEZA" />
                               </div>
                           </div>
                        </div>
@@ -668,22 +685,22 @@ const Inventory: React.FC = () => {
                        <h4 className="text-[11px] font-black uppercase text-blue-700 flex items-center gap-3"><Layers size={16}/> Registro de Existencia Inicial (Lote / Serie)</h4>
                        <div className="grid grid-cols-3 gap-6">
                           <div className="space-y-2">
-                             <label className="text-[9px] font-black uppercase text-slate-400 ml-1">Num. Lote o Serie</label>
-                             <input className="w-full p-3.5 bg-white border border-blue-200 rounded-xl text-xs font-mono font-black uppercase text-center shadow-sm" value={batchForm.batchNumber} onChange={e => setBatchForm({...batchForm, batchNumber: e.target.value})} placeholder="S/N" />
+                             <label htmlFor="batch-number" className="text-[9px] font-black uppercase text-slate-400 ml-1">Num. Lote o Serie</label>
+                             <input id="batch-number" className="w-full p-3.5 bg-white border border-blue-200 rounded-xl text-xs font-mono font-black uppercase text-center shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500" value={batchForm.batchNumber} onChange={e => setBatchForm({...batchForm, batchNumber: e.target.value})} placeholder="S/N" />
                           </div>
                           <div className="space-y-2">
-                             <label className="text-[9px] font-black uppercase text-slate-400 ml-1">Cantidad Inicial</label>
-                             <input type="number" className="w-full p-3.5 bg-white border border-blue-200 rounded-xl text-lg font-black text-center shadow-sm" value={batchForm.currentStock} onChange={e => setBatchForm({...batchForm, currentStock: parseInt(e.target.value) || 0})} />
+                             <label htmlFor="batch-stock" className="text-[9px] font-black uppercase text-slate-400 ml-1">Cantidad Inicial</label>
+                             <input id="batch-stock" type="number" className="w-full p-3.5 bg-white border border-blue-200 rounded-xl text-lg font-black text-center shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500" value={batchForm.currentStock} onChange={e => setBatchForm({...batchForm, currentStock: parseInt(e.target.value) || 0})} />
                           </div>
                           <div className="space-y-2">
-                             <label className="text-[9px] font-black uppercase text-slate-400 ml-1">Vigencia / Caducidad</label>
+                             <label htmlFor="batch-expiry" className="text-[9px] font-black uppercase text-slate-400 ml-1">Vigencia / Caducidad</label>
                              <div className="flex gap-2">
                                 {!noExpiry ? (
-                                   <input type="date" className="flex-1 p-3.5 bg-white border border-blue-200 rounded-xl text-xs font-bold shadow-sm" value={batchForm.expiryDate} onChange={e => setBatchForm({...batchForm, expiryDate: e.target.value})} />
+                                   <input id="batch-expiry" type="date" className="flex-1 p-3.5 bg-white border border-blue-200 rounded-xl text-xs font-bold shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500" value={batchForm.expiryDate} onChange={e => setBatchForm({...batchForm, expiryDate: e.target.value})} />
                                 ) : (
                                    <div className="flex-1 p-3.5 bg-slate-100 rounded-xl text-[9px] font-black text-slate-400 flex items-center justify-center uppercase">Producto No Perecedero</div>
                                 )}
-                                <button onClick={() => setNoExpiry(!noExpiry)} className={`p-3.5 rounded-xl transition-all shadow-sm ${noExpiry ? 'bg-blue-600 text-white' : 'bg-white border border-blue-100 text-blue-600'}`} title="Marcar como No Perecedero"><CalendarOff size={18}/></button>
+                                <button onClick={() => setNoExpiry(!noExpiry)} aria-pressed={noExpiry} className={`p-3.5 rounded-xl transition-all shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${noExpiry ? 'bg-blue-600 text-white' : 'bg-white border border-blue-100 text-blue-600'}`} title="Marcar como No Perecedero" aria-label="Marcar como producto no perecedero"><CalendarOff size={18} aria-hidden="true" /></button>
                              </div>
                           </div>
                        </div>
@@ -699,7 +716,7 @@ const Inventory: React.FC = () => {
                                   <DollarSign size={20}/>
                                   <h4 className="text-[12px] font-black uppercase leading-tight">Vínculo de Venta<br/>(POS)</h4>
                               </div>
-                              <button onClick={() => setCreateInCatalog(!createInCatalog)} className={`px-4 py-2 rounded-xl text-[8px] font-black uppercase transition-all shadow-md ${createInCatalog ? 'bg-indigo-600 text-white' : 'bg-white text-indigo-400 border border-indigo-100'}`}>
+                              <button onClick={() => setCreateInCatalog(!createInCatalog)} aria-pressed={createInCatalog} className={`px-4 py-2 rounded-xl text-[8px] font-black uppercase transition-all shadow-md focus:outline-none focus:ring-2 focus:ring-indigo-500 ${createInCatalog ? 'bg-indigo-600 text-white' : 'bg-white text-indigo-400 border border-indigo-100'}`}>
                                  {createInCatalog ? 'Publicación Activa' : 'No Publicado'}
                               </button>
                            </div>
@@ -707,17 +724,17 @@ const Inventory: React.FC = () => {
                            {createInCatalog ? (
                               <div className="space-y-8 animate-in zoom-in-95">
                                  <div className="space-y-2 text-center">
-                                    <label className="text-[10px] font-black uppercase text-indigo-400 tracking-widest block">Precio al Público ($)</label>
-                                    <input type="number" className="w-full p-6 bg-white border-2 border-indigo-100 rounded-3xl text-4xl font-black text-center text-indigo-900 outline-none shadow-xl focus:ring-4 focus:ring-indigo-200" placeholder="0.00" value={catalogForm.price} onChange={e => setCatalogForm({...catalogForm, price: e.target.value})} />
+                                    <label htmlFor="catalog-price" className="text-[10px] font-black uppercase text-indigo-400 tracking-widest block">Precio al Público ($)</label>
+                                    <input id="catalog-price" type="number" className="w-full p-6 bg-white border-2 border-indigo-100 rounded-3xl text-4xl font-black text-center text-indigo-900 outline-none shadow-xl focus:ring-4 focus:ring-indigo-200" placeholder="0.00" value={catalogForm.price} onChange={e => setCatalogForm({...catalogForm, price: e.target.value})} />
                                  </div>
                                  <div className="grid grid-cols-2 gap-4">
                                     <div className="space-y-2">
-                                       <label className="text-[8px] font-black uppercase text-slate-400 ml-1">IVA Trasladado (%)</label>
-                                       <input type="number" className="w-full p-3 bg-white border border-indigo-100 rounded-2xl text-xs font-bold text-center" value={catalogForm.tax} onChange={e => setCatalogForm({...catalogForm, tax: parseInt(e.target.value)})} />
+                                       <label htmlFor="catalog-tax" className="text-[8px] font-black uppercase text-slate-400 ml-1">IVA Trasladado (%)</label>
+                                       <input id="catalog-tax" type="number" className="w-full p-3 bg-white border border-indigo-100 rounded-2xl text-xs font-bold text-center focus:outline-none focus:ring-2 focus:ring-indigo-500" value={catalogForm.tax} onChange={e => setCatalogForm({...catalogForm, tax: parseInt(e.target.value)})} />
                                     </div>
                                     <div className="space-y-2">
-                                       <label className="text-[8px] font-black uppercase text-slate-400 ml-1">SKU / Código Interno</label>
-                                       <input className="w-full p-3 bg-white border border-indigo-100 rounded-2xl text-xs font-mono font-black text-center uppercase" value={catalogForm.code} onChange={e => setCatalogForm({...catalogForm, code: e.target.value})} placeholder="AUTO" />
+                                       <label htmlFor="catalog-code" className="text-[8px] font-black uppercase text-slate-400 ml-1">SKU / Código Interno</label>
+                                       <input id="catalog-code" className="w-full p-3 bg-white border border-indigo-100 rounded-2xl text-xs font-mono font-black text-center uppercase focus:outline-none focus:ring-2 focus:ring-indigo-500" value={catalogForm.code} onChange={e => setCatalogForm({...catalogForm, code: e.target.value})} placeholder="AUTO" />
                                     </div>
                                  </div>
                                  <div className="p-4 bg-indigo-100/50 rounded-2xl border border-indigo-100">
@@ -741,9 +758,9 @@ const Inventory: React.FC = () => {
               </div>
 
               <div className="flex gap-4 pt-8 border-t border-slate-100">
-                 <button onClick={() => { setShowAddModal(false); resetForms(); }} className="flex-1 py-6 bg-slate-100 rounded-[2rem] font-black text-xs uppercase text-slate-500 hover:bg-slate-200 transition-all">Cancelar</button>
-                 <button onClick={handleCreateMed} className="flex-[2.5] py-6 bg-slate-900 text-white rounded-[2rem] font-black text-xs uppercase tracking-[0.2em] shadow-2xl hover:bg-emerald-600 transition-all flex items-center justify-center gap-4 active:scale-95">
-                    <Save size={24} /> {isEditingMed ? 'Guardar Cambios de Ficha' : 'Certificar Alta Integral de Producto'}
+                 <button onClick={() => { setShowAddModal(false); resetForms(); }} className="flex-1 py-6 bg-slate-100 rounded-[2rem] font-black text-xs uppercase text-slate-500 hover:bg-slate-200 transition-all focus:outline-none focus:ring-2 focus:ring-slate-400">Cancelar</button>
+                 <button onClick={handleCreateMed} className="flex-[2.5] py-6 bg-slate-900 text-white rounded-[2rem] font-black text-xs uppercase tracking-[0.2em] shadow-2xl hover:bg-emerald-600 transition-all flex items-center justify-center gap-4 active:scale-95 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2">
+                    <Save size={24} aria-hidden="true" /> {isEditingMed ? 'Guardar Cambios de Ficha' : 'Certificar Alta Integral de Producto'}
                  </button>
               </div>
            </div>

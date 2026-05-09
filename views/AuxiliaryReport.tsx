@@ -31,12 +31,17 @@ const AuxiliaryReport: React.FC<{ patients: Patient[], onSaveNote: (n: ClinicalN
   const [customStudyName, setCustomStudyName] = useState('');
   const [useCustomName, setUseCustomName] = useState(false);
 
+  const getToday = () => {
+    const d = new Date();
+    return new Date(d.getTime() - (d.getTimezoneOffset() * 60000)).toISOString().split('T')[0];
+  };
+
   // ESTADO DEL FORMULARIO COMPLETO
   const [form, setForm] = useState({
     // Contexto del Estudio
-    studyDate: new Date().toISOString().split('T')[0],
+    studyDate: getToday(),
     studyTime: new Date().toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' }),
-    requestingDr: 'Dr. Alejandro Méndez', // Debería venir de la orden original
+    requestingDr: 'Dr. Médico', // Debería venir de la orden original
     clinicalIndication: patient?.reason || '', // Problema clínico en estudio
     
     // Resultados Imagenología (Texto Libre Estructurado)

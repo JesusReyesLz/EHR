@@ -93,6 +93,18 @@ const SocialWorkSheet: React.FC<{ patients: Patient[], onSaveNote: (n: ClinicalN
 
   return (
     <div className="max-w-6xl mx-auto pb-40 animate-in fade-in duration-500">
+      <style>{`
+        @media print {
+          .no-print, nav, aside, button { display: none !important; }
+          body { background: white !important; margin: 0 !important; }
+          main { margin: 0 !important; padding: 0.5cm !important; width: 100% !important; left: 0 !important; top: 0 !important; }
+          .max-w-6xl { max-width: 100% !important; }
+          .bg-slate-900 { background: #000 !important; color: #fff !important; -webkit-print-color-adjust: exact; }
+          .border { border: 1px solid #000 !important; }
+          .shadow-sm, .shadow-md, .shadow-lg, .shadow-xl, .shadow-2xl { box-shadow: none !important; }
+          @page { margin: 0.5cm; size: portrait; }
+        }
+      `}</style>
       {/* Header Estilo Expediente */}
       <div className="bg-white border-b-8 border-indigo-600 p-8 rounded-t-[3.5rem] shadow-2xl mb-8 flex flex-col md:flex-row justify-between items-center gap-6 no-print">
         <div className="flex items-center gap-6">
@@ -131,8 +143,7 @@ const SocialWorkSheet: React.FC<{ patients: Patient[], onSaveNote: (n: ClinicalN
         <div className="p-16 space-y-12">
           
           {/* SECCIÓN 1: FAMILIA */}
-          {activeSection === 'family' && (
-            <div className="space-y-10 animate-in slide-in-from-left-4">
+          <div className={`${activeSection === 'family' ? 'block animate-in slide-in-from-left-4' : 'hidden print:block'} space-y-10`}>
               <div className="flex justify-between items-center border-b border-slate-100 pb-6">
                  <h3 className="text-sm font-black uppercase tracking-widest text-slate-900 flex items-center gap-3">
                     <Users className="text-indigo-600" /> Integración del Núcleo Familiar
@@ -192,12 +203,10 @@ const SocialWorkSheet: React.FC<{ patients: Patient[], onSaveNote: (n: ClinicalN
                     </p>
                  </div>
               </div>
-            </div>
-          )}
+          </div>
 
           {/* SECCIÓN 2: VIVIENDA */}
-          {activeSection === 'housing' && (
-            <div className="space-y-12 animate-in slide-in-from-right-4">
+          <div className={`${activeSection === 'housing' ? 'block animate-in slide-in-from-right-4' : 'hidden print:block'} space-y-12`}>
                <h3 className="text-sm font-black uppercase tracking-widest text-slate-900 flex items-center gap-3 border-b border-slate-100 pb-6">
                   <Home className="text-indigo-600" /> Características de la Vivienda
                </h3>
@@ -241,11 +250,9 @@ const SocialWorkSheet: React.FC<{ patients: Patient[], onSaveNote: (n: ClinicalN
                   </div>
                </div>
             </div>
-          )}
 
           {/* SECCIÓN 3: DIAGNÓSTICO SOCIAL */}
-          {activeSection === 'diagnosis' && (
-            <div className="space-y-10 animate-in zoom-in-95">
+          <div className={`${activeSection === 'diagnosis' ? 'block animate-in zoom-in-95' : 'hidden print:block'} space-y-10`}>
                <h3 className="text-sm font-black uppercase tracking-widest text-slate-900 flex items-center gap-3 border-b border-slate-100 pb-6">
                   <HeartHandshake className="text-indigo-600" /> Evaluación y Plan Social
                </h3>
@@ -283,8 +290,7 @@ const SocialWorkSheet: React.FC<{ patients: Patient[], onSaveNote: (n: ClinicalN
                   <p className="text-[9px] font-bold text-slate-400 uppercase tracking-[0.2em] mt-1">Cédula Prof. Trabajo Social 88776655</p>
                </div>
             </div>
-          )}
-        </div>
+          </div>
 
         {/* Footer Acciones */}
         <div className="p-12 bg-slate-900 text-white flex justify-between items-center no-print overflow-hidden relative">

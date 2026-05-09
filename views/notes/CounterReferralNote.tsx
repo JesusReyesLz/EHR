@@ -41,7 +41,7 @@ const CounterReferralNote: React.FC<{ patients: Patient[], notes: ClinicalNote[]
     warningSigns: '', // Datos de alarma para reingreso
     
     // Administrativo
-    responsibleDoctor: doctorInfo?.name || 'Dr. Alejandro Méndez',
+    responsibleDoctor: doctorInfo?.name || 'Dr. Médico',
     cedulaDoctor: doctorInfo?.cedula || '12345678',
     date: new Date().toLocaleString('es-MX')
   });
@@ -177,11 +177,15 @@ const CounterReferralNote: React.FC<{ patients: Patient[], notes: ClinicalNote[]
                               <p className="text-[9px] text-slate-500 uppercase">Expediente / CURP</p>
                               <p className="text-sm font-black uppercase">{patient.id} / {patient.curp}</p>
                           </div>
-                          <div className="col-span-6">
+                          <div className="col-span-4">
+                              <p className="text-[9px] text-slate-500 uppercase">Servicio Tratante</p>
+                              <p className="text-xs font-bold uppercase">{form.serviceUnit}</p>
+                          </div>
+                          <div className="col-span-4">
                               <p className="text-[9px] text-slate-500 uppercase">Unidad que Contrarrefiere (Envía)</p>
                               <p className="text-xs font-bold uppercase">{form.sendingUnit}</p>
                           </div>
-                          <div className="col-span-6">
+                          <div className="col-span-4">
                               <p className="text-[9px] text-slate-500 uppercase">Unidad Receptora (Destino)</p>
                               <p className="text-xs font-bold uppercase">{form.receivingUnit}</p>
                           </div>

@@ -186,6 +186,29 @@ const AuxiliaryOrder: React.FC<{ patients: Patient[], onSaveNote: (n: ClinicalNo
                       value={form.clinicalJustification}
                       onChange={e => setForm({...form, clinicalJustification: e.target.value})}
                    />
+                   <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                         <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-2">Urgencia</label>
+                         <select 
+                            className="w-full bg-white/5 border border-white/10 p-4 rounded-2xl text-xs outline-none focus:bg-white/10 text-white"
+                            value={form.urgency}
+                            onChange={e => setForm({...form, urgency: e.target.value})}
+                         >
+                            <option value="Rutina" className="text-slate-900">Rutina</option>
+                            <option value="Urgente" className="text-slate-900">Urgente</option>
+                            <option value="Prioritario" className="text-slate-900">Prioritario</option>
+                         </select>
+                      </div>
+                      <div className="space-y-2">
+                         <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-2">Instrucciones Adicionales</label>
+                         <input 
+                            className="w-full bg-white/5 border border-white/10 p-4 rounded-2xl text-xs outline-none focus:bg-white/10 text-white placeholder:text-slate-500"
+                            placeholder="Ej: Ayuno de 8 horas..."
+                            value={form.doctorInstructions}
+                            onChange={e => setForm({...form, doctorInstructions: e.target.value})}
+                         />
+                      </div>
+                   </div>
                    <div className="p-6 bg-white/5 border-2 border-dashed border-white/10 rounded-3xl space-y-4">
                       <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Resumen de Orden</p>
                       <div className="space-y-2">
@@ -227,6 +250,10 @@ const AuxiliaryOrder: React.FC<{ patients: Patient[], onSaveNote: (n: ClinicalNo
               <div className="text-right">
                  <p className="text-sm font-black text-slate-900 uppercase">{form.date}</p>
                  <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest mt-1">Folio de Orden: {Date.now().toString().substr(-6)}</p>
+                 <div className="mt-2 inline-block px-3 py-1 bg-slate-100 border border-slate-200 rounded-lg">
+                    <p className="text-[8px] font-black text-slate-500 uppercase tracking-widest">Prioridad</p>
+                    <p className={`text-[10px] font-black uppercase ${form.urgency === 'Urgente' ? 'text-rose-600' : 'text-slate-900'}`}>{form.urgency}</p>
+                 </div>
               </div>
            </div>
 
@@ -264,6 +291,12 @@ const AuxiliaryOrder: React.FC<{ patients: Patient[], onSaveNote: (n: ClinicalNo
               <div className="space-y-4">
                  <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Justificación Médica (Criterio NOM-004)</p>
                  <p className="text-xs text-slate-800 font-medium leading-relaxed italic border-l-2 border-slate-200 pl-6">"{form.clinicalJustification || 'Se solicitan auxiliares para confirmar sospecha diagnóstica y normar conducta terapéutica.'}"</p>
+                 {form.doctorInstructions && (
+                     <div className="pt-4">
+                         <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">Instrucciones Adicionales</p>
+                         <p className="text-xs text-slate-800 font-bold uppercase border-l-2 border-blue-200 pl-6">{form.doctorInstructions}</p>
+                     </div>
+                 )}
               </div>
               <div className="text-center space-y-4 pt-10">
                  <div className="w-64 h-24 border-b-2 border-slate-900 mx-auto flex items-center justify-center italic text-slate-200 text-2xl font-serif">Firma Digitalizada</div>

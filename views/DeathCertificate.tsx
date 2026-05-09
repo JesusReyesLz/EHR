@@ -7,14 +7,15 @@ import {
   Lock, PenTool, ClipboardCheck, Info, Clock, Skull,
   Calendar, MapPin, Briefcase, GraduationCap
 } from 'lucide-react';
-import { Patient, ClinicalNote } from '../types';
+import { Patient, ClinicalNote, PatientStatus, ModuleType } from '../types';
 
 interface DeathCertificateProps {
   patients: Patient[];
   onSaveNote: (note: ClinicalNote) => void;
+  onUpdatePatient?: (p: Patient) => void;
 }
 
-const DeathCertificate: React.FC<DeathCertificateProps> = ({ patients, onSaveNote }) => {
+const DeathCertificate: React.FC<DeathCertificateProps> = ({ patients, onSaveNote, onUpdatePatient }) => {
   const { id } = useParams();
   const navigate = useNavigate();
   const patient = patients.find(p => p.id === id);
@@ -43,7 +44,7 @@ const DeathCertificate: React.FC<DeathCertificateProps> = ({ patients, onSaveNot
     civilStatus: patient?.civilStatus || 'Soltero(a)',
     
     // Certificante
-    certifierName: 'Dr. Alejandro Méndez',
+    certifierName: 'Dr. Médico',
     certifierId: '12345678',
     certifierType: 'Médico Tratante'
   });
@@ -69,6 +70,25 @@ const DeathCertificate: React.FC<DeathCertificateProps> = ({ patients, onSaveNot
       hash: `CERT-SHA256-DEATH-${Math.random().toString(36).substr(2, 12).toUpperCase()}`
     };
     onSaveNote(newNote);
+
+    if (onUpdatePatient) {
+      onUpdatePatient({
+        ...patient,
+        status: PatientStatus.ATTENDED,
+        bedNumber: undefined,
+        transitTargetModule: undefined,
+        history: {
+          ...patient.history,
+          dischargeData: {
+            program: patient.assignedModule === ModuleType.EMERGENCY ? 'Urgencias' : 'Hospitalización',
+            diagnosticos: [{ name: form.causePart1A, status: 'Confirmado' }],
+            medico: form.certifierName,
+            timestamp: new Date().toISOString()
+          }
+        }
+      });
+    }
+
     navigate(`/patient/${id}`);
   };
 

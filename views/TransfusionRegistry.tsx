@@ -120,6 +120,18 @@ const TransfusionRegistry: React.FC<TransfusionRegistryProps> = ({ patients, onS
 
   return (
     <div className="max-w-6xl mx-auto pb-40 animate-in fade-in duration-500">
+      <style>{`
+        @media print {
+          .no-print, nav, aside, button { display: none !important; }
+          body { background: white !important; margin: 0 !important; }
+          main { margin: 0 !important; padding: 0.5cm !important; width: 100% !important; left: 0 !important; top: 0 !important; }
+          .max-w-6xl { max-width: 100% !important; }
+          .bg-slate-900 { background: #000 !important; color: #fff !important; -webkit-print-color-adjust: exact; }
+          .border { border: 1px solid #000 !important; }
+          .shadow-sm, .shadow-md, .shadow-lg, .shadow-xl, .shadow-2xl { box-shadow: none !important; }
+          @page { margin: 0.5cm; size: portrait; }
+        }
+      `}</style>
       {/* Header Bar */}
       <div className="bg-white border-b-8 border-rose-600 p-8 rounded-t-[3.5rem] shadow-2xl mb-8 flex flex-col md:flex-row justify-between items-center gap-6 no-print sticky top-4 z-40">
         <div className="flex items-center gap-6">
@@ -397,6 +409,39 @@ const TransfusionRegistry: React.FC<TransfusionRegistryProps> = ({ patients, onS
               </div>
           </div>
       </div>
+
+      {/* VISTA DE IMPRESIÓN (FIRMAS) */}
+      <div className="hidden print:block mt-12 pt-12 border-t-2 border-slate-900">
+          <div className="grid grid-cols-3 gap-8">
+              <div className="text-center">
+                  <div className="w-48 h-16 border-b border-slate-900 mx-auto mb-2"></div>
+                  <p className="text-[10px] font-black uppercase">{form.indicatedBy}</p>
+                  <p className="text-[8px] text-slate-500 uppercase">Médico que Indica</p>
+              </div>
+              <div className="text-center">
+                  <div className="w-48 h-16 border-b border-slate-900 mx-auto mb-2"></div>
+                  <p className="text-[10px] font-black uppercase">{form.performedBy}</p>
+                  <p className="text-[8px] text-slate-500 uppercase">Personal que Transfunde</p>
+              </div>
+              <div className="text-center">
+                  <div className="w-48 h-16 border-b border-slate-900 mx-auto mb-2"></div>
+                  <p className="text-[10px] font-black uppercase">{form.witnessName || 'Nombre y Firma'}</p>
+                  <p className="text-[8px] text-slate-500 uppercase">Testigo / Doble Verificación</p>
+              </div>
+          </div>
+      </div>
+
+      <style>{`
+        @media print {
+          .no-print, nav, aside, button { display: none !important; }
+          body { background: white !important; margin: 0 !important; }
+          main { margin: 0 !important; padding: 1cm !important; width: 100% !important; left: 0 !important; top: 0 !important; }
+          .max-w-6xl { max-width: 100% !important; }
+          .bg-slate-50 { background: #f8fafc !important; }
+          input, select, textarea { border: none !important; background: transparent !important; padding: 0 !important; }
+          @page { margin: 1cm; size: letter; }
+        }
+      `}</style>
     </div>
   );
 };

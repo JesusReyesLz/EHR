@@ -3,17 +3,19 @@ import React, { useState, useMemo } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { 
   ChevronLeft, History, Search, Filter, Eye, Printer, 
-  Database, User, Clock, Activity, FileText, ClipboardList
+  Database, User, Clock, Activity, FileText, ClipboardList, Edit, X, Save
 } from 'lucide-react';
 import { Patient, ClinicalNote, ModuleType, PatientStatus } from '../types';
 
-const HistoryRegistries: React.FC<{ patients: Patient[], notes: ClinicalNote[] }> = ({ patients, notes }) => {
+const HistoryRegistries: React.FC<{ patients: Patient[], notes: ClinicalNote[], onUpdatePatient?: (p: Patient) => void }> = ({ patients, notes, onUpdatePatient }) => {
   const location = useLocation();
   const navigate = useNavigate();
   const initialModule = (location.state?.module as ModuleType) || ModuleType.OUTPATIENT;
   
   const [selectedModule, setSelectedModule] = useState<ModuleType>(initialModule);
   const [searchTerm, setSearchTerm] = useState('');
+  const [editingPatient, setEditingPatient] = useState<Patient | null>(null);
+  const [editForm, setEditForm] = useState({ assignedModule: ModuleType.OUTPATIENT, program: '' });
 
   const finalizedPatients = useMemo(() => {
     // Obtenemos pacientes con estado ATENDIDO del módulo seleccionado
@@ -34,9 +36,36 @@ const HistoryRegistries: React.FC<{ patients: Patient[], notes: ClinicalNote[] }
             diagnosis.toLowerCase().includes(search));
   });
 
+  const handleEditClick = (p: Patient) => {
+    setEditingPatient(p);
+    setEditForm({
+      assignedModule: p.assignedModule,
+      program: p.history?.dischargeData?.program || 'Consulta General'
+    });
+  };
+
+  const handleSaveEdit = () => {
+    if (!editingPatient || !onUpdatePatient) return;
+    
+    const updatedPatient = {
+      ...editingPatient,
+      assignedModule: editForm.assignedModule,
+      history: {
+        ...editingPatient.history,
+        dischargeData: {
+          ...editingPatient.history?.dischargeData,
+          program: editForm.program
+        }
+      }
+    };
+    
+    onUpdatePatient(updatedPatient);
+    setEditingPatient(null);
+  };
+
   return (
     <div className="max-w-7xl mx-auto space-y-10 animate-in fade-in duration-500">
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-8">
+      <div className="flex flex-col md:flex-row md:items-end justify-between gap-8 no-print">
         <div className="space-y-4">
            <button onClick={() => navigate('/')} className="flex items-center text-[10px] font-black uppercase text-blue-600 tracking-[0.2em] hover:opacity-70 transition-all">
               <ChevronLeft size={14} className="mr-2" /> Volver al Monitor
@@ -57,8 +86,8 @@ const HistoryRegistries: React.FC<{ patients: Patient[], notes: ClinicalNote[] }
         </div>
       </div>
 
-      <div className="bg-white border border-slate-200 rounded-[3.5rem] shadow-2xl overflow-hidden">
-         <div className="p-10 border-b border-slate-100 flex flex-col md:flex-row justify-between items-center gap-6">
+      <div className="bg-white border border-slate-200 rounded-[3.5rem] shadow-2xl overflow-hidden print:shadow-none print:border-none print:rounded-none">
+         <div className="p-10 border-b border-slate-100 flex flex-col md:flex-row justify-between items-center gap-6 no-print">
             <div className="relative flex-1 w-full max-w-2xl">
                <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5" />
                <input 
@@ -69,8 +98,8 @@ const HistoryRegistries: React.FC<{ patients: Patient[], notes: ClinicalNote[] }
                  onChange={(e) => setSearchTerm(e.target.value)}
                />
             </div>
-            <div className="flex gap-4">
-               <button className="p-4 bg-slate-50 text-slate-400 rounded-2xl hover:text-slate-900 shadow-sm border border-slate-200"><Printer size={20} /></button>
+            <div className="flex gap-4 no-print">
+               <button onClick={() => window.print()} className="p-4 bg-slate-50 text-slate-400 rounded-2xl hover:text-slate-900 shadow-sm border border-slate-200"><Printer size={20} /></button>
                <button className="p-4 bg-slate-50 text-slate-400 rounded-2xl hover:text-slate-900 shadow-sm border border-slate-200"><Filter size={20} /></button>
             </div>
          </div>
@@ -83,7 +112,7 @@ const HistoryRegistries: React.FC<{ patients: Patient[], notes: ClinicalNote[] }
                      <th className="px-10 py-6">Paciente / CURP</th>
                      <th className="px-10 py-6">Diagnóstico Principal</th>
                      <th className="px-10 py-6">Programa / Detalles</th>
-                     <th className="px-10 py-6 text-right">Expediente</th>
+                     <th className="px-10 py-6 text-right no-print">Expediente</th>
                   </tr>
                </thead>
                <tbody className="divide-y divide-slate-100">
@@ -113,10 +142,15 @@ const HistoryRegistries: React.FC<{ patients: Patient[], notes: ClinicalNote[] }
                                 {discharge?.program || 'Consulta General'}
                              </p>
                           </td>
-                          <td className="px-10 py-8 text-right">
-                             <button onClick={() => navigate(`/patient/${p.id}`)} className="p-4 bg-slate-900 text-white rounded-2xl hover:bg-blue-600 transition-all shadow-lg flex items-center gap-2 ml-auto">
-                                <Eye size={18} />
-                             </button>
+                          <td className="px-10 py-8 text-right no-print">
+                             <div className="flex items-center justify-end gap-2">
+                               <button onClick={() => handleEditClick(p)} className="p-4 bg-slate-100 text-slate-500 rounded-2xl hover:bg-slate-200 transition-all shadow-sm">
+                                  <Edit size={18} />
+                               </button>
+                               <button onClick={() => navigate(`/patient/${p.id}`)} className="p-4 bg-slate-900 text-white rounded-2xl hover:bg-blue-600 transition-all shadow-lg flex items-center gap-2">
+                                  <Eye size={18} />
+                               </button>
+                             </div>
                           </td>
                        </tr>
                     );
@@ -133,6 +167,74 @@ const HistoryRegistries: React.FC<{ patients: Patient[], notes: ClinicalNote[] }
             </table>
          </div>
       </div>
+
+      {/* MODAL DE EDICIÓN HISTÓRICA */}
+      {editingPatient && (
+        <div className="fixed inset-0 z-[300] bg-slate-900/90 backdrop-blur-sm flex items-center justify-center p-6 animate-in fade-in">
+           <div className="bg-white w-full max-w-lg rounded-[3rem] p-10 shadow-2xl space-y-8">
+              <div className="flex justify-between items-center">
+                 <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tight">Editar Registro Histórico</h3>
+                 <button onClick={() => setEditingPatient(null)} className="p-2 hover:bg-slate-100 rounded-full"><X size={24}/></button>
+              </div>
+              
+              <div className="space-y-6">
+                 <div className="space-y-2">
+                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-2">Módulo Asignado</label>
+                    <select 
+                        className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold uppercase outline-none"
+                        value={editForm.assignedModule}
+                        onChange={e => setEditForm({...editForm, assignedModule: e.target.value as ModuleType})}
+                    >
+                        {Object.values(ModuleType).filter(m => m !== ModuleType.ADMIN && m !== ModuleType.MONITOR).map(m => (
+                            <option key={m} value={m}>{m}</option>
+                        ))}
+                    </select>
+                 </div>
+
+                 <div className="space-y-2">
+                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-2">Programa / Servicio (SUIVE)</label>
+                    <select 
+                        className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold uppercase outline-none"
+                        value={editForm.program}
+                        onChange={e => setEditForm({...editForm, program: e.target.value})}
+                    >
+                        <option value="Consulta General">Consulta General</option>
+                        <option value="Urgencias">Urgencias</option>
+                        <option value="Hospitalización">Hospitalización</option>
+                        <option value="Laboratorio">Laboratorio</option>
+                        <option value="Imagenología">Imagenología</option>
+                        <option value="Odontología">Odontología</option>
+                        <option value="Psicología">Psicología</option>
+                        <option value="Nutrición">Nutrición</option>
+                        <option value="Planificación Familiar">Planificación Familiar</option>
+                        <option value="Control Prenatal">Control Prenatal</option>
+                        <option value="Control Niño Sano">Control Niño Sano</option>
+                        <option value="Crónico-Degenerativas">Crónico-Degenerativas</option>
+                        <option value="Salud Mental">Salud Mental</option>
+                        <option value="Detección Cáncer">Detección Cáncer</option>
+                        <option value="Telemedicina">Telemedicina</option>
+                    </select>
+                 </div>
+              </div>
+
+              <button onClick={handleSaveEdit} className="w-full py-5 bg-slate-900 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl hover:bg-blue-600 transition-all flex items-center justify-center gap-2">
+                 <Save size={18} /> Guardar Cambios
+              </button>
+           </div>
+        </div>
+      )}
+
+      <style>{`
+        @media print {
+          .no-print, nav, aside, button { display: none !important; }
+          body { background: white !important; margin: 0 !important; }
+          main { margin: 0 !important; padding: 0.5cm !important; width: 100% !important; left: 0 !important; top: 0 !important; }
+          .max-w-7xl { max-width: 100% !important; }
+          .bg-slate-900 { background: #000 !important; color: #fff !important; -webkit-print-color-adjust: exact; }
+          .border { border: 1px solid #000 !important; }
+          @page { margin: 0.5cm; size: landscape; }
+        }
+      `}</style>
     </div>
   );
 };

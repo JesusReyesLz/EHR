@@ -236,10 +236,11 @@ const EpiDeathReport: React.FC<EpiDeathReportProps> = ({ patients, notes, onSave
                           <div className="border-b border-slate-900 mb-1"></div>
                           <p className="font-bold uppercase">{form.reportingDoctor}</p>
                           <p className="text-[9px] uppercase">Médico Notificante</p>
+                          <p className="text-[9px] uppercase">Cédula: {form.cedula}</p>
                       </div>
                       <div>
                           <div className="border-b border-slate-900 mb-1"></div>
-                          <p className="font-bold uppercase">Sello Epidemiología</p>
+                          <p className="font-bold uppercase">{form.epidemiologistName || 'Sello Epidemiología'}</p>
                           <p className="text-[9px] uppercase">Recepción Jurisdiccional</p>
                       </div>
                   </div>

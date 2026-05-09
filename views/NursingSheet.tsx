@@ -20,8 +20,8 @@ interface ProcedureLog {
   nurse: string;
 }
 
-const NursingSheet: React.FC<{ patients: Patient[], onSaveNote: (n: ClinicalNote) => void, onUpdatePatient: (p: Patient) => void }> = ({ patients, onSaveNote, onUpdatePatient }) => {
-  const { id } = useParams();
+const NursingSheet: React.FC<{ patients: Patient[], onSaveNote: (n: ClinicalNote) => void, onUpdatePatient: (p: Patient) => void, notes?: ClinicalNote[] }> = ({ patients, onSaveNote, onUpdatePatient, notes = [] }) => {
+  const { id, noteId } = useParams();
   const navigate = useNavigate();
   const patient = patients.find(p => p.id === id);
 
@@ -199,7 +199,18 @@ const NursingSheet: React.FC<{ patients: Patient[], onSaveNote: (n: ClinicalNote
 
   return (
     <div className="max-w-7xl mx-auto pb-40 animate-in fade-in space-y-8">
-      
+      <style>{`
+        @media print {
+          .no-print, nav, aside, button { display: none !important; }
+          body { background: white !important; margin: 0 !important; }
+          main { margin: 0 !important; padding: 0.5cm !important; width: 100% !important; left: 0 !important; top: 0 !important; }
+          .max-w-7xl { max-width: 100% !important; }
+          .bg-slate-900 { background: #000 !important; color: #fff !important; -webkit-print-color-adjust: exact; }
+          .border { border: 1px solid #000 !important; }
+          .shadow-sm, .shadow-md, .shadow-lg, .shadow-xl, .shadow-2xl { box-shadow: none !important; }
+          @page { margin: 0.5cm; size: landscape; }
+        }
+      `}</style>
       {/* TOOLBAR */}
       <div className="bg-white border border-slate-200 p-6 rounded-[2.5rem] shadow-xl flex flex-wrap items-center justify-between gap-6 no-print">
          <div className="flex items-center gap-4">
@@ -214,6 +225,7 @@ const NursingSheet: React.FC<{ patients: Patient[], onSaveNote: (n: ClinicalNote
             <select className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-black uppercase" value={shift} onChange={e => setShift(e.target.value)}>
                <option>Matutino</option><option>Vespertino</option><option>Nocturno A</option><option>Nocturno B</option><option>Jornada Especial</option>
             </select>
+            <button onClick={() => window.print()} className="p-3 bg-white border border-slate-200 rounded-xl text-slate-400 hover:text-blue-600 shadow-sm transition-all"><Printer size={20} /></button>
          </div>
       </div>
 
@@ -652,6 +664,20 @@ const NursingSheet: React.FC<{ patients: Patient[], onSaveNote: (n: ClinicalNote
            </div>
         </div>
       )}
+
+      <style>{`
+        @media print {
+          .no-print, nav, aside, button, select { display: none !important; }
+          body { background: white !important; margin: 0 !important; }
+          main { margin: 0 !important; padding: 0.5cm !important; width: 100% !important; left: 0 !important; top: 0 !important; }
+          .max-w-7xl { max-width: 100% !important; }
+          .bg-slate-900 { background: #000 !important; color: #fff !important; -webkit-print-color-adjust: exact; }
+          .bg-blue-600 { background: #2563eb !important; -webkit-print-color-adjust: exact; }
+          .border { border: 1px solid #000 !important; }
+          input, textarea { border: none !important; border-bottom: 1px solid #000 !important; border-radius: 0 !important; }
+          @page { margin: 0.5cm; size: letter; }
+        }
+      `}</style>
     </div>
   );
 };

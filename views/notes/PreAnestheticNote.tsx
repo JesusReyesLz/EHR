@@ -275,7 +275,7 @@ const PreAnestheticNote: React.FC<PreAnestheticNoteProps> = ({ patients, notes, 
                         <div className="space-y-1">
                             <label className="text-[8px] font-black text-slate-400 uppercase ml-1">Mov. Cervical</label>
                             <select className="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-xs font-bold" value={form.cervicalMobility} onChange={e => setForm({...form, cervicalMobility: e.target.value})}>
-                                <option>Normal (>90°)</option>
+                                <option>Normal (&gt;90°)</option>
                                 <option>Limitada</option>
                                 <option>Muy Limitada</option>
                             </select>

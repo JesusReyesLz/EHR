@@ -43,9 +43,19 @@ const Finance: React.FC = () => {
   const [movements, setMovements] = useState<any[]>(() => JSON.parse(localStorage.getItem('med_movements_v6') || '[]'));
 
   // Logic for Date Filtering
-  const getToday = () => new Date().toISOString().split('T')[0];
+  const getToday = () => {
+    const d = new Date();
+    return new Date(d.getTime() - (d.getTimezoneOffset() * 60000)).toISOString().split('T')[0];
+  };
+  
+  const getStartOfMonth = () => {
+    const d = new Date();
+    const firstDay = new Date(d.getFullYear(), d.getMonth(), 1);
+    return new Date(firstDay.getTime() - (firstDay.getTimezoneOffset() * 60000)).toISOString().split('T')[0];
+  };
+
   const [dateRange, setDateRange] = useState({
-    start: new Date(new Date().setDate(1)).toISOString().split('T')[0], // Inicio de mes por defecto
+    start: getStartOfMonth(), // Inicio de mes por defecto
     end: getToday(),
     mode: 'month' as 'day' | 'week' | 'month' | 'custom'
   });
@@ -59,10 +69,10 @@ const Finance: React.FC = () => {
           start = getToday();
       } else if (mode === 'week') {
           const firstDay = today.getDate() - today.getDay() + (today.getDay() === 0 ? -6 : 1); // Monday
-          const monday = new Date(today.setDate(firstDay));
-          start = monday.toISOString().split('T')[0];
+          const monday = new Date(today.getFullYear(), today.getMonth(), firstDay);
+          start = new Date(monday.getTime() - (monday.getTimezoneOffset() * 60000)).toISOString().split('T')[0];
       } else if (mode === 'month') {
-          start = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().split('T')[0];
+          start = getStartOfMonth();
       } else {
           // Keep current dates if custom
           start = dateRange.start;
@@ -577,7 +587,19 @@ const Finance: React.FC = () => {
   };
 
   return (
-    <div className="max-w-[98%] mx-auto pb-20 space-y-8 animate-in fade-in">
+    <div className={`max-w-[98%] mx-auto pb-20 space-y-8 animate-in fade-in ${viewingOrder ? 'print:hidden' : ''}`}>
+      <style>{`
+        @media print {
+          .no-print, nav, aside, button { display: none !important; }
+          body { background: white !important; margin: 0 !important; }
+          main { margin: 0 !important; padding: 0.5cm !important; width: 100% !important; left: 0 !important; top: 0 !important; }
+          .max-w-[98%] { max-width: 100% !important; }
+          .bg-slate-900 { background: #000 !important; color: #fff !important; -webkit-print-color-adjust: exact; }
+          .border { border: 1px solid #000 !important; }
+          .shadow-sm, .shadow-md, .shadow-lg, .shadow-xl, .shadow-2xl { box-shadow: none !important; }
+          @page { margin: 0.5cm; size: landscape; }
+        }
+      `}</style>
       {/* HEADER & FILTER */}
       <div className="bg-white p-6 rounded-[3rem] border border-slate-200 shadow-sm flex flex-col xl:flex-row justify-between items-end gap-6 no-print sticky top-20 z-40">
         <div className="flex items-center gap-6">
@@ -659,7 +681,7 @@ const Finance: React.FC = () => {
       </div>
 
       {/* TABS NAVIGATION */}
-      <div className="flex flex-wrap gap-2 bg-white p-2 rounded-[2rem] shadow-sm border border-slate-200">
+      <div className="flex flex-wrap gap-2 bg-white p-2 rounded-[2rem] shadow-sm border border-slate-200 no-print">
           {['dashboard', 'analytics', 'margins', 'income', 'expenses'].map((tab) => (
               <button
                   key={tab}
@@ -677,7 +699,7 @@ const Finance: React.FC = () => {
           {/* 1. DASHBOARD & ANALYTICS GRAPHS */}
           {(activeTab === 'dashboard' || activeTab === 'analytics') && (
               <div className="space-y-8">
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 no-print">
                       <div className="bg-white p-8 rounded-[3rem] border border-slate-200 shadow-sm min-h-[400px]">
                           <h3 className="text-sm font-black uppercase text-slate-900 tracking-widest mb-8 flex items-center gap-3"><BarChart3 size={18}/> Tendencia de Ingresos Diarios</h3>
                           <ResponsiveContainer width="100%" height={300}>
@@ -1261,8 +1283,8 @@ const Finance: React.FC = () => {
       )}
 
       {viewingOrder && (
-        <div className="fixed inset-0 z-[250] bg-slate-900/95 backdrop-blur flex items-center justify-center p-4 animate-in fade-in">
-            <div className="bg-white w-full max-w-4xl rounded-[3rem] p-12 shadow-2xl h-[90vh] flex flex-col border-4 border-slate-900/10">
+        <div className="fixed inset-0 z-[250] bg-slate-900/95 backdrop-blur flex items-center justify-center p-4 animate-in fade-in print:bg-white print:p-0">
+            <div className="bg-white w-full max-w-4xl rounded-[3rem] p-12 shadow-2xl h-[90vh] flex flex-col border-4 border-slate-900/10 print:shadow-none print:border-none print:m-0 print:w-full print:h-auto">
                 {/* ... (Contenido del modal de visualización de orden igual que antes) ... */}
                 <div className="flex justify-between items-start border-b-4 border-slate-900 pb-8 mb-8">
                     <div className="space-y-4">

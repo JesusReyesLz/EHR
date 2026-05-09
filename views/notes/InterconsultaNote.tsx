@@ -100,7 +100,7 @@ const InterconsultaNote: React.FC<{ patients: Patient[], notes: ClinicalNote[], 
       type: 'Nota de Interconsulta',
       date: new Date().toLocaleString('es-MX'),
       /* Changed author to use doctorInfo name if available */
-      author: doctorInfo?.name || 'Dr. Alejandro Méndez (Especialista)',
+      author: doctorInfo?.name || 'Dr. Médico (Especialista)',
       content: { ...form, vitals }, // Guardamos snapshot de vitales
       isSigned: finalize,
       hash: finalize ? `CERT-INT-${Math.random().toString(36).substr(2, 9).toUpperCase()}` : undefined

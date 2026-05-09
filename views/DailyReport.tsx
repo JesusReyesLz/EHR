@@ -206,7 +206,7 @@ const DailyReport: React.FC<DailyReportProps> = ({ patients, notes }) => {
   };
 
   return (
-    <div className="max-w-7xl mx-auto space-y-8 animate-in fade-in duration-500 pb-20">
+    <div className={`max-w-7xl mx-auto space-y-8 animate-in fade-in duration-500 pb-20 ${showPrintPreview ? 'print:hidden' : ''}`}>
       
       {/* HEADER & CONTROLS */}
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 no-print">
@@ -432,7 +432,7 @@ const DailyReport: React.FC<DailyReportProps> = ({ patients, notes }) => {
 
       {/* PRINT PREVIEW MODAL */}
       {showPrintPreview && (
-          <div className="fixed inset-0 z-[200] bg-slate-900/95 backdrop-blur flex items-center justify-center p-8 animate-in fade-in no-print">
+          <div className="fixed inset-0 z-[200] bg-slate-900/95 backdrop-blur flex items-center justify-center p-8 animate-in fade-in print:bg-white print:p-0">
               <div className="bg-white w-full max-w-[215mm] h-full overflow-y-auto rounded-none shadow-none print:w-full print:h-auto print:overflow-visible">
                   
                   {/* PRINT TOOLBAR */}

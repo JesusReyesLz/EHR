@@ -9,6 +9,7 @@ import {
   PenTool
 } from 'lucide-react';
 import { Patient, ClinicalNote, DoctorInfo, Vitals } from '../../types';
+import PDFViewer from '../../src/components/PDFViewer';
 
 interface MedicalCertificateProps {
   patients: Patient[];
@@ -19,8 +20,8 @@ interface MedicalCertificateProps {
 
 type CertificateType = 'Escolar' | 'Laboral' | 'Deportivo' | 'Licencia de Conducir' | 'Viaje' | 'General';
 
-const MedicalCertificate: React.FC<MedicalCertificateProps> = ({ patients, onSaveNote, doctorInfo }) => {
-  const { id } = useParams();
+const MedicalCertificate: React.FC<MedicalCertificateProps> = ({ patients, onSaveNote, doctorInfo, notes = [] }) => {
+  const { id, noteId } = useParams();
   const navigate = useNavigate();
   const patient = patients.find(p => p.id === id);
 
@@ -58,6 +59,18 @@ const MedicalCertificate: React.FC<MedicalCertificateProps> = ({ patients, onSav
 
   useEffect(() => {
      if (patient) {
+         if (noteId) {
+             const existingNote = notes.find(n => n.id === noteId);
+             if (existingNote) {
+                 setForm(existingNote.content);
+                 setVitals(existingNote.content.vitals || vitals);
+                 setCertType(existingNote.content.certType || 'General');
+                 setGeneratedNoteId(existingNote.id);
+                 setShowPrintView(true);
+                 return;
+             }
+         }
+
          if (patient.currentVitals) {
              setVitals(prev => ({...prev, ...patient.currentVitals}));
          }
@@ -78,7 +91,7 @@ const MedicalCertificate: React.FC<MedicalCertificateProps> = ({ patients, onSav
              pathologicalHistory: historyText + chronicText
          }));
      }
-  }, [patient]);
+  }, [patient, noteId, notes]);
 
   // Update specific clause based on type
   useEffect(() => {
@@ -121,25 +134,10 @@ const MedicalCertificate: React.FC<MedicalCertificateProps> = ({ patients, onSav
 
   if (showPrintView) {
       return (
-        <div className="min-h-screen bg-slate-100 flex justify-center p-8 animate-in fade-in">
-           <div className="w-full max-w-[215mm] bg-white shadow-2xl overflow-hidden flex flex-col relative print:shadow-none print:w-full print:p-0 print:m-0">
-               {/* Toolbar */}
-               <div className="bg-slate-900 p-4 flex justify-between items-center no-print sticky top-0 z-50">
-                  <div className="flex items-center gap-4 text-white">
-                      <ShieldCheck className="text-emerald-400" />
-                      <div>
-                          <p className="text-xs font-black uppercase tracking-widest">Certificado Oficial</p>
-                          <p className="text-[10px] text-slate-400">Folio: {generatedNoteId}</p>
-                      </div>
-                  </div>
-                  <div className="flex gap-3">
-                      <button onClick={() => window.print()} className="px-6 py-2 bg-blue-600 text-white rounded-xl text-xs font-black uppercase tracking-widest hover:bg-blue-500 flex items-center gap-2"><Printer size={16}/> Imprimir</button>
-                      <button onClick={() => navigate(`/patient/${id}`)} className="px-6 py-2 bg-slate-700 text-white rounded-xl text-xs font-black uppercase tracking-widest hover:bg-rose-600">Cerrar</button>
-                  </div>
-              </div>
-
-              {/* Print Content */}
-              <div className="p-[25mm] space-y-10 text-slate-900 leading-relaxed text-justify relative">
+        <PDFViewer filename={`Certificado_Medico_${patient.name.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`} onClose={() => navigate(`/patient/${id}`)}>
+           <div className="w-[210mm] min-h-[297mm] bg-white text-slate-900 p-[20mm] flex flex-col relative text-[12px]">
+               {/* Print Content */}
+               <div className="space-y-10 leading-relaxed text-justify relative flex-1">
                   
                   {/* Header */}
                   <div className="flex justify-between items-end border-b-4 border-slate-900 pb-6">
@@ -207,12 +205,26 @@ const MedicalCertificate: React.FC<MedicalCertificateProps> = ({ patients, onSav
                       </div>
 
                       <p>
+                          <strong>ANTECEDENTES:</strong> {form.pathologicalHistory}
+                      </p>
+
+                      <p>
                           <strong>EXPLORACIÓN FÍSICA:</strong> {form.physicalExam}
+                      </p>
+
+                      <p>
+                          <strong>ESTADO MENTAL / NEUROLÓGICO:</strong> {form.mentalStatus}
                       </p>
                       
                       {(certType === 'Deportivo' || certType === 'Escolar') && (
                           <p>
                               <strong>ESTADO DÉRMICO Y MÚSCULO-ESQUELÉTICO:</strong> {form.skinStatus} {form.musculoskeletal}
+                          </p>
+                      )}
+                      
+                      {certType === 'Licencia de Conducir' && (
+                          <p>
+                              <strong>APTITUD MOTORA Y REFLEJOS:</strong> {form.musculoskeletal}
                           </p>
                       )}
 
@@ -243,7 +255,7 @@ const MedicalCertificate: React.FC<MedicalCertificateProps> = ({ patients, onSav
                   </div>
               </div>
            </div>
-        </div>
+        </PDFViewer>
       );
   }
 
@@ -314,15 +326,15 @@ const MedicalCertificate: React.FC<MedicalCertificateProps> = ({ patients, onSav
                                 value={vitals.bloodType}
                                 onChange={e => setVitals({...vitals, bloodType: e.target.value})}
                              >
-                                 <option value="">Desconocido</option>
-                                 <option value="O+">O Positivo</option>
-                                 <option value="O-">O Negativo</option>
-                                 <option value="A+">A Positivo</option>
-                                 <option value="A-">A Negativo</option>
-                                 <option value="B+">B Positivo</option>
-                                 <option value="B-">B Negativo</option>
-                                 <option value="AB+">AB Positivo</option>
-                                 <option value="AB-">AB Negativo</option>
+                                 <option value="" className="text-slate-900">Desconocido</option>
+                                 <option value="O+" className="text-slate-900">O Positivo</option>
+                                 <option value="O-" className="text-slate-900">O Negativo</option>
+                                 <option value="A+" className="text-slate-900">A Positivo</option>
+                                 <option value="A-" className="text-slate-900">A Negativo</option>
+                                 <option value="B+" className="text-slate-900">B Positivo</option>
+                                 <option value="B-" className="text-slate-900">B Negativo</option>
+                                 <option value="AB+" className="text-slate-900">AB Positivo</option>
+                                 <option value="AB-" className="text-slate-900">AB Negativo</option>
                              </select>
                         </div>
                         <div className="space-y-1">

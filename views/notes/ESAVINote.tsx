@@ -5,10 +5,10 @@ import {
   ChevronLeft, Printer, ShieldCheck, Save, Info, AlertOctagon, 
   Syringe, Clock, Calendar, CheckCircle2, Lock, User
 } from 'lucide-react';
-import { Patient, ClinicalNote } from '../../types';
+import { Patient, ClinicalNote, DoctorInfo } from '../../types';
 
 // Fix: Add notes to props interface to satisfy compiler requirements from App.tsx
-const ESAVINote: React.FC<{ patients: Patient[], notes: ClinicalNote[], onSaveNote: (n: ClinicalNote) => void }> = ({ patients, notes, onSaveNote }) => {
+const ESAVINote: React.FC<{ patients: Patient[], notes: ClinicalNote[], onSaveNote: (n: ClinicalNote) => void, doctorInfo: DoctorInfo }> = ({ patients, notes, onSaveNote, doctorInfo }) => {
   const { id } = useParams();
   const navigate = useNavigate();
   const patient = patients.find(p => p.id === id);
@@ -42,7 +42,7 @@ const ESAVINote: React.FC<{ patients: Patient[], notes: ClinicalNote[], onSaveNo
       patientId: patient.id,
       type: 'Reporte de ESAVI (Vacunas)',
       date: new Date().toLocaleString('es-MX'),
-      author: 'Dr. Alejandro Méndez',
+      author: doctorInfo?.name || 'Dr. Médico',
       content: { ...form },
       isSigned: true,
       hash: `CERT-ESAVI-${Math.random().toString(36).substr(2, 9).toUpperCase()}`

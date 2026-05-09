@@ -52,7 +52,7 @@ const ClinicalSummaryNote: React.FC<{ patients: Patient[], notes: ClinicalNote[]
     
     // Administrativo
     emissionDate: new Date().toLocaleString('es-MX'),
-    responsibleDoctor: doctorInfo?.name || 'Dr. Alejandro Méndez',
+    responsibleDoctor: doctorInfo?.name || 'Dr. Médico',
     cedula: doctorInfo?.cedula || ''
   });
 
@@ -246,6 +246,9 @@ const ClinicalSummaryNote: React.FC<{ patients: Patient[], notes: ClinicalNote[]
                               {form.proceduresPerformed && (
                                   <p className="text-xs text-justify uppercase leading-relaxed mt-1 font-bold">Procedimientos: {form.proceduresPerformed}</p>
                               )}
+                              {form.recommendations && (
+                                  <p className="text-xs text-justify uppercase leading-relaxed mt-1 font-bold">Recomendaciones: {form.recommendations}</p>
+                              )}
                           </div>
 
                           <div className="grid grid-cols-2 gap-4">
@@ -400,13 +403,24 @@ const ClinicalSummaryNote: React.FC<{ patients: Patient[], notes: ClinicalNote[]
                     </div>
                     <div className="space-y-2">
                         <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2 flex items-center gap-2">
-                            <Activity size={14} className="text-blue-600"/> Evolución del Padecimiento y Exploración
+                            <Activity size={14} className="text-blue-600"/> Evolución del Padecimiento
                         </label>
                         <textarea 
                             className="w-full p-6 bg-slate-50 border border-slate-200 rounded-2xl h-40 text-sm font-medium text-slate-600 outline-none focus:bg-white focus:border-blue-400 transition-all shadow-inner" 
                             value={form.clinicalEvolution} 
                             onChange={e => setForm({...form, clinicalEvolution: e.target.value})} 
                             placeholder="Descripción detallada de la evolución clínica..."
+                        />
+                    </div>
+                    <div className="space-y-2">
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2 flex items-center gap-2">
+                            <Activity size={14} className="text-blue-600"/> Resumen de Exploración Física
+                        </label>
+                        <textarea 
+                            className="w-full p-6 bg-slate-50 border border-slate-200 rounded-2xl h-32 text-sm font-medium text-slate-600 outline-none focus:bg-white focus:border-blue-400 transition-all shadow-inner" 
+                            value={form.physicalExplorationSummary} 
+                            onChange={e => setForm({...form, physicalExplorationSummary: e.target.value})} 
+                            placeholder="Hallazgos relevantes a la exploración física..."
                         />
                     </div>
                 </div>
@@ -447,6 +461,28 @@ const ClinicalSummaryNote: React.FC<{ patients: Patient[], notes: ClinicalNote[]
                             value={form.therapeuticEmployed} 
                             onChange={e => setForm({...form, therapeuticEmployed: e.target.value})} 
                             placeholder="Medicamentos administrados, dosis, vía..."
+                        />
+                    </div>
+                    <div className="space-y-2">
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2 flex items-center gap-2">
+                            <Activity size={14} className="text-indigo-600"/> Procedimientos Realizados
+                        </label>
+                        <textarea 
+                            className="w-full p-6 bg-indigo-50/30 border border-indigo-100 rounded-2xl h-24 text-sm font-medium outline-none" 
+                            value={form.proceduresPerformed} 
+                            onChange={e => setForm({...form, proceduresPerformed: e.target.value})} 
+                            placeholder="Procedimientos quirúrgicos, intervenciones..."
+                        />
+                    </div>
+                    <div className="space-y-2">
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2 flex items-center gap-2">
+                            <ClipboardList size={14} className="text-indigo-600"/> Recomendaciones
+                        </label>
+                        <textarea 
+                            className="w-full p-6 bg-indigo-50/30 border border-indigo-100 rounded-2xl h-24 text-sm font-medium outline-none" 
+                            value={form.recommendations} 
+                            onChange={e => setForm({...form, recommendations: e.target.value})} 
+                            placeholder="Recomendaciones al alta o seguimiento..."
                         />
                     </div>
                     <div className="grid grid-cols-2 gap-6">

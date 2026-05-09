@@ -12,6 +12,8 @@ import {
 import { Patient, ClinicalNote, Vitals, MedicationPrescription, MedicationStock, PriceItem, PriceType, ChargeItem, DoctorInfo } from '../../types';
 import { VADEMECUM_DB, INITIAL_STOCK, INITIAL_PRICES } from '../../constants';
 
+import PDFViewer from '../../src/components/PDFViewer';
+
 // --- COMPONENTE DE IMPRESIÓN (DISEÑO FINAL) ---
 const EvolutionNotePrint: React.FC<{ 
   data: any, 
@@ -24,197 +26,211 @@ const EvolutionNotePrint: React.FC<{
 }> = ({ data, vitals, patient, doctor, noteId, onClose, actionLabel = "Cerrar" }) => {
   
   return (
-    <div className="min-h-screen bg-slate-100 flex justify-center p-4 lg:p-8 animate-in fade-in fixed inset-0 z-[100] overflow-y-auto">
-      <div className="w-full max-w-[215mm] bg-white shadow-2xl flex flex-col relative print:shadow-none print:w-full print:m-0 print:p-0 h-fit min-h-[279mm]">
+    <PDFViewer filename={`Nota_Evolucion_${patient.name.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`} onClose={onClose}>
+      <div className="w-[210mm] min-h-[297mm] bg-white text-slate-900 p-[10mm] flex flex-col relative text-[10px]">
         
-        {/* BARRA DE HERRAMIENTAS (NO IMPRIMIR) */}
-        <div className="bg-slate-900 p-4 flex justify-between items-center no-print sticky top-0 z-50 shadow-lg">
-           <div className="flex items-center gap-4 text-white">
-               <ShieldCheck className="text-emerald-400" />
-               <div>
-                   <p className="text-xs font-black uppercase tracking-widest">Nota Certificada</p>
-                   <p className="text-[10px] text-slate-400">Folio: {noteId}</p>
-               </div>
-           </div>
-           <div className="flex gap-3">
-               <button onClick={() => window.print()} className="px-6 py-2 bg-blue-600 text-white rounded-xl text-xs font-black uppercase tracking-widest hover:bg-blue-500 transition-all flex items-center gap-2">
-                   <Printer size={16}/> Imprimir
-               </button>
-               <button onClick={onClose} className="px-6 py-2 bg-slate-700 text-white rounded-xl text-xs font-black uppercase tracking-widest hover:bg-emerald-600 transition-all flex items-center gap-2">
-                   {actionLabel} {actionLabel.includes('Receta') && <ArrowRight size={14}/>}
-               </button>
-           </div>
+        {/* HEADER: IDENTIFICACIÓN DEL PACIENTE */}
+        <div className="flex justify-between items-start mb-4">
+          <div className="flex-1">
+            <div className="bg-teal-600 text-white px-3 py-1 inline-block font-bold uppercase tracking-widest text-xs mb-2 shadow-sm">
+              IDENTIFICACIÓN DEL PACIENTE
+            </div>
+            <div className="grid grid-cols-2 gap-x-4 gap-y-1 mt-1">
+              <div className="col-span-2"><span className="text-slate-500">Nombre:</span> <span className="font-bold">{patient.name}</span></div>
+              <div><span className="text-slate-500">Fecha de nacimiento:</span> <span className="font-bold">{patient.birthDate || '--'}</span></div>
+              <div><span className="text-slate-500">Edad:</span> <span className="font-bold">{patient.age} {patient.ageUnit || 'Años'}</span></div>
+              <div className="col-span-2"><span className="text-slate-500">Alergias:</span> <span className="font-bold text-rose-600">{patient.allergies?.join(', ') || 'Negadas'}</span></div>
+              <div><span className="text-slate-500">Grupo y Rh sanguíneo:</span> <span className="font-bold">{patient.bloodType || '--'}</span></div>
+            </div>
+          </div>
+          
+          {/* LOGO CLINICA */}
+          <div className="w-24 h-24 flex items-center justify-center mx-4">
+            <div className="w-16 h-16 bg-teal-600 rounded-full flex items-center justify-center text-white font-black text-2xl">
+              {doctor.hospital ? doctor.hospital.charAt(0) : 'C'}
+            </div>
+          </div>
+
+          <div className="flex-1 text-right">
+            <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-left ml-auto w-fit">
+              <div><span className="font-bold">Fecha:</span> {new Date().toLocaleDateString('es-MX')}</div>
+              <div><span className="font-bold">Hora:</span> {new Date().toLocaleTimeString('es-MX', {hour:'2-digit', minute:'2-digit'})}</div>
+              <div><span className="text-slate-500">CURP:</span> <span className="font-bold">{patient.curp || '--'}</span></div>
+              <div><span className="text-slate-500">N° de expediente:</span> <span className="font-bold">{patient.id.slice(0,8)}</span></div>
+              <div><span className="text-slate-500">Sexo:</span> <span className="font-bold">{patient.sex}</span></div>
+              <div><span className="text-slate-500">N° de cama:</span> <span className="font-bold">{patient.bedNumber || '--'}</span></div>
+              <div className="col-span-2"><span className="text-slate-500">Teléfono:</span> <span className="font-bold">{patient.phone || '--'}</span></div>
+            </div>
+          </div>
         </div>
 
-        {/* CONTENIDO DEL DOCUMENTO */}
-        <div className="p-[15mm] text-slate-900 flex-1 flex flex-col">
-           
-           {/* ENCABEZADO */}
-           <div className="border-b-4 border-slate-900 pb-6 mb-6 flex justify-between items-start">
-               <div>
-                   <h1 className="text-2xl font-black uppercase tracking-tighter">{doctor.hospital || 'CONSULTORIO MÉDICO'}</h1>
-                   <p className="text-xs font-bold text-slate-500 uppercase tracking-[0.2em] mt-1">Nota de Evolución Médica</p>
-                   <p className="text-[10px] font-medium text-slate-400 mt-1">NOM-004-SSA3-2012</p>
-               </div>
-               <div className="text-right">
-                   <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Fecha de Atención</p>
-                   <p className="text-sm font-black uppercase">{new Date().toLocaleDateString('es-MX', {weekday: 'long', day:'numeric', month:'long', year:'numeric'})}</p>
-                   <p className="text-[10px] font-bold text-slate-500 uppercase">{new Date().toLocaleTimeString('es-MX', {hour:'2-digit', minute:'2-digit'})} HRS</p>
-               </div>
-           </div>
-
-           {/* FICHA DE IDENTIFICACIÓN */}
-           <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 mb-8 flex flex-wrap gap-x-8 gap-y-2 text-xs uppercase">
-               <div><span className="font-bold text-slate-500">Paciente:</span> <span className="font-black text-slate-900 text-sm">{patient.name}</span></div>
-               <div><span className="font-bold text-slate-500">Edad:</span> <span className="font-black text-slate-900">{patient.age} Años</span></div>
-               <div><span className="font-bold text-slate-500">Sexo:</span> <span className="font-black text-slate-900">{patient.sex}</span></div>
-               <div><span className="font-bold text-slate-500">Expediente:</span> <span className="font-black text-slate-900">{patient.id}</span></div>
-               <div className="w-full border-t border-slate-200 my-1"></div>
-               <div><span className="font-bold text-slate-500">Alergias:</span> <span className="font-black text-rose-600">{patient.allergies?.join(', ') || 'NEGADAS'}</span></div>
-               <div><span className="font-bold text-slate-500">Tipo Sangre:</span> <span className="font-black text-slate-900">{patient.bloodType || 'DESC'}</span></div>
-           </div>
-
-           {/* CUERPO PRINCIPAL (2 COLUMNAS) */}
-           <div className="flex gap-8 flex-1">
-               
-               {/* COLUMNA IZQUIERDA: SIGNOS VITALES (MARGEN) */}
-               <div className="w-48 flex-shrink-0 border-r-2 border-slate-100 pr-6 space-y-6">
-                   <div className="bg-slate-900 text-white p-2 text-center rounded-lg mb-4">
-                       <p className="text-[10px] font-black uppercase tracking-widest">Signos Vitales</p>
-                   </div>
-
-                   <div className="space-y-4 text-center">
-                       <div className="border-b border-slate-100 pb-2">
-                           <p className="text-[9px] font-bold text-slate-400 uppercase mb-1">Tensión Arterial</p>
-                           <p className="text-xl font-black text-slate-900">{vitals?.bp || '--/--'}</p>
-                           <p className="text-[8px] text-slate-400">mmHg</p>
-                       </div>
-                       <div className="border-b border-slate-100 pb-2">
-                           <p className="text-[9px] font-bold text-slate-400 uppercase mb-1">Frec. Cardiaca</p>
-                           <p className="text-xl font-black text-slate-900">{vitals?.hr || '--'}</p>
-                           <p className="text-[8px] text-slate-400">lpm</p>
-                       </div>
-                       <div className="border-b border-slate-100 pb-2">
-                           <p className="text-[9px] font-bold text-slate-400 uppercase mb-1">Frec. Respiratoria</p>
-                           <p className="text-xl font-black text-slate-900">{vitals?.rr || '--'}</p>
-                           <p className="text-[8px] text-slate-400">rpm</p>
-                       </div>
-                       <div className="border-b border-slate-100 pb-2">
-                           <p className="text-[9px] font-bold text-slate-400 uppercase mb-1">Temperatura</p>
-                           <p className="text-xl font-black text-slate-900">{vitals?.temp || '--'}</p>
-                           <p className="text-[8px] text-slate-400">°C</p>
-                       </div>
-                       <div className="border-b border-slate-100 pb-2">
-                           <p className="text-[9px] font-bold text-slate-400 uppercase mb-1">Saturación O2</p>
-                           <p className="text-xl font-black text-slate-900">{vitals?.o2 || '--'}</p>
-                           <p className="text-[8px] text-slate-400">%</p>
-                       </div>
-                       
-                       <div className="pt-4 space-y-2">
-                           <div className="flex justify-between text-xs">
-                               <span className="font-bold text-slate-500">Peso:</span>
-                               <span className="font-black">{vitals?.weight} kg</span>
-                           </div>
-                           <div className="flex justify-between text-xs">
-                               <span className="font-bold text-slate-500">Talla:</span>
-                               <span className="font-black">{vitals?.height} cm</span>
-                           </div>
-                           <div className="flex justify-between text-xs">
-                               <span className="font-bold text-slate-500">IMC:</span>
-                               <span className="font-black">{vitals?.bmi}</span>
-                           </div>
-                       </div>
-                   </div>
-               </div>
-
-               {/* COLUMNA DERECHA: PSOAP */}
-               <div className="flex-1 space-y-6 text-sm text-justify leading-relaxed">
-                   
-                   {/* SUBJETIVO */}
-                   <div>
-                       <h3 className="text-xs font-black text-slate-900 uppercase tracking-widest border-b border-slate-300 pb-1 mb-2">S - Subjetivo</h3>
-                       <p className="text-slate-700 whitespace-pre-wrap">{data.subjectiveNarrative || 'Sin datos subjetivos relevantes.'}</p>
-                       {data.interrogationSummary && (
-                           <p className="text-xs text-slate-500 mt-2 italic bg-slate-50 p-2 rounded border border-slate-100">{data.interrogationSummary}</p>
-                       )}
-                   </div>
-
-                   {/* OBJETIVO */}
-                   <div>
-                       <h3 className="text-xs font-black text-slate-900 uppercase tracking-widest border-b border-slate-300 pb-1 mb-2">O - Objetivo</h3>
-                       <p className="text-slate-700 whitespace-pre-wrap">{data.objectivePhysical}</p>
-                       {data.mentalStatus && <p className="mt-2"><span className="font-bold text-xs uppercase text-slate-500">Estado Mental:</span> {data.mentalStatus}</p>}
-                       {data.objectiveResults && <p className="mt-2"><span className="font-bold text-xs uppercase text-slate-500">Estudios:</span> {data.objectiveResults}</p>}
-                   </div>
-
-                   {/* ANALISIS */}
-                   <div>
-                       <h3 className="text-xs font-black text-slate-900 uppercase tracking-widest border-b border-slate-300 pb-1 mb-2">A - Análisis y Diagnóstico</h3>
-                       <div className="bg-slate-100 p-3 rounded-lg border-l-4 border-slate-400 mb-2">
-                           <p className="font-black text-slate-900 uppercase">{data.mainProblem}</p>
-                           {data.cieCode && <p className="text-[10px] text-slate-500 font-mono mt-1">{data.cieCode}</p>}
-                       </div>
-                       <p className="text-slate-700">{data.analysisReasoning}</p>
-                       <div className="flex gap-4 mt-2 text-xs font-bold text-slate-600">
-                           <span>Pronóstico Vida: {data.pronosticoVida}</span>
-                           <span>Pronóstico Función: {data.pronosticoFuncion}</span>
-                       </div>
-                   </div>
-
-                   {/* PLAN */}
-                   <div>
-                       <h3 className="text-xs font-black text-slate-900 uppercase tracking-widest border-b border-slate-300 pb-1 mb-2">P - Plan de Manejo</h3>
-                       
-                       {/* Medicamentos */}
-                       {data.prescriptions && data.prescriptions.length > 0 && (
-                           <div className="mb-4">
-                               <p className="text-[10px] font-bold text-slate-500 uppercase mb-1">Farmacoterapia:</p>
-                               <ul className="list-disc ml-4 space-y-1">
-                                   {data.prescriptions.map((med: any, i: number) => (
-                                       <li key={i} className="text-slate-900 font-bold uppercase text-xs">
-                                           {med.name} <span className="font-normal text-slate-600">({med.genericName})</span> - {med.dosage} {med.route} cada {med.frequency} por {med.duration}.
-                                       </li>
-                                   ))}
-                               </ul>
-                           </div>
-                       )}
-
-                       {data.nonPharmaPlan && (
-                           <div className="mb-2">
-                               <p className="text-[10px] font-bold text-slate-500 uppercase">Indicaciones Generales:</p>
-                               <p className="text-slate-700">{data.nonPharmaPlan}</p>
-                           </div>
-                       )}
-                       
-                       <p className="text-xs mt-2"><span className="font-bold text-slate-500 uppercase">Seguimiento:</span> {data.seguimiento}</p>
-                   </div>
-
-               </div>
-           </div>
-
-           {/* PIE DE PÁGINA (FIRMAS) */}
-           <div className="mt-auto pt-12 pb-4">
-               <div className="flex justify-between items-end">
-                   <div className="text-center">
-                       <div className="w-24 h-24 border border-slate-200 mb-2 flex items-center justify-center">
-                           <QrCode size={64} className="text-slate-800"/>
-                       </div>
-                       <p className="text-[8px] font-mono text-slate-400">Sello Digital</p>
-                   </div>
-                   <div className="text-center w-64">
-                       <div className="border-b-2 border-slate-900 mb-2"></div>
-                       <p className="text-sm font-black text-slate-900 uppercase">{doctor.name}</p>
-                       <p className="text-[10px] font-bold text-slate-500 uppercase">{doctor.specialty}</p>
-                       <p className="text-[10px] text-slate-400 uppercase">Céd. Prof. {doctor.cedula}</p>
-                   </div>
-               </div>
-               <div className="text-center mt-8 border-t border-slate-200 pt-2">
-                   <p className="text-[8px] text-slate-400 uppercase">Expediente Clínico Electrónico generado por MedExpediente MX • {new Date().getFullYear()}</p>
-               </div>
-           </div>
+        {/* TITLE */}
+        <div className="flex justify-center mb-6 relative">
+          <div className="bg-teal-700 text-white px-8 py-2 text-lg font-black uppercase tracking-[0.2em] shadow-md transform -skew-x-12">
+            <div className="transform skew-x-12">NOTA DE EVOLUCIÓN</div>
+          </div>
         </div>
+
+        {/* MAIN CONTENT AREA */}
+        <div className="flex gap-6 flex-1">
+          
+          {/* LEFT SIDEBAR (Signos Vitales, etc) */}
+          <div className="w-40 flex-shrink-0 space-y-4">
+            {/* Signos Vitales */}
+            <div>
+              <div className="bg-teal-600 text-white px-2 py-1 font-bold uppercase text-[9px] mb-2">Signos vitales</div>
+              <div className="space-y-1 text-[9px]">
+                <div className="flex justify-between"><span className="font-bold">TA</span> <span>{vitals?.bp || '--'} mmHg</span></div>
+                <div className="flex justify-between"><span className="font-bold">FC</span> <span>{vitals?.hr || '--'} Lpm</span></div>
+                <div className="flex justify-between"><span className="font-bold">FR</span> <span>{vitals?.rr || '--'} Rpm</span></div>
+                <div className="flex justify-between"><span className="font-bold">Temp.</span> <span>{vitals?.temp || '--'} °C</span></div>
+                <div className="flex justify-between"><span className="font-bold">Sat O2</span> <span>{vitals?.o2 || '--'} %</span></div>
+              </div>
+            </div>
+
+            {/* Antropometría */}
+            <div>
+              <div className="bg-teal-600 text-white px-2 py-1 font-bold uppercase text-[9px] mb-2">Antropometría</div>
+              <div className="space-y-1 text-[9px]">
+                <div className="flex justify-between"><span className="font-bold">Peso</span> <span>{vitals?.weight || '--'} Kg</span></div>
+                <div className="flex justify-between"><span className="font-bold">Talla</span> <span>{vitals?.height || '--'} Metros</span></div>
+                <div className="flex justify-between"><span className="font-bold">IMC</span> <span>{vitals?.bmi || '--'} Kg/m2</span></div>
+              </div>
+            </div>
+
+            {/* Factores de riesgo */}
+            <div>
+              <div className="bg-teal-600 text-white px-2 py-1 font-bold uppercase text-[9px] mb-2">Factores de riesgo</div>
+              <div className="space-y-1 text-[9px]">
+                <div className="flex justify-between"><span className="font-bold">C. Cintura</span> <span>-- Cm</span></div>
+                <div className="flex justify-between"><span className="font-bold">C. Cadera</span> <span>-- Cm</span></div>
+                <div className="flex justify-between"><span className="font-bold">ICC</span> <span>--</span></div>
+                <div className="flex justify-between"><span className="font-bold">RCV</span> <span>--</span></div>
+                <div className="flex justify-between"><span className="font-bold">TFG</span> <span>-- ml/min/m2</span></div>
+              </div>
+            </div>
+
+            {/* Pendientes */}
+            {data.nonPharmaPlan && (
+              <div>
+                <div className="bg-teal-600 text-white px-2 py-1 font-bold uppercase text-[9px] mb-2">Indicaciones Generales</div>
+                <p className="text-[9px] text-slate-700 whitespace-pre-wrap">{data.nonPharmaPlan}</p>
+              </div>
+            )}
+          </div>
+
+          {/* RIGHT CONTENT (PSOAP) */}
+          <div className="flex-1 space-y-4 relative">
+            {/* Watermark Logo */}
+            <div className="absolute inset-0 flex items-center justify-center opacity-5 pointer-events-none">
+               <div className="w-64 h-64 bg-teal-600 rounded-full flex items-center justify-center text-white font-black text-9xl">
+                 {doctor.hospital ? doctor.hospital.charAt(0) : 'C'}
+               </div>
+            </div>
+
+            {/* Resumen del interrogatorio */}
+            <div className="relative z-10">
+              <div className="bg-teal-600/80 text-white px-2 py-0.5 font-bold uppercase text-[10px] inline-block mb-1">Resumen del interrogatorio:</div>
+              <p className="text-slate-800 whitespace-pre-wrap pl-2 border-l-2 border-teal-200">{data.subjectiveNarrative || 'Sin datos relevantes.'}</p>
+              {data.interrogationSummary && <p className="text-slate-600 italic pl-2 mt-1">{data.interrogationSummary}</p>}
+            </div>
+
+            {/* Evolución y actualización */}
+            <div className="relative z-10">
+              <div className="bg-teal-600/80 text-white px-2 py-0.5 font-bold uppercase text-[10px] inline-block mb-1">Evolución y actualización del cuadro clínico:</div>
+              <p className="text-slate-800 whitespace-pre-wrap pl-2 border-l-2 border-teal-200">{data.objectivePhysical || 'Sin cambios significativos.'}</p>
+            </div>
+
+            {/* Exploración física */}
+            <div className="relative z-10">
+              <div className="bg-teal-600/80 text-white px-2 py-0.5 font-bold uppercase text-[10px] inline-block mb-1">Exploración física:</div>
+              <p className="text-slate-800 whitespace-pre-wrap pl-2 border-l-2 border-teal-200">{data.objectivePhysical || 'Sin hallazgos relevantes.'}</p>
+            </div>
+
+            {/* Resultados de estudios */}
+            <div className="relative z-10">
+              <div className="bg-teal-600/80 text-white px-2 py-0.5 font-bold uppercase text-[10px] inline-block mb-1">Resultados de estudios auxiliares:</div>
+              <p className="text-slate-800 whitespace-pre-wrap pl-2 border-l-2 border-teal-200">{data.objectiveResults || 'No presenta estudios.'}</p>
+            </div>
+
+            {/* Análisis clínico */}
+            <div className="relative z-10">
+              <div className="bg-teal-600/80 text-white px-2 py-0.5 font-bold uppercase text-[10px] inline-block mb-1">Análisis clínico:</div>
+              <p className="text-slate-800 whitespace-pre-wrap pl-2 border-l-2 border-teal-200">{data.analysisReasoning || 'Sin análisis registrado.'}</p>
+            </div>
+
+            {/* Diagnóstico */}
+            <div className="relative z-10">
+              <div className="bg-teal-600/80 text-white px-2 py-0.5 font-bold uppercase text-[10px] inline-block mb-1">Diagnóstico(s) o problemas clínicos:</div>
+              <p className="text-slate-800 font-bold pl-2 border-l-2 border-teal-200">{data.mainProblem}</p>
+              {data.cieCode && <p className="text-slate-600 pl-2">Código CIE-11: {data.cieCode}</p>}
+            </div>
+
+            {/* Plan */}
+            <div className="relative z-10">
+              <div className="bg-teal-600/80 text-white px-2 py-0.5 font-bold uppercase text-[10px] inline-block mb-1">Plan de estudios, preventivo, nutricional y/o terapéutico:</div>
+              <div className="pl-2 border-l-2 border-teal-200">
+                {data.prescriptions && data.prescriptions.length > 0 ? (
+                  <ul className="list-disc ml-4 space-y-1">
+                    {data.prescriptions.map((med: any, i: number) => (
+                      <li key={i} className="text-slate-800">
+                        <span className="font-bold">{med.name}</span> ({med.genericName}) - {med.dosage} {med.route} cada {med.frequency} por {med.duration}.
+                        {med.instructions && <span className="italic text-slate-600 block">{med.instructions}</span>}
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-slate-800">Sin plan farmacológico registrado.</p>
+                )}
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+        {/* FOOTER */}
+        <div className="mt-auto pt-4 border-t border-slate-300">
+          <div className="flex justify-between items-end mb-4">
+            {/* Firmas */}
+            <div className="flex gap-4 items-end">
+              {/* Logo Universidad Placeholder */}
+              <div className="w-12 h-16 border border-slate-300 flex items-center justify-center text-[8px] text-center text-slate-400">Logo Univ.</div>
+              <div className="text-center">
+                <div className="w-48 border-b border-slate-800 mb-1"></div>
+                <p className="font-bold">{doctor.name}</p>
+                <p className="text-[9px]">{doctor.specialty || 'Médico Cirujano'}</p>
+                <p className="text-[9px]">Ced. Prof. {doctor.cedula}</p>
+              </div>
+              <div className="w-12 h-16 border border-slate-300 flex items-center justify-center text-[8px] text-center text-slate-400">Sello</div>
+            </div>
+
+            {/* Pronósticos y Cita */}
+            <div className="text-right space-y-1">
+              <div className="flex gap-4 justify-end">
+                <div><span className="bg-teal-600/80 text-white px-1 font-bold">Plan de seguimiento:</span> {data.seguimiento || 'Abierto'}</div>
+                <div><span className="bg-teal-600/80 text-white px-1 font-bold">Próxima cita:</span> {data.nextAppointment || '--'}</div>
+              </div>
+              <div className="flex gap-4 justify-end text-[9px]">
+                <div><span className="bg-teal-600/80 text-white px-1 font-bold">Pronósticos</span> para la vida: <span className="font-bold text-orange-600">{data.pronosticoVida || 'Incierto'}</span></div>
+                <div>Para la función: <span className="font-bold text-orange-600">{data.pronosticoFuncion || 'Incierto'}</span></div>
+                <div>Para la recuperación: <span className="font-bold text-orange-600">Incierto</span></div>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex justify-between text-[8px] text-slate-500 border-t border-slate-200 pt-1">
+            <p>Nombre del médico quien elabora: <span className="font-bold text-slate-800">{doctor.name}</span></p>
+            <p>Cédula profesional: <span className="font-bold text-slate-800">{doctor.cedula}</span></p>
+            <p>Cédula de especialidad: <span className="font-bold text-slate-800">--</span></p>
+            <p>Matrícula: <span className="font-bold text-slate-800">--</span></p>
+          </div>
+          <div className="text-[8px] text-slate-500 mt-1">
+            <p>Teléfono de la unidad: <span className="font-bold text-slate-800">{doctor.phone || '--'}</span> Dirección de la unidad de salud: <span className="font-bold text-slate-800">{doctor.address || '--'}</span></p>
+          </div>
+        </div>
+
       </div>
-    </div>
+    </PDFViewer>
   );
 };
 
@@ -281,6 +297,8 @@ const EvolutionNote: React.FC<{ patients: Patient[], notes: ClinicalNote[], onSa
   
   // Estado para controlar la vista de impresión
   const [isNoteFinalized, setIsNoteFinalized] = useState(false);
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [confirmAction, setConfirmAction] = useState<{finalize: boolean, goToPrescription: boolean} | null>(null);
   
   // Estado para manejar la redirección post-impresión
   const [pendingRedirect, setPendingRedirect] = useState<string | null>(null);
@@ -403,28 +421,36 @@ const EvolutionNote: React.FC<{ patients: Patient[], notes: ClinicalNote[], onSa
     setMedications(medications.map(m => m.id === mid ? { ...m, [field]: value } : m));
   };
 
+
   const handleSave = (finalize: boolean = false, goToPrescription: boolean = false) => {
     if (!form.mainProblem || !form.analysisReasoning) {
       alert("Diagnóstico Principal y Análisis Clínico son obligatorios.");
       return;
     }
     
-    if (finalize && !window.confirm("¿Desea firmar y cerrar esta nota? No podrá editarse posteriormente.")) {
+    if (finalize) {
+        setConfirmAction({ finalize, goToPrescription });
+        setShowConfirmModal(true);
         return;
     }
 
+    executeSave(finalize, goToPrescription);
+  };
+
+  const executeSave = (finalize: boolean, goToPrescription: boolean) => {
     const currentNoteId = noteId || `EVO-${Date.now()}`;
     const newNote: ClinicalNote = {
       id: currentNoteId,
       patientId: patient?.id || '',
       type: 'Nota de Evolución PSOAP',
       date: new Date().toLocaleString('es-MX'),
-      author: doctorInfo?.name || 'Dr. Alejandro Méndez',
+      author: doctorInfo?.name || 'Dr. Médico',
       content: { 
          ...form, 
          vitals, 
          prescriptions: medications, 
-         procedures: selectedProcedures 
+         procedures: selectedProcedures,
+         doctorInfo: doctorInfo || null
       },
       isSigned: finalize,
       hash: finalize ? `CERT-EVO-${Math.random().toString(36).substr(2, 9).toUpperCase()}` : undefined
@@ -526,23 +552,30 @@ const EvolutionNote: React.FC<{ patients: Patient[], notes: ClinicalNote[], onSa
               </h3>
               <div className="grid grid-cols-2 gap-3">
                  {[
-                   { l: 'T.A.', v: vitals?.bp || '--', u: 'mmHg', icon: <Activity size={12} className="text-blue-500" /> },
-                   { l: 'F.C.', v: vitals?.hr || '--', u: 'lpm', icon: <HeartPulse size={12} className="text-rose-500" /> },
-                   { l: 'F.R.', v: vitals?.rr || '--', u: 'rpm', icon: <Wind size={12} className="text-emerald-500" /> },
-                   { l: 'Temp', v: vitals?.temp || '--', u: '°C', icon: <Thermometer size={12} className="text-amber-500" /> },
-                   { l: 'SatO2', v: vitals?.o2 || '--', u: '%', icon: <Droplet size={12} className="text-cyan-500" /> },
-                   { l: 'Peso', v: vitals?.weight || '--', u: 'kg', icon: <Scale size={12} className="text-indigo-500" /> },
-                   { l: 'Talla', v: vitals?.height || '--', u: 'cm', icon: <Ruler size={12} className="text-violet-500" /> },
-                   { l: 'IMC', v: vitals?.bmi || '--', u: '', icon: <Activity size={12} className="text-slate-400" /> }
+                   { l: 'T.A.', k: 'bp', v: vitals?.bp || '', u: 'mmHg', icon: <Activity size={12} className="text-blue-500" /> },
+                   { l: 'F.C.', k: 'hr', v: vitals?.hr || '', u: 'lpm', icon: <HeartPulse size={12} className="text-rose-500" /> },
+                   { l: 'F.R.', k: 'rr', v: vitals?.rr || '', u: 'rpm', icon: <Wind size={12} className="text-emerald-500" /> },
+                   { l: 'Temp', k: 'temp', v: vitals?.temp || '', u: '°C', icon: <Thermometer size={12} className="text-amber-500" /> },
+                   { l: 'SatO2', k: 'o2', v: vitals?.o2 || '', u: '%', icon: <Droplet size={12} className="text-cyan-500" /> },
+                   { l: 'Peso', k: 'weight', v: vitals?.weight || '', u: 'kg', icon: <Scale size={12} className="text-indigo-500" /> },
+                   { l: 'Talla', k: 'height', v: vitals?.height || '', u: 'cm', icon: <Ruler size={12} className="text-violet-500" /> },
+                   { l: 'IMC', k: 'bmi', v: vitals?.bmi || '', u: '', icon: <Activity size={12} className="text-slate-400" /> }
                  ].map(item => (
                    <div key={item.l} className="bg-white p-3 rounded-xl border border-slate-100 shadow-sm flex flex-col justify-between">
                       <div className="flex items-center gap-2 mb-1">
                          {item.icon}
                          <span className="text-[8px] font-black text-slate-400 uppercase">{item.l}</span>
                       </div>
-                      <p className="text-sm font-black text-slate-900 leading-none">
-                        {item.v} <span className="text-[8px] text-slate-400 font-medium">{item.u}</span>
-                      </p>
+                      <div className="flex items-center gap-1 mt-1">
+                        <input 
+                          type="text" 
+                          value={item.v} 
+                          onChange={(e) => setVitals({...vitals, [item.k]: e.target.value} as Vitals)}
+                          className="w-full text-sm font-black text-slate-900 bg-transparent outline-none placeholder:text-slate-300"
+                          placeholder="--"
+                        />
+                        <span className="text-[8px] text-slate-400 font-medium shrink-0">{item.u}</span>
+                      </div>
                    </div>
                  ))}
               </div>
@@ -566,7 +599,7 @@ const EvolutionNote: React.FC<{ patients: Patient[], notes: ClinicalNote[], onSa
                         <textarea 
                             className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-medium outline-none focus:border-blue-400 transition-all h-24 resize-none shadow-inner" 
                             placeholder="Actualización de antecedentes relevantes..." 
-                            value={form.interrogationSummary}
+                            value={form.interrogationSummary || ''}
                             onChange={e => setForm({...form, interrogationSummary: e.target.value})}
                         />
                     </div>
@@ -575,7 +608,7 @@ const EvolutionNote: React.FC<{ patients: Patient[], notes: ClinicalNote[], onSa
                         <textarea 
                             className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-medium outline-none focus:border-blue-400 transition-all h-24 resize-none shadow-inner" 
                             placeholder="Describa evolución, síntomas actuales. Incluya uso/abuso de alcohol, tabaco o toxicomanías si aplica." 
-                            value={form.subjectiveNarrative}
+                            value={form.subjectiveNarrative || ''}
                             onChange={e => setForm({...form, subjectiveNarrative: e.target.value})}
                         />
                     </div>
@@ -595,7 +628,7 @@ const EvolutionNote: React.FC<{ patients: Patient[], notes: ClinicalNote[], onSa
                         <textarea 
                             className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-medium outline-none focus:border-emerald-400 transition-all h-32 resize-none shadow-inner" 
                             placeholder="Hallazgos físicos relevantes..." 
-                            value={form.objectivePhysical}
+                            value={form.objectivePhysical || ''}
                             onChange={e => setForm({...form, objectivePhysical: e.target.value})}
                         />
                     </div>
@@ -604,7 +637,7 @@ const EvolutionNote: React.FC<{ patients: Patient[], notes: ClinicalNote[], onSa
                         <textarea 
                             className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-medium outline-none focus:border-emerald-400 transition-all h-32 resize-none shadow-inner" 
                             placeholder="Alerta, orientado, Glasgow, funciones mentales superiores..." 
-                            value={form.mentalStatus}
+                            value={form.mentalStatus || ''}
                             onChange={e => setForm({...form, mentalStatus: e.target.value})}
                         />
                     </div>
@@ -614,7 +647,7 @@ const EvolutionNote: React.FC<{ patients: Patient[], notes: ClinicalNote[], onSa
                     <textarea 
                         className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-medium outline-none focus:border-emerald-400 transition-all h-20 resize-none shadow-inner" 
                         placeholder="Labs, Rayos X, etc..." 
-                        value={form.objectiveResults}
+                        value={form.objectiveResults || ''}
                         onChange={e => setForm({...form, objectiveResults: e.target.value})}
                     />
                  </div>
@@ -628,7 +661,7 @@ const EvolutionNote: React.FC<{ patients: Patient[], notes: ClinicalNote[], onSa
                        <input 
                           className="w-full p-3 bg-white border border-slate-200 rounded-xl text-sm font-black uppercase outline-none focus:border-amber-500 shadow-sm transition-all text-slate-900" 
                           placeholder="Escriba el diagnóstico..." 
-                          value={form.mainProblem} 
+                          value={form.mainProblem || ''} 
                           onChange={e => setForm({...form, mainProblem: e.target.value})} 
                        />
                     </div>
@@ -637,7 +670,7 @@ const EvolutionNote: React.FC<{ patients: Patient[], notes: ClinicalNote[], onSa
                        <input 
                           className="w-full p-3 bg-slate-900 text-white border-none rounded-xl text-xs font-black uppercase outline-none text-center shadow-md" 
                           placeholder="CÓDIGO" 
-                          value={form.cieCode} 
+                          value={form.cieCode || ''} 
                           onChange={e => setForm({...form, cieCode: e.target.value})} 
                        />
                     </div>
@@ -652,7 +685,7 @@ const EvolutionNote: React.FC<{ patients: Patient[], notes: ClinicalNote[], onSa
                     <textarea 
                         className="w-full p-4 text-xs font-medium leading-relaxed outline-none h-24 resize-none text-slate-900 bg-white border border-slate-200 rounded-2xl shadow-sm focus:border-amber-400" 
                         placeholder="Integración diagnóstica, justificación terapéutica..." 
-                        value={form.analysisReasoning} 
+                        value={form.analysisReasoning || ''} 
                         onChange={e => setForm({...form, analysisReasoning: e.target.value})} 
                     />
                  </div>
@@ -663,7 +696,7 @@ const EvolutionNote: React.FC<{ patients: Patient[], notes: ClinicalNote[], onSa
                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Pronóstico de Vida</label>
                        <select 
                           className="w-full p-3 bg-white border border-slate-200 rounded-xl text-xs font-bold outline-none"
-                          value={form.pronosticoVida}
+                          value={form.pronosticoVida || ''}
                           onChange={e => setForm({...form, pronosticoVida: e.target.value})}
                        >
                           <option>Bueno</option>
@@ -675,7 +708,7 @@ const EvolutionNote: React.FC<{ patients: Patient[], notes: ClinicalNote[], onSa
                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Pronóstico de Función</label>
                        <select 
                           className="w-full p-3 bg-white border border-slate-200 rounded-xl text-xs font-bold outline-none"
-                          value={form.pronosticoFuncion}
+                          value={form.pronosticoFuncion || ''}
                           onChange={e => setForm({...form, pronosticoFuncion: e.target.value})}
                        >
                           <option>Bueno</option>
@@ -782,11 +815,11 @@ const EvolutionNote: React.FC<{ patients: Patient[], notes: ClinicalNote[], onSa
                        {/* ... Non pharma plan ... */}
                        <div className="space-y-2">
                           <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1 flex items-center gap-2"><ClipboardList size={14} /> Plan No Farmacológico</label>
-                          <textarea className="w-full p-4 text-[11px] bg-slate-50 border border-slate-200 rounded-2xl outline-none h-24 resize-none focus:bg-white focus:border-blue-400 transition-all text-slate-900 bg-white" placeholder="Dieta, medidas generales..." value={form.nonPharmaPlan} onChange={e => setForm({...form, nonPharmaPlan: e.target.value})} />
+                          <textarea className="w-full p-4 text-[11px] bg-slate-50 border border-slate-200 rounded-2xl outline-none h-24 resize-none focus:bg-white focus:border-blue-400 transition-all text-slate-900 bg-white" placeholder="Dieta, medidas generales..." value={form.nonPharmaPlan || ''} onChange={e => setForm({...form, nonPharmaPlan: e.target.value})} />
                        </div>
                        <div className="space-y-2">
                           <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1 flex items-center gap-2"><Clock size={14} /> Seguimiento</label>
-                          <textarea className="w-full p-4 text-[11px] bg-slate-50 border border-slate-200 rounded-2xl outline-none h-24 resize-none focus:bg-white focus:border-blue-400 transition-all text-slate-900 bg-white" value={form.seguimiento} onChange={e => setForm({...form, seguimiento: e.target.value})} />
+                          <textarea className="w-full p-4 text-[11px] bg-slate-50 border border-slate-200 rounded-2xl outline-none h-24 resize-none focus:bg-white focus:border-blue-400 transition-all text-slate-900 bg-white" value={form.seguimiento || ''} onChange={e => setForm({...form, seguimiento: e.target.value})} />
                        </div>
                     </div>
                  </div>
@@ -827,6 +860,40 @@ const EvolutionNote: React.FC<{ patients: Patient[], notes: ClinicalNote[], onSa
           }}
           onClose={() => setFullScreenSection(null)}
         />
+      )}
+
+      {/* MODAL DE CONFIRMACIÓN */}
+      {showConfirmModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-8 max-w-md w-full shadow-2xl animate-in zoom-in-95 duration-200">
+            <div className="flex items-center gap-4 mb-6 text-amber-600">
+              <AlertTriangle size={32} />
+              <h3 className="text-xl font-black uppercase tracking-tight text-slate-900">Confirmar Firma</h3>
+            </div>
+            <p className="text-slate-600 mb-8 text-sm leading-relaxed">
+              ¿Desea firmar y cerrar esta nota? Una vez firmada, se generará el documento oficial y <strong>no podrá editarse posteriormente</strong>.
+            </p>
+            <div className="flex gap-4">
+              <button 
+                onClick={() => setShowConfirmModal(false)}
+                className="flex-1 py-3 bg-slate-100 text-slate-700 rounded-xl font-bold uppercase text-xs tracking-widest hover:bg-slate-200 transition-all"
+              >
+                Cancelar
+              </button>
+              <button 
+                onClick={() => {
+                  setShowConfirmModal(false);
+                  if (confirmAction) {
+                    executeSave(confirmAction.finalize, confirmAction.goToPrescription);
+                  }
+                }}
+                className="flex-1 py-3 bg-blue-600 text-white rounded-xl font-bold uppercase text-xs tracking-widest hover:bg-blue-700 transition-all shadow-lg shadow-blue-600/20"
+              >
+                Firmar Nota
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

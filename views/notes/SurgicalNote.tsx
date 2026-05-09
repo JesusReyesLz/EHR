@@ -25,7 +25,7 @@ const SurgicalNote: React.FC<{ patients: Patient[], notes: ClinicalNote[], onSav
     gasasCount: true,
     bleeding: 'Sin sangrado importante',
     incidentes: 'Sin incidentes',
-    surgeon: doctorInfo?.name || 'Dr. Alejandro Méndez',
+    surgeon: doctorInfo?.name || 'Dr. Médico',
     anesthesiologist: 'Dr. Roberto Cruz',
     surgicalRisk: 'ASA I',
     technique: ''

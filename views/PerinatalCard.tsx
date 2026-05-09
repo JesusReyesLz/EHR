@@ -118,7 +118,8 @@ const PerinatalCard: React.FC<{ patients: Patient[], onSaveNote: (n: ClinicalNot
   // --- CÁLCULOS AUTOMÁTICOS ---
   const calculatedWeeks = useMemo(() => {
       if (!currentRecord?.fum) return 0;
-      const fumDate = new Date(currentRecord.fum);
+      const [year, month, day] = currentRecord.fum.split('-').map(Number);
+      const fumDate = new Date(year, month - 1, day);
       const today = new Date();
       // Si está finalizado, usar fecha fin, si no, hoy
       const endDate = currentRecord.status === 'Finished' && currentRecord.endDate ? new Date(currentRecord.endDate) : today;
@@ -156,7 +157,8 @@ const PerinatalCard: React.FC<{ patients: Patient[], onSaveNote: (n: ClinicalNot
       if (!newPregnancyForm.fum) return alert("Debe ingresar la Fecha de Última Menstruación (FUM).");
       
       // Calcular FPP
-      const date = new Date(newPregnancyForm.fum);
+      const [year, month, day] = newPregnancyForm.fum.split('-').map(Number);
+      const date = new Date(year, month - 1, day);
       date.setDate(date.getDate() + 7);
       date.setMonth(date.getMonth() + 9);
       const fpp = date.toISOString().split('T')[0];

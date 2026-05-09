@@ -9,6 +9,41 @@ const getLocalToday = () => {
 
 const todayStr = getLocalToday();
 
+export const CIE10_CODES = [
+  { code: 'A09', name: 'Diarrea y gastroenteritis de presunto origen infeccioso' },
+  { code: 'E11', name: 'Diabetes mellitus tipo 2' },
+  { code: 'E11.9', name: 'Diabetes mellitus tipo 2 sin complicaciones' },
+  { code: 'E66.9', name: 'Obesidad, no especificada' },
+  { code: 'I10', name: 'Hipertensión esencial (primaria)' },
+  { code: 'J00', name: 'Rinofaringitis aguda (resfriado común)' },
+  { code: 'J01', name: 'Sinusitis aguda' },
+  { code: 'J02', name: 'Faringitis aguda' },
+  { code: 'J02.9', name: 'Faringitis aguda, no especificada' },
+  { code: 'J03', name: 'Amigdalitis aguda' },
+  { code: 'J03.9', name: 'Amigdalitis aguda, no especificada' },
+  { code: 'J06.9', name: 'Infección aguda de las vías respiratorias superiores, no especificada' },
+  { code: 'J20.9', name: 'Bronquitis aguda, no especificada' },
+  { code: 'J45', name: 'Asma' },
+  { code: 'K21', name: 'Enfermedad del reflujo gastroesofágico' },
+  { code: 'K29', name: 'Gastritis y duodenitis' },
+  { code: 'K29.7', name: 'Gastritis, no especificada' },
+  { code: 'K35', name: 'Apendicitis aguda' },
+  { code: 'K80', name: 'Colelitiasis' },
+  { code: 'M54.5', name: 'Lumbago no especificado' },
+  { code: 'N39.0', name: 'Infección de vías urinarias, sitio no especificado' },
+  { code: 'O80', name: 'Parto único espontáneo' },
+  { code: 'O82', name: 'Parto único por cesárea' },
+  { code: 'R10.4', name: 'Otros dolores abdominales y los no especificados' },
+  { code: 'R50.9', name: 'Fiebre, no especificada' },
+  { code: 'R51', name: 'Cefalea' },
+  { code: 'Z00.0', name: 'Examen médico general' },
+  { code: 'Z01.2', name: 'Examen odontológico' },
+  { code: 'Z30.0', name: 'Consejo y asesoramiento general sobre la anticoncepción' },
+  { code: 'Z32.1', name: 'Embarazo confirmado' },
+  { code: 'Z34.9', name: 'Supervisión de embarazo normal no especificado' },
+  { code: 'Z76.2', name: 'Consulta para atención y supervisión de la salud de otros niños o lactantes sanos' }
+];
+
 export const MOCK_DOCTORS: DoctorInfo[] = [
   {
     id: 'DR-01',
@@ -153,7 +188,8 @@ export const DEFAULT_INFRASTRUCTURE = {
     'Obstetricia': Array.from({ length: 4 }, (_, i) => `OB-${(i+1).toString().padStart(2, '0')}`),
     'Pediatría': Array.from({ length: 4 }, (_, i) => `PD-${(i+1).toString().padStart(2, '0')}`),
     'UCI': Array.from({ length: 4 }, (_, i) => `ICU-${(i+1).toString().padStart(2, '0')}`)
-  }
+  },
+  assignments: {}
 };
 
 export const LAB_STUDIES = [
@@ -433,6 +469,12 @@ export const INITIAL_PRICES: PriceItem[] = [
 
 export const NOTE_CATEGORIES = [
   {
+    title: 'Salud Ocupacional',
+    notes: [
+      'Examen Médico de Admisión Laboral'
+    ]
+  },
+  {
     title: 'Evaluación y Seguimiento',
     notes: [
       'Historia Clínica Medica',
@@ -452,7 +494,7 @@ export const NOTE_CATEGORIES = [
       'Nota de Egreso / Alta',
       'Carnet Perinatal / Control Prenatal',
       'Tarjeta de Control de Enfermedades Crónicas',
-      'Carnet de Salud Integral / Niño Sano'
+      'Carnet de Salud Integral'
     ]
   },
   {

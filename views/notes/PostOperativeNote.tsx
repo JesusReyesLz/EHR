@@ -26,7 +26,7 @@ const PostOperativeNote: React.FC<{ patients: Patient[], notes: ClinicalNote[], 
     anesthesiaEndTime: '',
     
     // Equipo Quirúrgico
-    surgeon: doctorInfo?.name || 'Dr. Alejandro Méndez',
+    surgeon: doctorInfo?.name || 'Dr. Médico',
     assistant1: '',
     assistant2: '',
     anesthesiologist: '',

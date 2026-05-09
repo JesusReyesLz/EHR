@@ -56,6 +56,11 @@ const AuxiliaryIntake: React.FC<AuxiliaryIntakeProps> = ({ patients, onSaveNote,
       return Array.from(new Map(combined.map(item => [item.name, item])).values());
   }, [prices]);
 
+  const getToday = () => {
+    const d = new Date();
+    return new Date(d.getTime() - (d.getTimezoneOffset() * 60000)).toISOString().split('T')[0];
+  };
+
   const [patientForm, setPatientForm] = useState<Partial<Patient>>({
     name: '',
     curp: '',
@@ -65,7 +70,7 @@ const AuxiliaryIntake: React.FC<AuxiliaryIntakeProps> = ({ patients, onSaveNote,
     status: PatientStatus.WAITING_FOR_SAMPLES,
     priority: PriorityLevel.ROUTINE,
     assignedModule: ModuleType.AUXILIARY,
-    scheduledDate: new Date().toISOString().split('T')[0], 
+    scheduledDate: getToday(), 
     reason: ''
   });
 
@@ -169,7 +174,7 @@ const AuxiliaryIntake: React.FC<AuxiliaryIntakeProps> = ({ patients, onSaveNote,
         status: PatientStatus.WAITING_FOR_SAMPLES,
         assignedModule: ModuleType.AUXILIARY,
         reason: studySummary,
-        lastVisit: new Date().toISOString().split('T')[0],
+        lastVisit: getToday(),
         paymentStatus: 'Pendiente', 
         pendingCharges: [...existingPending, ...pendingCharges]
       };
@@ -185,7 +190,7 @@ const AuxiliaryIntake: React.FC<AuxiliaryIntakeProps> = ({ patients, onSaveNote,
         reason: studySummary,
         allergies: [],
         chronicDiseases: [],
-        lastVisit: new Date().toISOString().split('T')[0],
+        lastVisit: getToday(),
         paymentStatus: 'Pendiente', 
         pendingCharges: pendingCharges
       };

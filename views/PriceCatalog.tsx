@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
+import { useAuth } from '../contexts/AuthContext';
 import { 
   Search, Plus, Tag, DollarSign, 
   Printer, Trash2, Edit2, Package, X,
@@ -15,6 +16,9 @@ import { INITIAL_PRICES, INITIAL_STOCK } from '../constants';
 const generateId = (prefix: string) => `${prefix}-${Date.now()}-${Math.floor(Math.random() * 100000)}`;
 
 const PriceCatalog: React.FC = () => {
+  const { user } = useAuth();
+  const canEdit = user?.role === 'SUPER_ADMIN' || user?.role === 'ADMIN' || user?.role === 'ADMIN CLINICA' || user?.role === 'admin clinica';
+
   const [prices, setPrices] = useState<PriceItem[]>(() => {
     const saved = localStorage.getItem('med_price_catalog_v1');
     return saved ? JSON.parse(saved) : INITIAL_PRICES;
@@ -466,6 +470,18 @@ const PriceCatalog: React.FC = () => {
 
   return (
     <div className="max-w-7xl mx-auto space-y-8 pb-20 animate-in fade-in">
+      <style>{`
+        @media print {
+          .no-print, nav, aside, button { display: none !important; }
+          body { background: white !important; margin: 0 !important; }
+          main { margin: 0 !important; padding: 0.5cm !important; width: 100% !important; left: 0 !important; top: 0 !important; }
+          .max-w-7xl { max-width: 100% !important; }
+          .bg-slate-900 { background: #000 !important; color: #fff !important; -webkit-print-color-adjust: exact; }
+          .border { border: 1px solid #000 !important; }
+          .shadow-sm, .shadow-md, .shadow-lg, .shadow-xl, .shadow-2xl { box-shadow: none !important; }
+          @page { margin: 0.5cm; size: landscape; }
+        }
+      `}</style>
       <div className="flex flex-col md:flex-row justify-between items-end gap-6 no-print">
         <div className="space-y-1">
           <div className="flex items-center gap-3 text-indigo-600">
@@ -480,19 +496,21 @@ const PriceCatalog: React.FC = () => {
               <button onClick={() => setActiveTab('services')} className={`px-8 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'services' ? 'bg-blue-600 text-white shadow-xl' : 'text-slate-500 hover:bg-slate-50'}`}>Servicios</button>
               <button onClick={() => setActiveTab('products')} className={`px-8 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'products' ? 'bg-emerald-600 text-white shadow-xl' : 'text-slate-500 hover:bg-slate-50'}`}>Farmacia/Insumos</button>
            </div>
-           <button onClick={() => { setCatalogItemToEdit(null); setShowNewCatalogItemModal(true); }} className="px-10 py-5 bg-slate-900 text-white rounded-[1.8rem] font-black text-xs uppercase tracking-widest shadow-2xl hover:bg-indigo-600 transition-all flex items-center gap-3 active:scale-95">
-              <Plus size={20} /> Nuevo Concepto
-           </button>
+           {canEdit && (
+             <button onClick={() => { setCatalogItemToEdit(null); setShowNewCatalogItemModal(true); }} className="px-10 py-5 bg-slate-900 text-white rounded-[1.8rem] font-black text-xs uppercase tracking-widest shadow-2xl hover:bg-indigo-600 transition-all flex items-center gap-3 active:scale-95">
+                <Plus size={20} /> Nuevo Concepto
+             </button>
+           )}
         </div>
       </div>
 
       <div className="bg-white border border-slate-100 rounded-[3.5rem] shadow-sm overflow-hidden min-h-[600px]">
-         <div className="p-10 border-b border-slate-100 flex items-center gap-8 bg-slate-50/30">
+         <div className="p-10 border-b border-slate-100 flex items-center gap-8 bg-slate-50/30 no-print">
             <div className="relative flex-1">
                <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-300" size={24} />
                <input className="w-full pl-16 pr-8 py-6 bg-white border border-slate-200 rounded-[2rem] text-sm font-black uppercase outline-none focus:border-indigo-500 transition-all shadow-inner" placeholder="Buscar por código, descripción o medicamento..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
             </div>
-            <button className="p-6 bg-white border border-slate-200 text-slate-400 rounded-[1.5rem] hover:text-slate-900 shadow-sm transition-all"><Printer size={24}/></button>
+            <button onClick={() => window.print()} className="p-6 bg-white border border-slate-200 text-slate-400 rounded-[1.5rem] hover:text-slate-900 shadow-sm transition-all"><Printer size={24}/></button>
          </div>
 
          <div className="overflow-x-auto">
@@ -551,10 +569,12 @@ const PriceCatalog: React.FC = () => {
                            <p className="text-[9px] font-bold text-slate-400 uppercase mt-1">IVA {item.taxPercent}% INCL.</p>
                         </td>
                         <td className="px-10 py-8 text-right no-print">
-                           <div className="flex justify-end gap-3 opacity-0 group-hover:opacity-100 transition-all">
-                              <button onClick={() => { setCatalogItemToEdit(item); setShowNewCatalogItemModal(true); }} className="p-4 bg-white border border-slate-200 rounded-2xl text-slate-400 hover:text-indigo-600 hover:shadow-xl transition-all"><Edit2 size={16}/></button>
-                              <button onClick={() => handleDelete(item.id)} className="p-4 bg-white border border-slate-200 rounded-2xl text-slate-400 hover:text-rose-600 hover:shadow-xl transition-all"><Trash2 size={16}/></button>
-                           </div>
+                           {canEdit && (
+                             <div className="flex justify-end gap-3 opacity-0 group-hover:opacity-100 transition-all">
+                                <button onClick={() => { setCatalogItemToEdit(item); setShowNewCatalogItemModal(true); }} className="p-4 bg-white border border-slate-200 rounded-2xl text-slate-400 hover:text-indigo-600 hover:shadow-xl transition-all"><Edit2 size={16}/></button>
+                                <button onClick={() => handleDelete(item.id)} className="p-4 bg-white border border-slate-200 rounded-2xl text-slate-400 hover:text-rose-600 hover:shadow-xl transition-all"><Trash2 size={16}/></button>
+                             </div>
+                           )}
                         </td>
                      </tr>
                   ))}

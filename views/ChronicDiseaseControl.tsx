@@ -12,11 +12,15 @@ import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, ComposedChart 
 } from 'recharts';
 import { Patient, ClinicalNote, ChronicDiseaseRecord, ChronicVisit, TreatmentPlan } from '../types';
+import { useAuth } from '../contexts/AuthContext';
 
 const ChronicDiseaseControl: React.FC<{ patients: Patient[], onSaveNote: (n: ClinicalNote) => void, onUpdatePatient: (p: Patient) => void }> = ({ patients, onSaveNote, onUpdatePatient }) => {
   const { id } = useParams();
   const navigate = useNavigate();
   const patient = patients.find(p => p.id === id);
+  const { user } = useAuth();
+  const isPatient = user?.role === 'PACIENTE';
+  const authorMarker = isPatient ? '(Paciente)' : '(Médico)';
 
   const [activeTab, setActiveTab] = useState<'dashboard' | 'visits' | 'meds' | 'goals' | 'education'>('dashboard');
   const [selectedRecordId, setSelectedRecordId] = useState<string | null>(null);
@@ -117,7 +121,7 @@ const ChronicDiseaseControl: React.FC<{ patients: Patient[], onSaveNote: (n: Cli
 
   // --- ACTIONS ---
   const handleStartControl = () => {
-      if (newRecordForm.diagnosis.length === 0) return alert("Seleccione al menos un diagnóstico.");
+      if (newRecordForm.diagnosis.length === 0) return;
       
       const newRecord: ChronicDiseaseRecord = {
           id: `CHRON-${Date.now()}`,
@@ -169,7 +173,7 @@ const ChronicDiseaseControl: React.FC<{ patients: Patient[], onSaveNote: (n: Cli
 
   const handleRemoveDiagnosis = (dx: string) => {
       if (!activeRecord) return;
-      if (!confirm(`¿Eliminar diagnóstico ${dx} de este control?`)) return;
+      // window.confirm is blocked in iframes
 
       const updatedHistory = patient!.chronicHistory!.map(rec => {
           if (rec.id === activeRecord.id) {
@@ -177,11 +181,11 @@ const ChronicDiseaseControl: React.FC<{ patients: Patient[], onSaveNote: (n: Cli
           }
           return rec;
       });
-      onUpdatePatient({ ...patient!, chronicHistory: updatedHistory });
+      onUpdatePatient({ ...patient!, chronicHistory: updatedHistory, chronicDiseases: patient!.chronicDiseases.filter(d => d !== dx) });
   };
 
   const handleAddVisit = () => {
-      if (!visitForm.weight || !visitForm.bp) return alert("Peso y T/A son obligatorios para el seguimiento.");
+      // if (!visitForm.weight || !visitForm.bp) return; // allow partial visits to skip alert block
       if (!activeRecord) return;
 
       // Construct Treatment Snapshot String
@@ -206,7 +210,7 @@ const ChronicDiseaseControl: React.FC<{ patients: Patient[], onSaveNote: (n: Cli
           adherenceToMeds: visitForm.adherenceToMeds || 'Buena',
           adherenceToDiet: visitForm.adherenceToDiet || 'Regular',
           
-          notes: visitForm.notes || '',
+          notes: `${visitForm.notes || ''} \n\nRegistrado por: ${user?.name || 'Sistema'} ${authorMarker}`.trim(),
           medicationAdjustments: visitForm.medicationAdjustments || 'Continuar mismo esquema',
           nextAppointment: visitForm.nextAppointment || '',
           treatmentSnapshot: treatmentSnapshot,
@@ -236,23 +240,25 @@ const ChronicDiseaseControl: React.FC<{ patients: Patient[], onSaveNote: (n: Cli
       setVisitForm({ adherenceToMeds: 'Buena', adherenceToDiet: 'Regular', checkupsPerformed: [] });
 
       // Generate Note
-      const note: ClinicalNote = {
-          id: `NOTE-CRON-${Date.now()}`,
-          patientId: patient!.id,
-          type: 'Control de Enfermedades Crónicas',
-          date: new Date().toLocaleString('es-MX'),
-          author: 'Dr. Tratante',
-          content: {
-              diagnosis: currentRecord?.diagnosis.join(', '),
-              visitData: newVisit,
-              currentTreatment: treatmentSnapshot,
-              checkupsDoneToday: visitForm.checkupsPerformed?.join(', ') || 'Ninguna',
-              analysis: `Paciente en control. Riesgo CV: ${riskLevel}. Adherencia tx: ${newVisit.adherenceToMeds}. Metas: ${newVisit.bp}/${activeRecord.goals.bpTargetSystolic}mmHg.`,
-              plan: `Próxima cita: ${newVisit.nextAppointment}. Ajustes: ${newVisit.medicationAdjustments}`
-          },
-          isSigned: true
-      };
-      onSaveNote(note);
+      if (!isPatient) {
+          const note: ClinicalNote = {
+              id: `NOTE-CRON-${Date.now()}`,
+              patientId: patient!.id,
+              type: 'Control de Enfermedades Crónicas',
+              date: new Date().toLocaleString('es-MX'),
+              author: user?.name || 'Dr. Tratante',
+              content: {
+                  diagnosis: currentRecord?.diagnosis.join(', '),
+                  visitData: newVisit,
+                  currentTreatment: treatmentSnapshot,
+                  checkupsDoneToday: visitForm.checkupsPerformed?.join(', ') || 'Ninguna',
+                  analysis: `Paciente en control. Riesgo CV: ${riskLevel}. Adherencia tx: ${newVisit.adherenceToMeds}. Metas: ${newVisit.bp}/${activeRecord.goals.bpTargetSystolic}mmHg.`,
+                  plan: `Próxima cita: ${newVisit.nextAppointment}. Ajustes: ${newVisit.medicationAdjustments}`
+              },
+              isSigned: true
+          };
+          onSaveNote(note);
+      }
   };
 
   const handleAddMed = () => {
@@ -291,7 +297,7 @@ const ChronicDiseaseControl: React.FC<{ patients: Patient[], onSaveNote: (n: Cli
 
   const handleArchiveControl = () => {
       if (!activeRecord) return;
-      if (!confirm("¿Desea cerrar el ciclo de control actual? Esto archivará el registro para iniciar uno nuevo si es necesario (ej. cambio de adscripción o reinicio de metas).")) return;
+      // window.confirm is bypassed
       
       const updatedHistory = patient!.chronicHistory!.map(rec => {
           if (rec.id === activeRecord.id) {
@@ -331,11 +337,6 @@ const ChronicDiseaseControl: React.FC<{ patients: Patient[], onSaveNote: (n: Cli
               const currentVal = rec.annualCheckups[key];
               const newVal = currentVal ? '' : new Date().toISOString().split('T')[0];
               
-              // If trying to clear an existing date, confirm first
-              if (currentVal && !confirm(`¿Desea borrar la fecha de revisión (${currentVal})?`)) {
-                  return rec;
-              }
-
               return { ...rec, annualCheckups: { ...rec.annualCheckups, [key]: newVal } };
           }
           return rec;
@@ -388,9 +389,11 @@ const ChronicDiseaseControl: React.FC<{ patients: Patient[], onSaveNote: (n: Cli
                       </div>
                   )}
 
-                  <button onClick={() => setShowNewRecordModal(true)} className="px-10 py-4 bg-slate-900 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl hover:bg-emerald-600 transition-all">
-                      Iniciar Nuevo Protocolo
-                  </button>
+                  {!isPatient && (
+                      <button onClick={() => setShowNewRecordModal(true)} className="px-10 py-4 bg-slate-900 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl hover:bg-emerald-600 transition-all">
+                          Iniciar Nuevo Protocolo
+                      </button>
+                  )}
               </div>
           </div>
       );
@@ -447,7 +450,7 @@ const ChronicDiseaseControl: React.FC<{ patients: Patient[], onSaveNote: (n: Cli
 
                     <div className="mt-8 flex gap-4">
                         <button onClick={() => setShowNewRecordModal(false)} className="flex-1 py-4 bg-slate-100 rounded-2xl font-black text-xs uppercase text-slate-500 hover:bg-slate-200">Cancelar</button>
-                        <button onClick={handleStartControl} className="flex-[2] py-4 bg-emerald-600 rounded-2xl font-black text-xs uppercase text-white shadow-xl hover:bg-emerald-700">Iniciar Control</button>
+                        <button disabled={newRecordForm.diagnosis.length === 0} onClick={handleStartControl} className={`flex-[2] py-4 rounded-2xl font-black text-xs uppercase text-white shadow-xl ${newRecordForm.diagnosis.length === 0 ? 'bg-slate-300' : 'bg-emerald-600 hover:bg-emerald-700'}`}>Iniciar Control</button>
                     </div>
                 </div>
             </div>
@@ -901,7 +904,7 @@ const ChronicDiseaseControl: React.FC<{ patients: Patient[], onSaveNote: (n: Cli
                                         <h4 className="text-[10px] font-black uppercase text-amber-700 tracking-widest flex items-center gap-2 mb-2">
                                             <AlertTriangle size={14}/> Datos de Alarma
                                         </h4>
-                                        <p className="text-xs text-amber-900 font-medium leading-relaxed">
+                                        <div className="text-xs text-amber-900 font-medium leading-relaxed">
                                             Instruir al paciente acudir a Urgencias si presenta:
                                             <ul className="list-disc ml-4 mt-2 space-y-1">
                                                 <li>Glucosa {'>'} 250 mg/dL con cetonas o {'>'} 600 mg/dL (Estado Hiperosmolar)</li>
@@ -910,7 +913,7 @@ const ChronicDiseaseControl: React.FC<{ patients: Patient[], onSaveNote: (n: Cli
                                                 <li>Lesiones en pies con cambio de coloración o infección</li>
                                                 <li>Presión Arterial {'>'} 180/110 mmHg con síntomas</li>
                                             </ul>
-                                        </p>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -940,115 +943,129 @@ const ChronicDiseaseControl: React.FC<{ patients: Patient[], onSaveNote: (n: Cli
                             <label className="text-[9px] font-black uppercase text-slate-400 ml-2">Glucosa (mg/dL)</label>
                             <input type="number" className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-lg font-black text-center" value={visitForm.glucose || ''} onChange={e => setVisitForm({...visitForm, glucose: parseFloat(e.target.value)})}/>
                         </div>
-                        <div className="space-y-2">
-                            <label className="text-[9px] font-black uppercase text-slate-400 ml-2">Cintura (cm)</label>
-                            <input type="number" className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-lg font-black text-center" value={visitForm.waistCircumference || ''} onChange={e => setVisitForm({...visitForm, waistCircumference: parseFloat(e.target.value)})} placeholder="Opcional"/>
-                        </div>
-                        <div className="space-y-2">
-                            <label className="text-[9px] font-black uppercase text-slate-400 ml-2">HbA1c (%)</label>
-                            <input type="number" className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-lg font-black text-center text-rose-500" value={visitForm.hba1c || ''} onChange={e => setVisitForm({...visitForm, hba1c: parseFloat(e.target.value)})} placeholder="Opcional"/>
-                        </div>
+                        {!isPatient && (
+                            <>
+                                <div className="space-y-2">
+                                    <label className="text-[9px] font-black uppercase text-slate-400 ml-2">Cintura (cm)</label>
+                                    <input type="number" className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-lg font-black text-center" value={visitForm.waistCircumference || ''} onChange={e => setVisitForm({...visitForm, waistCircumference: parseFloat(e.target.value)})} placeholder="Opcional"/>
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-[9px] font-black uppercase text-slate-400 ml-2">HbA1c (%)</label>
+                                    <input type="number" className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-lg font-black text-center text-rose-500" value={visitForm.hba1c || ''} onChange={e => setVisitForm({...visitForm, hba1c: parseFloat(e.target.value)})} placeholder="Opcional"/>
+                                </div>
+                            </>
+                        )}
                     </div>
 
-                    <div className="bg-amber-50 p-6 rounded-3xl border border-amber-100 mb-6 space-y-4">
-                        <p className="text-[10px] font-black uppercase text-amber-700 tracking-widest">Perfil de Lípidos (Si Aplica)</p>
-                        <div className="grid grid-cols-2 gap-4">
-                            <div className="space-y-1">
-                                <label className="text-[9px] font-bold text-slate-500 uppercase ml-1">Colesterol Total</label>
-                                <input type="number" className="w-full p-3 bg-white border border-amber-200 rounded-xl text-xs font-bold text-center" value={visitForm.totalCholesterol || ''} onChange={e => setVisitForm({...visitForm, totalCholesterol: parseFloat(e.target.value)})} placeholder="mg/dL" />
-                            </div>
-                            <div className="space-y-1">
-                                <label className="text-[9px] font-bold text-slate-500 uppercase ml-1">LDL (Malo)</label>
-                                <input type="number" className="w-full p-3 bg-white border border-amber-200 rounded-xl text-xs font-bold text-center" value={visitForm.ldl || ''} onChange={e => setVisitForm({...visitForm, ldl: parseFloat(e.target.value)})} placeholder="mg/dL" />
-                            </div>
-                            <div className="space-y-1">
-                                <label className="text-[9px] font-bold text-slate-500 uppercase ml-1">HDL (Bueno)</label>
-                                <input type="number" className="w-full p-3 bg-white border border-amber-200 rounded-xl text-xs font-bold text-center" value={visitForm.hdl || ''} onChange={e => setVisitForm({...visitForm, hdl: parseFloat(e.target.value)})} placeholder="mg/dL" />
-                            </div>
-                            <div className="space-y-1">
-                                <label className="text-[9px] font-bold text-slate-500 uppercase ml-1">Triglicéridos</label>
-                                <input type="number" className="w-full p-3 bg-white border border-amber-200 rounded-xl text-xs font-bold text-center" value={visitForm.triglycerides || ''} onChange={e => setVisitForm({...visitForm, triglycerides: parseFloat(e.target.value)})} placeholder="mg/dL" />
+                    {!isPatient && (
+                        <div className="bg-amber-50 p-6 rounded-3xl border border-amber-100 mb-6 space-y-4">
+                            <p className="text-[10px] font-black uppercase text-amber-700 tracking-widest">Perfil de Lípidos (Si Aplica)</p>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-1">
+                                    <label className="text-[9px] font-bold text-slate-500 uppercase ml-1">Colesterol Total</label>
+                                    <input type="number" className="w-full p-3 bg-white border border-amber-200 rounded-xl text-xs font-bold text-center" value={visitForm.totalCholesterol || ''} onChange={e => setVisitForm({...visitForm, totalCholesterol: parseFloat(e.target.value)})} placeholder="mg/dL" />
+                                </div>
+                                <div className="space-y-1">
+                                    <label className="text-[9px] font-bold text-slate-500 uppercase ml-1">LDL (Malo)</label>
+                                    <input type="number" className="w-full p-3 bg-white border border-amber-200 rounded-xl text-xs font-bold text-center" value={visitForm.ldl || ''} onChange={e => setVisitForm({...visitForm, ldl: parseFloat(e.target.value)})} placeholder="mg/dL" />
+                                </div>
+                                <div className="space-y-1">
+                                    <label className="text-[9px] font-bold text-slate-500 uppercase ml-1">HDL (Bueno)</label>
+                                    <input type="number" className="w-full p-3 bg-white border border-amber-200 rounded-xl text-xs font-bold text-center" value={visitForm.hdl || ''} onChange={e => setVisitForm({...visitForm, hdl: parseFloat(e.target.value)})} placeholder="mg/dL" />
+                                </div>
+                                <div className="space-y-1">
+                                    <label className="text-[9px] font-bold text-slate-500 uppercase ml-1">Triglicéridos</label>
+                                    <input type="number" className="w-full p-3 bg-white border border-amber-200 rounded-xl text-xs font-bold text-center" value={visitForm.triglycerides || ''} onChange={e => setVisitForm({...visitForm, triglycerides: parseFloat(e.target.value)})} placeholder="mg/dL" />
+                                </div>
                             </div>
                         </div>
-                    </div>
+                    )}
 
-                    <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-4 mb-6">
-                        <p className="text-[9px] font-black uppercase text-slate-400 tracking-widest">Adherencia al Tratamiento</p>
-                        <div className="flex justify-between items-center">
-                            <span className="text-xs font-bold text-slate-700">Medicamentos</span>
-                            <div className="flex gap-2">
-                                {['Buena', 'Regular', 'Mala'].map(opt => (
-                                    <button 
-                                        key={opt} 
-                                        onClick={() => setVisitForm({...visitForm, adherenceToMeds: opt as any})}
-                                        className={`px-3 py-1 rounded-lg text-[9px] font-black uppercase transition-all ${visitForm.adherenceToMeds === opt ? (opt === 'Buena' ? 'bg-emerald-500 text-white' : 'bg-slate-900 text-white') : 'bg-white border text-slate-400'}`}
-                                    >
-                                        {opt}
-                                    </button>
-                                ))}
+                    {!isPatient && (
+                        <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-4 mb-6">
+                            <p className="text-[9px] font-black uppercase text-slate-400 tracking-widest">Adherencia al Tratamiento</p>
+                            <div className="flex justify-between items-center">
+                                <span className="text-xs font-bold text-slate-700">Medicamentos</span>
+                                <div className="flex gap-2">
+                                    {['Buena', 'Regular', 'Mala'].map(opt => (
+                                        <button 
+                                            key={opt} 
+                                            onClick={() => setVisitForm({...visitForm, adherenceToMeds: opt as any})}
+                                            className={`px-3 py-1 rounded-lg text-[9px] font-black uppercase transition-all ${visitForm.adherenceToMeds === opt ? (opt === 'Buena' ? 'bg-emerald-500 text-white' : 'bg-slate-900 text-white') : 'bg-white border text-slate-400'}`}
+                                        >
+                                            {opt}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                            <div className="flex justify-between items-center">
+                                <span className="text-xs font-bold text-slate-700">Dieta/Ejercicio</span>
+                                <div className="flex gap-2">
+                                    {['Buena', 'Regular', 'Mala'].map(opt => (
+                                        <button 
+                                            key={opt} 
+                                            onClick={() => setVisitForm({...visitForm, adherenceToDiet: opt as any})}
+                                            className={`px-3 py-1 rounded-lg text-[9px] font-black uppercase transition-all ${visitForm.adherenceToDiet === opt ? (opt === 'Buena' ? 'bg-emerald-500 text-white' : 'bg-slate-900 text-white') : 'bg-white border text-slate-400'}`}
+                                        >
+                                            {opt}
+                                        </button>
+                                    ))}
+                                </div>
                             </div>
                         </div>
-                        <div className="flex justify-between items-center">
-                            <span className="text-xs font-bold text-slate-700">Dieta/Ejercicio</span>
-                            <div className="flex gap-2">
-                                {['Buena', 'Regular', 'Mala'].map(opt => (
-                                    <button 
-                                        key={opt} 
-                                        onClick={() => setVisitForm({...visitForm, adherenceToDiet: opt as any})}
-                                        className={`px-3 py-1 rounded-lg text-[9px] font-black uppercase transition-all ${visitForm.adherenceToDiet === opt ? (opt === 'Buena' ? 'bg-emerald-500 text-white' : 'bg-slate-900 text-white') : 'bg-white border text-slate-400'}`}
-                                    >
-                                        {opt}
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
-                    </div>
+                    )}
 
                     {/* NEW SECTION: Annual Checkups during this visit */}
-                    <div className="space-y-2 mb-6">
-                        <label className="text-[9px] font-black uppercase text-slate-400 ml-2">Revisiones Anuales Realizadas Hoy</label>
-                        <div className="grid grid-cols-2 gap-2">
-                            {[
-                                { k: 'ophthalmology', l: 'Oftalmología' },
-                                { k: 'dental', l: 'Dental' },
-                                { k: 'footExam', l: 'Revisión Pies' },
-                                { k: 'cardiology', l: 'Cardiología/EKG' },
-                                { k: 'nephrology', l: 'Renal' },
-                                { k: 'nutrition', l: 'Nutrición' }
-                            ].map(item => {
-                                const isSelected = visitForm.checkupsPerformed?.includes(item.k);
-                                return (
-                                    <button 
-                                        key={item.k}
-                                        onClick={() => {
-                                            const current = visitForm.checkupsPerformed || [];
-                                            const updated = isSelected 
-                                                ? current.filter(c => c !== item.k) 
-                                                : [...current, item.k];
-                                            setVisitForm({...visitForm, checkupsPerformed: updated});
-                                        }}
-                                        className={`p-2 rounded-lg text-[9px] font-bold uppercase border transition-all text-left ${isSelected ? 'bg-emerald-50 border-emerald-500 text-emerald-800' : 'bg-white border-slate-200 text-slate-400'}`}
-                                    >
-                                        {isSelected ? '✓ ' : ''}{item.l}
-                                    </button>
-                                );
-                            })}
+                    {!isPatient && (
+                        <div className="space-y-2 mb-6">
+                            <label className="text-[9px] font-black uppercase text-slate-400 ml-2">Revisiones Anuales Realizadas Hoy</label>
+                            <div className="grid grid-cols-2 gap-2">
+                                {[
+                                    { k: 'ophthalmology', l: 'Oftalmología' },
+                                    { k: 'dental', l: 'Dental' },
+                                    { k: 'footExam', l: 'Revisión Pies' },
+                                    { k: 'cardiology', l: 'Cardiología/EKG' },
+                                    { k: 'nephrology', l: 'Renal' },
+                                    { k: 'nutrition', l: 'Nutrición' }
+                                ].map(item => {
+                                    const isSelected = visitForm.checkupsPerformed?.includes(item.k);
+                                    return (
+                                        <button 
+                                            key={item.k}
+                                            onClick={() => {
+                                                const current = visitForm.checkupsPerformed || [];
+                                                const updated = isSelected 
+                                                    ? current.filter(c => c !== item.k) 
+                                                    : [...current, item.k];
+                                                setVisitForm({...visitForm, checkupsPerformed: updated});
+                                            }}
+                                            className={`p-2 rounded-lg text-[9px] font-bold uppercase border transition-all text-left ${isSelected ? 'bg-emerald-50 border-emerald-500 text-emerald-800' : 'bg-white border-slate-200 text-slate-400'}`}
+                                        >
+                                            {isSelected ? '✓ ' : ''}{item.l}
+                                        </button>
+                                    );
+                                })}
+                            </div>
                         </div>
-                    </div>
+                    )}
 
                     <div className="space-y-6 mb-6">
+                        {!isPatient && (
+                            <div className="space-y-2">
+                                <label className="text-[9px] font-black uppercase text-slate-400 ml-2">Ajustes al Tratamiento</label>
+                                <textarea className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl h-20 text-sm font-medium resize-none outline-none" placeholder="Cambios en dosis, nuevos fármacos..." value={visitForm.medicationAdjustments} onChange={e => setVisitForm({...visitForm, medicationAdjustments: e.target.value})} />
+                            </div>
+                        )}
                         <div className="space-y-2">
-                            <label className="text-[9px] font-black uppercase text-slate-400 ml-2">Ajustes al Tratamiento</label>
-                            <textarea className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl h-20 text-sm font-medium resize-none outline-none" placeholder="Cambios en dosis, nuevos fármacos..." value={visitForm.medicationAdjustments} onChange={e => setVisitForm({...visitForm, medicationAdjustments: e.target.value})} />
+                            <label className="text-[9px] font-black uppercase text-slate-400 ml-2">Notas {isPatient ? '(Paciente)' : 'de Evolución'}</label>
+                            <textarea className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl h-24 text-sm font-medium resize-none outline-none" placeholder={isPatient ? "¿Cómo se ha sentido?" : "Síntomas, adherencia a dieta..."} value={visitForm.notes} onChange={e => setVisitForm({...visitForm, notes: e.target.value})} />
                         </div>
-                        <div className="space-y-2">
-                            <label className="text-[9px] font-black uppercase text-slate-400 ml-2">Notas de Evolución</label>
-                            <textarea className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl h-24 text-sm font-medium resize-none outline-none" placeholder="Síntomas, adherencia a dieta..." value={visitForm.notes} onChange={e => setVisitForm({...visitForm, notes: e.target.value})} />
-                        </div>
-                        <div className="space-y-2">
-                            <label className="text-[9px] font-black uppercase text-slate-400 ml-2">Próxima Cita</label>
-                            <input type="date" className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold" value={visitForm.nextAppointment} onChange={e => setVisitForm({...visitForm, nextAppointment: e.target.value})} />
-                        </div>
+                        {!isPatient && (
+                            <div className="space-y-2">
+                                <label className="text-[9px] font-black uppercase text-slate-400 ml-2">Próxima Cita</label>
+                                <input type="date" className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold" value={visitForm.nextAppointment} onChange={e => setVisitForm({...visitForm, nextAppointment: e.target.value})} />
+                            </div>
+                        )}
                     </div>
 
                     <div className="flex gap-4">

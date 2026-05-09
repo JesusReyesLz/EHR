@@ -83,6 +83,18 @@ const StomatologyExpedient: React.FC<{ patients: Patient[], onSaveNote: (n: Clin
 
   return (
     <div className="max-w-6xl mx-auto pb-40 animate-in fade-in duration-500">
+      <style>{`
+        @media print {
+          .no-print, nav, aside, button { display: none !important; }
+          body { background: white !important; margin: 0 !important; }
+          main { margin: 0 !important; padding: 0.5cm !important; width: 100% !important; left: 0 !important; top: 0 !important; }
+          .max-w-6xl { max-width: 100% !important; }
+          .bg-slate-900 { background: #000 !important; color: #fff !important; -webkit-print-color-adjust: exact; }
+          .border { border: 1px solid #000 !important; }
+          .shadow-sm, .shadow-md, .shadow-lg, .shadow-xl, .shadow-2xl { box-shadow: none !important; }
+          @page { margin: 0.5cm; size: portrait; }
+        }
+      `}</style>
       {/* Header Bar */}
       <div className="bg-white border-b-8 border-cyan-600 p-8 rounded-t-[3.5rem] shadow-2xl mb-8 flex flex-col md:flex-row justify-between items-center gap-6 no-print">
         <div className="flex items-center gap-6">

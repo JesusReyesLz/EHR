@@ -127,10 +127,10 @@ const TelemedicineConsent: React.FC<TelemedicineConsentProps> = ({ patients, onS
                     { key: 'electronicPrescription', label: 'Receta Electrónica', desc: 'Acepto recibir recetas médicas firmadas digitalmente y entiendo su validez legal.', icon: <FileText size={18} /> },
                     { key: 'remoteLabOrders', label: 'Estudios de Laboratorio', desc: 'Autorizo la generación de órdenes de estudios auxiliares digitales y la recepción de resultados por medios electrónicos.', icon: <FlaskConical size={18} /> }
                  ].map(item => (
-                    <button 
+                    <div 
                        key={item.key}
                        onClick={() => toggleTerm(item.key as any)}
-                       className={`flex items-center gap-6 p-6 rounded-[1.5rem] border-2 transition-all text-left group ${acceptedTerms[item.key as keyof typeof acceptedTerms] ? 'bg-blue-50 border-blue-600 shadow-lg' : 'bg-slate-50 border-slate-100 hover:border-blue-300'}`}
+                       className={`flex items-center gap-6 p-6 rounded-[1.5rem] border-2 transition-all text-left group cursor-pointer ${acceptedTerms[item.key as keyof typeof acceptedTerms] ? 'bg-blue-50 border-blue-600 shadow-lg' : 'bg-slate-50 border-slate-100 hover:border-blue-300'}`}
                     >
                        <div className={`w-12 h-12 rounded-xl flex items-center justify-center transition-colors ${acceptedTerms[item.key as keyof typeof acceptedTerms] ? 'bg-blue-600 text-white' : 'bg-white text-slate-400 group-hover:text-blue-600'}`}>
                           {item.icon}
@@ -142,7 +142,7 @@ const TelemedicineConsent: React.FC<TelemedicineConsentProps> = ({ patients, onS
                        <div className={`w-8 h-8 rounded-full border-2 flex items-center justify-center transition-all ${acceptedTerms[item.key as keyof typeof acceptedTerms] ? 'bg-blue-600 border-blue-600 text-white' : 'bg-white border-slate-200'}`}>
                           {acceptedTerms[item.key as keyof typeof acceptedTerms] && <CheckCircle2 size={16} />}
                        </div>
-                    </button>
+                    </div>
                  ))}
               </div>
            </div>

@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { 
   Search, Trash2, ShoppingCart, Lock, Unlock, History, DollarSign, 
   User, Plus, FileText, CreditCard, RefreshCw, Save, Printer, 
@@ -15,9 +15,11 @@ import {
   ModuleType, PatientStatus
 } from '../types';
 import { INITIAL_PRICES, INITIAL_STOCK } from '../constants';
+import PaymentModal from '../src/components/PaymentModal';
 
 const Billing: React.FC<{ patients: Patient[], notes: ClinicalNote[], onUpdatePatient?: (p: Patient) => void }> = ({ patients, notes, onUpdatePatient }) => {
   const navigate = useNavigate();
+  const location = useLocation();
 
   const [prices] = useState<PriceItem[]>(() => JSON.parse(localStorage.getItem('med_price_catalog_v1') || JSON.stringify(INITIAL_PRICES)));
   const [shifts, setShifts] = useState<CashShift[]>(() => JSON.parse(localStorage.getItem('med_shifts_v1') || '[]'));
@@ -28,11 +30,26 @@ const Billing: React.FC<{ patients: Patient[], notes: ClinicalNote[], onUpdatePa
   const [activeTab, setActiveTab] = useState<'pos' | 'history'>('pos');
   const [itemSearchTerm, setItemSearchTerm] = useState('');
   const [patientSearchTerm, setPatientSearchTerm] = useState('');
-  const [historyDate, setHistoryDate] = useState(new Date().toISOString().split('T')[0]);
+  
+  const getToday = () => {
+    const d = new Date();
+    return new Date(d.getTime() - (d.getTimezoneOffset() * 60000)).toISOString().split('T')[0];
+  };
+  const [historyDate, setHistoryDate] = useState(getToday());
 
   // Estado del Ticket Actual
   const [cart, setCart] = useState<ChargeItem[]>([]);
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
+
+  useEffect(() => {
+    const state = location.state as { patientId?: string } | null;
+    if (state?.patientId) {
+      const patient = patients.find(p => p.id === state.patientId);
+      if (patient) {
+        setSelectedPatient(patient);
+      }
+    }
+  }, [location.state, patients]);
   const [globalDiscount, setGlobalDiscount] = useState<number>(0);
   const [saleNotes, setSaleNotes] = useState('');
 
@@ -40,6 +57,8 @@ const Billing: React.FC<{ patients: Patient[], notes: ClinicalNote[], onUpdatePa
   
   // Modales
   const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [showStripeModal, setShowStripeModal] = useState(false);
+  const [stripeAmount, setStripeAmount] = useState(0);
   const [showShiftModal, setShowShiftModal] = useState(false); 
   const [showTicketModal, setShowTicketModal] = useState(false);
   const [selectedTicket, setSelectedTicket] = useState<Transaction | null>(null);
@@ -133,8 +152,19 @@ const Billing: React.FC<{ patients: Patient[], notes: ClinicalNote[], onUpdatePa
           if (!window.confirm("El monto excede el restante. ¿Desea registrarlo de todas formas?")) return;
       }
 
-      setPaymentMethods([...paymentMethods, { method: currentMethod, amount }]);
+      if (currentMethod === 'Tarjeta Crédito' || currentMethod === 'Tarjeta Débito') {
+          setStripeAmount(amount);
+          setShowStripeModal(true);
+      } else {
+          setPaymentMethods([...paymentMethods, { method: currentMethod, amount }]);
+          setAmountInput('');
+      }
+  };
+
+  const handleStripeSuccess = () => {
+      setPaymentMethods([...paymentMethods, { method: currentMethod, amount: stripeAmount }]);
       setAmountInput('');
+      setShowStripeModal(false);
   };
 
   const handleRemovePayment = (index: number) => {
@@ -171,8 +201,17 @@ const Billing: React.FC<{ patients: Patient[], notes: ClinicalNote[], onUpdatePa
           if (productIndex >= 0) {
               const product = updatedInventory[productIndex];
               let qtyToDeduct = quantity;
-              // FIFO Logic
-              const updatedBatches = product.batches?.map(b => {
+              
+              // FEFO Logic (First Expire, First Out)
+              // Create a sorted copy of the batches based on expiration date
+              const sortedBatches = [...(product.batches || [])].sort((a, b) => {
+                  if (!a.expirationDate) return 1;
+                  if (!b.expirationDate) return -1;
+                  return new Date(a.expirationDate).getTime() - new Date(b.expirationDate).getTime();
+              });
+
+              // Deduct from sorted batches
+              const updatedSortedBatches = sortedBatches.map(b => {
                   if (qtyToDeduct > 0 && b.currentStock > 0) {
                       const take = Math.min(b.currentStock, qtyToDeduct);
                       qtyToDeduct -= take;
@@ -180,7 +219,11 @@ const Billing: React.FC<{ patients: Patient[], notes: ClinicalNote[], onUpdatePa
                   }
                   return b;
               });
-              updatedInventory[productIndex] = { ...product, batches: updatedBatches };
+
+              // Reconstruct the original batches array to maintain any existing order if needed, 
+              // or just replace it with the sorted one. Replacing is fine and keeps it clean.
+              updatedInventory[productIndex] = { ...product, batches: updatedSortedBatches };
+              
               newMovements.push({
                   id: generateId('MOV'), medicationId: product.id, medicationName: product.name,
                   batch: 'VENTA-TPV', type: 'OUT', quantity: quantity,
@@ -362,10 +405,17 @@ const Billing: React.FC<{ patients: Patient[], notes: ClinicalNote[], onUpdatePa
   const activeStats = getCurrentShiftStats();
 
   return (
-    <div className="max-w-[98%] mx-auto space-y-4 animate-in fade-in">
+    <div className={`max-w-[98%] mx-auto space-y-4 animate-in fade-in ${showTicketModal ? 'print:hidden' : ''}`}>
        {/* HEADER SUPERIOR */}
        <div className="bg-slate-900 text-white p-4 rounded-3xl shadow-lg flex justify-between items-center no-print border-b-4 border-blue-600">
           <div className="flex items-center gap-6">
+             <button 
+                onClick={() => navigate('/dashboard')}
+                className="flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-xl transition-colors font-medium text-sm border border-slate-700"
+             >
+                <ArrowDownLeft size={18} />
+                Volver al Monitor
+             </button>
              <div className={`flex items-center gap-3 px-5 py-2.5 rounded-2xl border ${currentShift ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-400' : 'bg-rose-500/20 border-rose-500/50 text-rose-400'}`}>
                 {currentShift ? <Unlock size={18}/> : <Lock size={18}/>}
                 <div>
@@ -792,8 +842,8 @@ const Billing: React.FC<{ patients: Patient[], notes: ClinicalNote[], onUpdatePa
 
        {/* MODAL TICKET / REIMPRESIÓN ... (Sin cambios) */}
        {showTicketModal && (lastTransaction || selectedTicket) && (
-          <div className="fixed inset-0 z-[600] bg-slate-900/90 backdrop-blur flex items-center justify-center p-4 animate-in fade-in no-print">
-             <div className="bg-white w-[80mm] rounded-[2rem] shadow-2xl p-8 flex flex-col items-center border border-white/20">
+          <div className="fixed inset-0 z-[600] bg-slate-900/90 backdrop-blur flex items-center justify-center p-4 animate-in fade-in print:bg-white print:p-0">
+             <div className="bg-white w-[80mm] rounded-[2rem] shadow-2xl p-8 flex flex-col items-center border border-white/20 print:shadow-none print:border-none print:m-0 print:w-full">
                 <ShieldCheck size={48} className="text-slate-900 mb-4" />
                 <h4 className="text-lg font-black uppercase tracking-tight">MedExpediente MX</h4>
                 <p className="text-[9px] font-bold text-slate-400 uppercase mb-6 tracking-widest">Comprobante Digital</p>
@@ -814,12 +864,23 @@ const Billing: React.FC<{ patients: Patient[], notes: ClinicalNote[], onUpdatePa
                 </div>
                 {(lastTransaction || selectedTicket)?.notes && <div className="w-full mt-4 p-2 bg-slate-50 text-[8px] font-medium uppercase text-center italic border border-slate-100 rounded-lg">{(lastTransaction || selectedTicket)?.notes}</div>}
                 <div className="mt-8 flex flex-col items-center opacity-30"><QrCode size={64} /><p className="text-[7px] font-black uppercase mt-4">Gracias por su preferencia</p></div>
-                <div className="grid grid-cols-2 gap-3 w-full mt-10">
+                <div className="grid grid-cols-2 gap-3 w-full mt-10 no-print">
                     <button onClick={() => window.print()} className="py-4 bg-slate-900 text-white rounded-2xl font-black text-[9px] uppercase tracking-widest shadow-xl flex items-center justify-center gap-2"><Printer size={14}/> Imprimir</button>
                     <button onClick={() => { setShowTicketModal(false); setLastTransaction(null); setSelectedTicket(null); }} className="py-4 bg-slate-100 text-slate-500 rounded-2xl font-black text-[9px] uppercase tracking-widest transition-all hover:bg-slate-200">Cerrar</button>
                 </div>
              </div>
           </div>
+       )}
+
+       {/* STRIPE PAYMENT MODAL */}
+       {showStripeModal && (
+           <PaymentModal
+               isOpen={true}
+               amount={stripeAmount}
+               description={`Pago de ${currentMethod} en Caja`}
+               onSuccess={handleStripeSuccess}
+               onClose={() => setShowStripeModal(false)}
+           />
        )}
     </div>
   );

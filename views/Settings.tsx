@@ -1,6 +1,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext';
 import { 
   User, 
   ShieldCheck, 
@@ -34,9 +35,12 @@ import {
   Server,
   Briefcase,
   Calendar,
-  Clock
+  Clock,
+  Lock
 } from 'lucide-react';
 import { DoctorInfo, ClinicDocument } from '../types';
+import { auth } from '../firebase';
+import { EmailAuthProvider, reauthenticateWithCredential, updatePassword } from 'firebase/auth';
 
 interface SettingsProps {
   doctorInfo: DoctorInfo;
@@ -53,6 +57,7 @@ const MOCK_REVIEWS = [
 
 const SettingsView: React.FC<SettingsProps> = ({ doctorInfo, onUpdateDoctor }) => {
   const location = useLocation();
+  const { session } = useAuth();
   const [profile, setProfile] = useState<DoctorInfo>({
       ...doctorInfo,
       allowReviews: doctorInfo.allowReviews !== undefined ? doctorInfo.allowReviews : true // Default to true if undefined
@@ -76,6 +81,14 @@ const SettingsView: React.FC<SettingsProps> = ({ doctorInfo, onUpdateDoctor }) =
       endHour: profile.schedule?.endHour || '17:00',
       slotDuration: profile.schedule?.slotDuration || 30
   });
+
+  // Password Change State
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [pwdError, setPwdError] = useState('');
+  const [pwdSuccess, setPwdSuccess] = useState('');
+  const [isChangingPwd, setIsChangingPwd] = useState(false);
 
   useEffect(() => {
       if (location.state && (location.state as any).initialTab) {
@@ -101,6 +114,49 @@ const SettingsView: React.FC<SettingsProps> = ({ doctorInfo, onUpdateDoctor }) =
       setSaveStatus('success');
       setTimeout(() => setSaveStatus('idle'), 3000);
     }, 800);
+  };
+
+  const handleChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setPwdError('');
+    setPwdSuccess('');
+
+    if (newPassword !== confirmPassword) {
+      setPwdError('Las contraseñas nuevas no coinciden.');
+      return;
+    }
+
+    if (newPassword.length < 6) {
+      setPwdError('La nueva contraseña debe tener al menos 6 caracteres.');
+      return;
+    }
+
+    setIsChangingPwd(true);
+    try {
+      const user = auth.currentUser;
+      if (!user || !user.email) throw new Error('No hay usuario autenticado.');
+
+      // Re-authenticate
+      const credential = EmailAuthProvider.credential(user.email, currentPassword);
+      await reauthenticateWithCredential(user, credential);
+
+      // Update password
+      await updatePassword(user, newPassword);
+      
+      setPwdSuccess('Contraseña actualizada exitosamente.');
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+    } catch (err: any) {
+      console.error(err);
+      if (err.code === 'auth/invalid-credential' || err.code === 'auth/wrong-password') {
+        setPwdError('La contraseña actual es incorrecta.');
+      } else {
+        setPwdError(err.message || 'Error al actualizar la contraseña.');
+      }
+    } finally {
+      setIsChangingPwd(false);
+    }
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
@@ -189,12 +245,37 @@ const SettingsView: React.FC<SettingsProps> = ({ doctorInfo, onUpdateDoctor }) =
       { id: 0, label: 'Dom' },
   ];
 
+  const { globalSettings } = useAuth();
+  const isPatient = profile.userType === 'Paciente';
+  const isSuperAdmin = profile.userType === 'Administrador';
+
+  const patientTabs = [
+    { id: 'profile', label: 'Datos Personales', icon: <User className="w-4 h-4" /> },
+    { id: 'avatar', label: 'Foto de Perfil', icon: <ImageIcon className="w-4 h-4" /> },
+    { id: 'security', label: 'Seguridad y Contraseña', icon: <ShieldCheck className="w-4 h-4" /> },
+  ];
+
+  const doctorTabs = [
+    { id: 'profile', label: 'Identidad Médica', icon: <User className="w-4 h-4" /> },
+    { id: 'schedule', label: 'Agenda y Horarios', icon: <Calendar className="w-4 h-4" /> },
+    { id: 'clinic', label: 'Práctica / Establecimiento', icon: <Building2 className="w-4 h-4" /> },
+    { id: 'docs', label: 'Documentación Legal', icon: <FileText className="w-4 h-4" /> },
+    { id: 'public_profile', label: 'Perfil Público / Muro', icon: <Globe className="w-4 h-4" /> },
+    { id: 'security', label: 'Seguridad y e.firma', icon: <ShieldCheck className="w-4 h-4" /> },
+  ];
+
+  const tabsToRender = isPatient ? patientTabs : doctorTabs;
+
   return (
     <div className="max-w-6xl mx-auto space-y-10 animate-in fade-in duration-500 pb-20">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
         <div>
-          <h1 className="text-4xl font-black text-slate-900 tracking-tight uppercase">Configuración de Identidad</h1>
-          <p className="text-slate-500 text-sm font-medium mt-1">Gestione sus credenciales legales, integración multi-clínica y su perfil público.</p>
+          <h1 className="text-4xl font-black text-slate-900 tracking-tight uppercase">
+            {isPatient ? 'Configuración de Cuenta' : 'Configuración de Identidad'}
+          </h1>
+          <p className="text-slate-500 text-sm font-medium mt-1">
+            {isPatient ? 'Gestione sus datos personales y preferencias.' : 'Gestione sus credenciales legales, integración multi-clínica y su perfil público.'}
+          </p>
         </div>
         <button 
           onClick={handleSave}
@@ -214,14 +295,7 @@ const SettingsView: React.FC<SettingsProps> = ({ doctorInfo, onUpdateDoctor }) =
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
         <div className="lg:col-span-3 space-y-3">
-          {[
-            { id: 'profile', label: 'Identidad Médica', icon: <User className="w-4 h-4" /> },
-            { id: 'schedule', label: 'Agenda y Horarios', icon: <Calendar className="w-4 h-4" /> },
-            { id: 'clinic', label: 'Práctica / Establecimiento', icon: <Building2 className="w-4 h-4" /> },
-            { id: 'docs', label: 'Documentación Legal', icon: <FileText className="w-4 h-4" /> },
-            { id: 'public_profile', label: 'Perfil Público / Muro', icon: <Globe className="w-4 h-4" /> },
-            { id: 'security', label: 'Seguridad y e.firma', icon: <ShieldCheck className="w-4 h-4" /> },
-          ].map(item => (
+          {tabsToRender.map(item => (
             <button
               key={item.id}
               onClick={() => setActiveTab(item.id as any)}
@@ -240,13 +314,73 @@ const SettingsView: React.FC<SettingsProps> = ({ doctorInfo, onUpdateDoctor }) =
         <div className="lg:col-span-9 space-y-8">
           <input type="file" ref={fileInputRef} className="hidden" onChange={handleFileUpload} accept="image/*,application/pdf" />
 
-          {activeTab === 'profile' && (
+          {/* PATIENT SPECIFIC TABS */}
+          {isPatient && activeTab === 'profile' && (
+            <div className="bg-white border border-slate-200 rounded-[3rem] p-12 shadow-sm space-y-12 animate-in slide-in-from-right-4">
+              <h3 className="text-xs font-black uppercase tracking-[0.2em] text-blue-600 flex items-center">
+                 <User className="w-5 h-5 mr-3" /> Datos Personales
+              </h3>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
+                <div className="col-span-full space-y-3">
+                  <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest ml-2">Nombre Completo</label>
+                  <input type="text" name="name" value={profile.name} onChange={handleInputChange} className="w-full p-6 bg-slate-50 border border-slate-200 rounded-3xl text-sm font-black text-slate-900 outline-none focus:bg-white focus:ring-4 focus:ring-blue-100 uppercase" />
+                </div>
+                <div className="space-y-3">
+                  <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest ml-2">Teléfono</label>
+                  <input type="text" name="phone" value={profile.phone || ''} onChange={handleInputChange} className="w-full p-5 bg-slate-50 border border-slate-200 rounded-3xl text-sm font-bold text-slate-700" placeholder="Ej. 55 1234 5678" />
+                </div>
+                <div className="space-y-3">
+                  <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest ml-2">Correo Electrónico</label>
+                  <input type="email" name="email" value={profile.email || ''} onChange={handleInputChange} className="w-full p-5 bg-slate-50 border border-slate-200 rounded-3xl text-sm font-bold text-slate-700" placeholder="correo@ejemplo.com" />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {isPatient && activeTab === 'avatar' && (
+             <div className="bg-white border border-slate-200 rounded-[3rem] p-12 shadow-sm space-y-12 animate-in slide-in-from-right-4">
+                <h3 className="text-xs font-black uppercase tracking-[0.2em] text-blue-600 flex items-center">
+                   <ImageIcon className="w-5 h-5 mr-3" /> Foto de Perfil
+                </h3>
+                <div className="flex flex-col items-center justify-center p-10 border-2 border-dashed border-slate-200 rounded-3xl bg-slate-50">
+                    {profile.avatarUrl ? (
+                        <div className="relative mb-6">
+                            <img src={profile.avatarUrl} alt="Avatar" className="w-32 h-32 rounded-full object-cover border-4 border-white shadow-lg" />
+                            <button onClick={() => setProfile({...profile, avatarUrl: undefined})} className="absolute -top-2 -right-2 bg-red-500 text-white p-2 rounded-full shadow-md hover:bg-red-600 transition-colors">
+                                <Trash2 size={16} />
+                            </button>
+                        </div>
+                    ) : (
+                        <div className="w-32 h-32 rounded-full bg-slate-200 flex items-center justify-center mb-6 shadow-inner">
+                            <User size={48} className="text-slate-400" />
+                        </div>
+                    )}
+                    <button onClick={() => { setUploadType('avatar'); fileInputRef.current?.click(); }} className="px-6 py-3 bg-white border border-slate-200 text-slate-700 rounded-xl text-xs font-black uppercase tracking-widest hover:bg-slate-50 transition-all shadow-sm flex items-center gap-2">
+                        <Upload size={16} /> {profile.avatarUrl ? 'Cambiar Foto' : 'Subir Foto'}
+                    </button>
+                    <p className="text-xs text-slate-400 mt-4 text-center max-w-xs">Sube una foto clara de tu rostro. Formatos: JPG, PNG. Máx 5MB.</p>
+                </div>
+             </div>
+          )}
+
+          {/* DOCTOR SPECIFIC TABS */}
+          {!isPatient && activeTab === 'profile' && (
             <div className="bg-white border border-slate-200 rounded-[3rem] p-12 shadow-sm space-y-12 animate-in slide-in-from-right-4">
               <h3 className="text-xs font-black uppercase tracking-[0.2em] text-blue-600 flex items-center">
                  <GraduationCap className="w-5 h-5 mr-3" /> Credenciales Académicas y Legales
               </h3>
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
+                <div className="col-span-full space-y-3">
+                  <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest ml-2">Tipo de Usuario (Rol en el Sistema)</label>
+                  <select name="userType" value={profile.userType || 'Médico'} onChange={handleInputChange} className="w-full p-6 bg-slate-50 border border-slate-200 rounded-3xl text-sm font-black text-slate-900 outline-none focus:bg-white focus:ring-4 focus:ring-blue-100 uppercase">
+                    <option value="Médico">Médico (Acceso Total)</option>
+                    <option value="Paciente">Paciente (Solo Telemedicina)</option>
+                    <option value="Recursos Humanos">Recursos Humanos (Solo RRHH)</option>
+                    <option value="Administrador">Administrador (Acceso Total)</option>
+                  </select>
+                </div>
                 <div className="col-span-full space-y-3">
                   <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest ml-2">Nombre Completo (como aparece en su Cédula)</label>
                   <input type="text" name="name" value={profile.name} onChange={handleInputChange} className="w-full p-6 bg-slate-50 border border-slate-200 rounded-3xl text-sm font-black text-slate-900 outline-none focus:bg-white focus:ring-4 focus:ring-blue-100 uppercase" />
@@ -267,7 +401,7 @@ const SettingsView: React.FC<SettingsProps> = ({ doctorInfo, onUpdateDoctor }) =
             </div>
           )}
 
-          {activeTab === 'schedule' && (
+          {!isPatient && activeTab === 'schedule' && (
              <div className="bg-white border border-slate-200 rounded-[3rem] p-12 shadow-sm space-y-12 animate-in slide-in-from-right-4">
                  <h3 className="text-xs font-black uppercase tracking-[0.2em] text-blue-600 flex items-center">
                     <Clock className="w-5 h-5 mr-3" /> Configuración de Agenda y Disponibilidad
@@ -307,6 +441,21 @@ const SettingsView: React.FC<SettingsProps> = ({ doctorInfo, onUpdateDoctor }) =
                                  <option value={45}>45 Min</option>
                                  <option value={60}>60 Min</option>
                              </select>
+                         </div>
+                     </div>
+
+                     <div className="space-y-2">
+                         <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest ml-2">Precio de Consulta (MXN)</label>
+                         <div className="relative">
+                             <span className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-400 font-black">$</span>
+                             <input 
+                                 type="number" 
+                                 name="consultationPrice" 
+                                 value={profile.consultationPrice || ''} 
+                                 onChange={(e) => setProfile({ ...profile, consultationPrice: Number(e.target.value) })} 
+                                 className="w-full pl-12 p-5 bg-slate-50 border border-slate-200 rounded-3xl text-xl font-black text-slate-900 outline-none focus:bg-white focus:ring-4 focus:ring-blue-100" 
+                                 placeholder="Ej. 800"
+                             />
                          </div>
                      </div>
                      
@@ -368,22 +517,31 @@ const SettingsView: React.FC<SettingsProps> = ({ doctorInfo, onUpdateDoctor }) =
                   />
               </div>
 
+              {isSuperAdmin && (
+                <div className="bg-blue-50 border border-blue-100 p-6 rounded-2xl">
+                  <p className="text-[10px] text-blue-800 font-medium uppercase leading-relaxed">
+                    <Info size={14} className="inline mr-2 -mt-0.5"/>
+                    Como Super Administrador, la información de la clínica se gestiona desde el Panel Super Admin en la pestaña "Configuración SaaS".
+                  </p>
+                </div>
+              )}
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
                 <div className="col-span-full space-y-3">
                   <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest ml-2">Nombre Comercial / Clínica</label>
-                  <input type="text" name="hospital" value={profile.hospital} onChange={handleInputChange} className="w-full p-6 bg-slate-50 border border-slate-200 rounded-3xl text-sm font-black text-slate-800 uppercase" />
+                  <input type="text" name="hospital" value={isSuperAdmin ? globalSettings?.clinicName : profile.hospital} onChange={handleInputChange} disabled={isSuperAdmin} className="w-full p-6 bg-slate-50 border border-slate-200 rounded-3xl text-sm font-black text-slate-800 uppercase disabled:opacity-50" />
                 </div>
                 <div className="col-span-full space-y-3">
                   <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest ml-2">Dirección Fiscal / Operativa (Aparecerá en Recetas)</label>
-                  <input type="text" name="address" value={profile.address} onChange={handleInputChange} className="w-full p-5 bg-slate-50 border border-slate-200 rounded-3xl text-sm font-medium uppercase" />
+                  <input type="text" name="address" value={isSuperAdmin ? globalSettings?.address : profile.address} onChange={handleInputChange} disabled={isSuperAdmin} className="w-full p-5 bg-slate-50 border border-slate-200 rounded-3xl text-sm font-medium uppercase disabled:opacity-50" />
                 </div>
                 <div className="space-y-3">
                   <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest ml-2 flex items-center"><Phone className="w-3.5 h-3.5 mr-2" /> Teléfono de Urgencias / Citas</label>
-                  <input type="text" name="phone" value={profile.phone} onChange={handleInputChange} className="w-full p-5 bg-slate-50 border border-slate-200 rounded-3xl text-sm font-black text-slate-700" />
+                  <input type="text" name="phone" value={isSuperAdmin ? globalSettings?.phone : profile.phone} onChange={handleInputChange} disabled={isSuperAdmin} className="w-full p-5 bg-slate-50 border border-slate-200 rounded-3xl text-sm font-black text-slate-700 disabled:opacity-50" />
                 </div>
                 <div className="space-y-3">
                   <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest ml-2 flex items-center"><Bell className="w-3.5 h-3.5 mr-2" /> Email Profesional</label>
-                  <input type="email" name="email" value={profile.email} onChange={handleInputChange} className="w-full p-5 bg-slate-50 border border-slate-200 rounded-3xl text-sm font-bold text-slate-700" />
+                  <input type="email" name="email" value={isSuperAdmin ? globalSettings?.email : profile.email} onChange={handleInputChange} disabled={isSuperAdmin} className="w-full p-5 bg-slate-50 border border-slate-200 rounded-3xl text-sm font-bold text-slate-700 disabled:opacity-50" />
                 </div>
               </div>
 
@@ -702,22 +860,94 @@ const SettingsView: React.FC<SettingsProps> = ({ doctorInfo, onUpdateDoctor }) =
           )}
 
           {activeTab === 'security' && (
-            <div className="bg-slate-900 border border-slate-800 rounded-[3rem] p-12 shadow-2xl space-y-10 relative overflow-hidden group animate-in slide-in-from-right-4">
-              <Key className="absolute -right-8 -bottom-8 w-48 h-48 text-white opacity-5 group-hover:scale-110 transition-transform" />
-              <div className="flex items-center justify-between relative z-10">
-                <h3 className="text-2xl font-black text-white flex items-center uppercase tracking-tight">
-                  <ShieldCheck className="w-7 h-7 mr-4 text-emerald-400" /> Firma Electrónica (e.firma)
-                </h3>
-              </div>
-              <div className="bg-white/5 border border-white/10 rounded-[2.5rem] p-10 flex flex-col md:flex-row items-center gap-10 relative z-10">
-                <div className="w-20 h-20 bg-blue-600/20 rounded-3xl flex items-center justify-center text-blue-400 shadow-inner">
-                  <PenTool className="w-10 h-10" />
+            <div className="space-y-8 animate-in slide-in-from-right-4">
+              {!isPatient && (
+                <div className="bg-slate-900 border border-slate-800 rounded-[3rem] p-12 shadow-2xl space-y-10 relative overflow-hidden group">
+                  <Key className="absolute -right-8 -bottom-8 w-48 h-48 text-white opacity-5 group-hover:scale-110 transition-transform" />
+                  <div className="flex items-center justify-between relative z-10">
+                    <h3 className="text-2xl font-black text-white flex items-center uppercase tracking-tight">
+                      <ShieldCheck className="w-7 h-7 mr-4 text-emerald-400" /> Firma Electrónica (e.firma)
+                    </h3>
+                  </div>
+                  <div className="bg-white/5 border border-white/10 rounded-[2.5rem] p-10 flex flex-col md:flex-row items-center gap-10 relative z-10">
+                    <div className="w-20 h-20 bg-blue-600/20 rounded-3xl flex items-center justify-center text-blue-400 shadow-inner">
+                      <PenTool className="w-10 h-10" />
+                    </div>
+                    <div className="flex-1 text-center md:text-left space-y-2">
+                      <p className="text-lg font-black text-white uppercase tracking-tight">Sello Digital Vigente</p>
+                      <p className="text-[11px] text-emerald-400 uppercase font-black tracking-[0.2em]">Habilitado para Recetas de Medicamentos Controlados</p>
+                    </div>
+                    <button className="px-10 py-4 bg-white text-slate-900 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-blue-600 hover:text-white transition-all shadow-xl">Actualizar Certificado</button>
+                  </div>
                 </div>
-                <div className="flex-1 text-center md:text-left space-y-2">
-                  <p className="text-lg font-black text-white uppercase tracking-tight">Sello Digital Vigente</p>
-                  <p className="text-[11px] text-emerald-400 uppercase font-black tracking-[0.2em]">Habilitado para Recetas de Medicamentos Controlados</p>
+              )}
+
+              <div className="bg-white border border-slate-200 rounded-[3rem] p-12 shadow-sm space-y-10 relative overflow-hidden">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight flex items-center gap-3">
+                      <Lock size={20} className="text-blue-600" /> Cambiar Contraseña
+                    </h3>
+                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">Actualiza tu contraseña de acceso</p>
+                  </div>
                 </div>
-                <button className="px-10 py-4 bg-white text-slate-900 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-blue-600 hover:text-white transition-all shadow-xl">Actualizar Certificado</button>
+
+                {pwdError && (
+                  <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-2xl text-sm font-medium mb-6 text-left">
+                    {pwdError}
+                  </div>
+                )}
+                {pwdSuccess && (
+                  <div className="bg-emerald-50 border border-emerald-200 text-emerald-700 px-4 py-3 rounded-2xl text-sm font-medium mb-6 text-left">
+                    {pwdSuccess}
+                  </div>
+                )}
+
+                <form onSubmit={handleChangePassword} className="space-y-6 max-w-xl">
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2 mb-2">Contraseña Actual</label>
+                    <input 
+                      type="password" 
+                      required
+                      value={currentPassword}
+                      onChange={(e) => setCurrentPassword(e.target.value)}
+                      className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-medium text-slate-700 focus:ring-2 focus:ring-blue-500 outline-none transition-all"
+                      placeholder="Ingresa tu contraseña actual"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2 mb-2">Nueva Contraseña</label>
+                    <input 
+                      type="password" 
+                      required
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-medium text-slate-700 focus:ring-2 focus:ring-blue-500 outline-none transition-all"
+                      placeholder="Mínimo 6 caracteres"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2 mb-2">Confirmar Nueva Contraseña</label>
+                    <input 
+                      type="password" 
+                      required
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-medium text-slate-700 focus:ring-2 focus:ring-blue-500 outline-none transition-all"
+                      placeholder="Repite la nueva contraseña"
+                    />
+                  </div>
+                  
+                  <div className="pt-4">
+                    <button 
+                      type="submit"
+                      disabled={isChangingPwd}
+                      className="px-8 py-4 bg-blue-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-blue-700 transition-all shadow-lg shadow-blue-600/20 disabled:opacity-50"
+                    >
+                      {isChangingPwd ? 'Actualizando...' : 'Actualizar Contraseña'}
+                    </button>
+                  </div>
+                </form>
               </div>
             </div>
           )}

@@ -9,23 +9,30 @@ import {
 } from 'lucide-react';
 import { Patient, ModuleType, PatientStatus } from '../types';
 import { DEFAULT_INFRASTRUCTURE } from '../constants';
+import { useAuth } from '../contexts/AuthContext';
+import { db } from '../firebase';
+import { doc, onSnapshot, setDoc, updateDoc } from 'firebase/firestore';
 
 interface HospitalMonitorProps {
   patients: Patient[];
   onUpdatePatient?: (p: Patient) => void;
+  staffList?: any[]; // Keep any logic for now since type exists dynamically
+  onUpdateStaffList?: (s: any[]) => void;
 }
 
-type HospitalArea = 'Medicina Interna' | 'Cirugía' | 'Obstetricia' | 'Pediatría' | 'UCI';
+type HospitalArea = 'Medicina Interna' | 'Cirugía' | 'Obstetricia' | 'Pediatría' | 'UCI' | 'Quirófano';
 
 const AREA_CONFIG: Record<HospitalArea, { color: string, prefix: string, icon: any, module: ModuleType }> = {
   'Medicina Interna': { color: 'blue', prefix: 'MI', icon: <Thermometer className="w-4 h-4" />, module: ModuleType.HOSPITALIZATION },
   'Cirugía': { color: 'indigo', prefix: 'CX', icon: <Activity className="w-4 h-4" />, module: ModuleType.HOSPITALIZATION },
   'Obstetricia': { color: 'purple', prefix: 'OB', icon: <Baby className="w-4 h-4" />, module: ModuleType.HOSPITALIZATION },
   'Pediatría': { color: 'teal', prefix: 'PD', icon: <Heart className="w-4 h-4" />, module: ModuleType.HOSPITALIZATION },
-  'UCI': { color: 'rose', prefix: 'ICU', icon: <HeartPulse className="w-4 h-4" />, module: ModuleType.HOSPITALIZATION }
+  'UCI': { color: 'rose', prefix: 'ICU', icon: <HeartPulse className="w-4 h-4" />, module: ModuleType.HOSPITALIZATION },
+  'Quirófano': { color: 'emerald', prefix: 'Q', icon: <Activity className="w-4 h-4" />, module: ModuleType.HOSPITALIZATION }
 };
 
-const HospitalMonitor: React.FC<HospitalMonitorProps> = ({ patients, onUpdatePatient }) => {
+const HospitalMonitor: React.FC<HospitalMonitorProps> = (props) => {
+  const { patients, onUpdatePatient, staffList } = props;
   const navigate = useNavigate();
   const location = useLocation();
   
@@ -34,11 +41,34 @@ const HospitalMonitor: React.FC<HospitalMonitorProps> = ({ patients, onUpdatePat
   const [patientInTransit, setPatientInTransit] = useState<Patient | null>(null);
   const [isEditMode, setIsEditMode] = useState(false);
 
-  // Estado de infraestructura persistente
-  const [infra, setInfra] = useState(() => {
-    const saved = localStorage.getItem('med_infra_v_prod');
-    return saved ? JSON.parse(saved) : DEFAULT_INFRASTRUCTURE;
-  });
+  const { user } = useAuth();
+  const [infra, setInfra] = useState<any>(DEFAULT_INFRASTRUCTURE);
+
+  useEffect(() => {
+    if (!user?.clinicId) return;
+    const unsub = onSnapshot(doc(db, 'clinics', user.clinicId), (docSnap) => {
+      if (docSnap.exists() && docSnap.data().infrastructure) {
+        setInfra(docSnap.data().infrastructure);
+      } else {
+        // Initialize if not exists
+        setDoc(doc(db, 'clinics', user.clinicId), { infrastructure: DEFAULT_INFRASTRUCTURE }, { merge: true });
+        setInfra(DEFAULT_INFRASTRUCTURE);
+      }
+    });
+    return () => unsub();
+  }, [user?.clinicId]);
+
+  // Save infra to Firestore when it changes (only if edit mode is active to avoid loops)
+  const saveInfraToDb = async (newInfra: any) => {
+    if (!user?.clinicId) return;
+    try {
+      await updateDoc(doc(db, 'clinics', user.clinicId), {
+        infrastructure: newInfra
+      });
+    } catch (error) {
+      console.error("Error saving infrastructure:", error);
+    }
+  };
 
   // Estado del Modal de Gestión
   const [modalConfig, setModalConfig] = useState<{
@@ -54,10 +84,6 @@ const HospitalMonitor: React.FC<HospitalMonitorProps> = ({ patients, onUpdatePat
     contextModule: 'outpatient',
     inputValue: ''
   });
-
-  useEffect(() => {
-    localStorage.setItem('med_infra_v_prod', JSON.stringify(infra));
-  }, [infra]);
 
   useEffect(() => {
     if (location.state?.patientToAssign) {
@@ -133,10 +159,75 @@ const HospitalMonitor: React.FC<HospitalMonitorProps> = ({ patients, onUpdatePat
           [contextArea]: updateList(prev.hospitalization[contextArea])
         };
       }
+      
+      saveInfraToDb(newState);
       return newState;
     });
 
     setModalConfig(prev => ({ ...prev, isOpen: false }));
+  };
+
+  const handleAssignStaff = async (infraId: string, staffId: string) => {
+    if (!user?.clinicId) return;
+    const newAssignments = { ...infra?.assignments };
+    if (staffId) {
+      newAssignments[infraId] = staffId;
+      
+      // Auto-Link to Staff Management
+      let area = '';
+      if (infraId.startsWith('outpatient_')) area = 'Consulta Externa';
+      else if (infraId.startsWith('emergency_')) area = 'Urgencias';
+      else if (infraId.includes('_UCI_') || infraId.includes('_ICU_')) area = 'UCI';
+      else if (infraId.includes('_Quirófano_')) area = 'Quirófano';
+      else if (infraId.startsWith('hosp_')) area = 'Hospitalización';
+      
+      if (area && props.staffList && props.onUpdateStaffList) {
+          const staffArray = [...props.staffList];
+          const staffIdx = staffArray.findIndex(s => s.id === staffId);
+          if (staffIdx !== -1) {
+              const staff = staffArray[staffIdx];
+              if (!staff.assignedArea) staff.assignedArea = [];
+              if (!staff.assignedArea.includes(area)) {
+                  staffArray[staffIdx] = { ...staff, assignedArea: [...staff.assignedArea, area] };
+                  props.onUpdateStaffList(staffArray);
+              }
+              
+              try {
+                  const savedShifts = localStorage.getItem('med_work_shifts_v2');
+                  let currentShifts = savedShifts ? JSON.parse(savedShifts) : [];
+                  const today = new Date();
+                  const dateStr = today.toISOString().split('T')[0];
+                  
+                  const activeShiftId = staff.id + "_auto_" + dateStr;
+                  const hasShift = currentShifts.some((shift: any) => shift.staffId === staff.id && shift.date === dateStr);
+                  
+                  if (!hasShift) {
+                     currentShifts.push({
+                         id: activeShiftId,
+                         staffId: staff.id,
+                         area: area,
+                         date: dateStr,
+                         startTime: "00:00",
+                         endTime: "23:59"
+                     });
+                     localStorage.setItem('med_work_shifts_v2', JSON.stringify(currentShifts));
+                  }
+              } catch(e) {}
+          }
+      }
+    } else {
+      delete newAssignments[infraId];
+    }
+    
+    setInfra((prev: any) => ({ ...prev, assignments: newAssignments }));
+    
+    try {
+      await updateDoc(doc(db, 'clinics', user.clinicId), {
+        'infrastructure.assignments': newAssignments
+      });
+    } catch (error) {
+      console.error("Error saving assignment:", error);
+    }
   };
 
   const handleCompleteMove = (newBedId: string, targetModule: ModuleType) => {
@@ -151,106 +242,227 @@ const HospitalMonitor: React.FC<HospitalMonitorProps> = ({ patients, onUpdatePat
     window.history.replaceState({}, document.title);
   };
 
+  const getOccupantsInfo = (id: string, module: ModuleType) => {
+    const occupants = patients.filter(p => 
+      (p.bedNumber === id && p.assignedModule === module) || 
+      (p.transitTargetBed === id && p.transitTargetModule === module)
+    );
+
+    // Active patient (not just waiting, could be looking to transit)
+    const activePatient = occupants.find(p => 
+        (p.bedNumber === id && p.status !== PatientStatus.WAITING)
+    );
+
+    const transitTargetPatients = occupants.filter(p => 
+        p.transitTargetBed === id && p.transitTargetModule === module && p.status === PatientStatus.TRANSIT
+    );
+    
+    // waiting patients (already assigned to this bed/consultorio but waiting)
+    const waitingPatients = occupants.filter(p => 
+        p.bedNumber === id && p.assignedModule === module && p.status === PatientStatus.WAITING
+    );
+
+    const isSourceOfTransit = activePatient?.status === PatientStatus.TRANSIT;
+
+    return { activePatient, transitTargetPatients, waitingPatients, isSourceOfTransit };
+  };
+
   const handleConfirmArrival = (patient: Patient) => {
     if (!onUpdatePatient) return;
+
+    // Check if the bed/consultorio is already occupied by an active patient
+    const isOccupied = patients.some(otherPatient => 
+       otherPatient.id !== patient.id && 
+       otherPatient.bedNumber === patient.transitTargetBed &&
+       otherPatient.assignedModule === patient.transitTargetModule &&
+       otherPatient.status !== PatientStatus.TRANSIT && 
+       otherPatient.status !== PatientStatus.WAITING &&
+       otherPatient.status !== PatientStatus.ATTENDED
+    );
+
     onUpdatePatient({
       ...patient,
       bedNumber: patient.transitTargetBed,
       assignedModule: patient.transitTargetModule || patient.assignedModule,
-      transitTargetBed: undefined,
       transitTargetModule: undefined,
-      status: patient.transitTargetModule === ModuleType.HOSPITALIZATION 
-        ? PatientStatus.ADMITTED 
-        : PatientStatus.IN_CONSULTATION
+      status: isOccupied 
+        ? PatientStatus.WAITING 
+        : (patient.transitTargetModule === ModuleType.HOSPITALIZATION 
+            ? PatientStatus.ADMITTED 
+            : PatientStatus.IN_CONSULTATION)
     });
   };
 
-  const getOccupant = (id: string, module: ModuleType) => {
-    const patient = patients.find(p => 
-      (p.bedNumber === id && p.assignedModule === module) || 
-      (p.transitTargetBed === id && p.transitTargetModule === module)
-    );
-    if (!patient) return null;
-
-    const isSourceOfTransit = patient.bedNumber === id && patient.assignedModule === module && patient.status === PatientStatus.TRANSIT;
-    const isTargetOfTransit = patient.transitTargetBed === id && patient.transitTargetModule === module && patient.status === PatientStatus.TRANSIT;
-
-    return { patient, isSourceOfTransit, isTargetOfTransit };
+  const handleCancelTransit = (patient: Patient) => {
+    if (!onUpdatePatient) return;
+    onUpdatePatient({
+      ...patient,
+      transitTargetBed: undefined,
+      transitTargetModule: undefined,
+      status: patient.bedNumber ? (patient.assignedModule === ModuleType.HOSPITALIZATION ? PatientStatus.ADMITTED : PatientStatus.IN_CONSULTATION) : PatientStatus.WAITING
+    });
   };
 
   const renderCard = (id: string, module: ModuleType, themeColor: string) => {
-    const occupant = getOccupant(id, module);
-    const p = occupant?.patient;
-    const isTransit = occupant?.isSourceOfTransit || occupant?.isTargetOfTransit;
+    const { activePatient, transitTargetPatients, waitingPatients, isSourceOfTransit } = getOccupantsInfo(id, module);
+    const hasAnyPatient = activePatient || transitTargetPatients.length > 0 || waitingPatients.length > 0;
     
     return (
       <div 
         key={id}
-        onClick={() => !p && !isEditMode && patientInTransit && handleCompleteMove(id, module)}
-        className={`relative h-60 rounded-[2.5rem] border-2 p-6 flex flex-col justify-between transition-all group ${
-          p ? (isTransit ? 'bg-amber-50 border-amber-400 border-dashed' : 'bg-slate-900 border-slate-900 shadow-xl') : 
+        onClick={() => !isEditMode && patientInTransit && handleCompleteMove(id, module)}
+        className={`relative h-auto min-h-[15rem] rounded-[2.5rem] border-2 p-6 flex flex-col justify-between transition-all group ${
+          hasAnyPatient ? (isSourceOfTransit ? 'bg-amber-50 border-amber-400 border-dashed' : 'bg-slate-900 border-slate-900 shadow-xl') : 
           patientInTransit ? `bg-${themeColor}-50 border-${themeColor}-400 border-dashed cursor-pointer scale-105` : 'bg-slate-50 border-slate-100'
         }`}
       >
-        <div className="flex justify-between items-start">
-          <span className={`text-[10px] font-black ${p ? (isTransit ? 'text-amber-600' : 'text-blue-400') : 'text-slate-300'}`}>{id}</span>
-          {isEditMode && !p && (
-            <div className="flex gap-2">
-              <button 
-                onClick={(e) => { e.stopPropagation(); handleOpenRename(id, module === ModuleType.OUTPATIENT ? 'outpatient' : module === ModuleType.EMERGENCY ? 'emergency' : 'hosp', module === ModuleType.HOSPITALIZATION ? activeHospArea : undefined); }} 
-                className="p-1.5 bg-white rounded-lg shadow-sm text-slate-400 hover:text-blue-600 border border-slate-100"
-              >
-                <Edit2 size={12}/>
-              </button>
-              <button 
-                onClick={(e) => { e.stopPropagation(); handleOpenDelete(id, module === ModuleType.OUTPATIENT ? 'outpatient' : module === ModuleType.EMERGENCY ? 'emergency' : 'hosp', module === ModuleType.HOSPITALIZATION ? activeHospArea : undefined); }} 
-                className="p-1.5 bg-white rounded-lg shadow-sm text-slate-400 hover:text-rose-600 border border-slate-100"
-              >
-                <Trash2 size={12}/>
-              </button>
-            </div>
-          )}
-          {p && !isTransit && (
-            <button onClick={(e) => { e.stopPropagation(); setPatientInTransit(p); }} className="text-white/40 hover:text-white"><MoveHorizontal size={14} /></button>
-          )}
-        </div>
+        {(() => {
+            let assignmentKey = '';
+            if (module === ModuleType.OUTPATIENT) assignmentKey = `outpatient_${id}`;
+            else if (module === ModuleType.EMERGENCY) assignmentKey = `emergency_${id}`;
+            else if (module === ModuleType.HOSPITALIZATION) assignmentKey = `hosp_${activeHospArea}_${id}`;
+            
+            const assignedStaffId = infra?.assignments?.[assignmentKey];
+            const staffArray = staffList || [];
+            const staffMember = staffArray.find((s: any) => s.id === assignedStaffId);
 
-        {p ? (
-          <div className="space-y-3">
-             <div className="space-y-1">
-                <p className={`text-[11px] font-black uppercase truncate ${isTransit ? 'text-amber-900' : 'text-white'}`}>{p.name}</p>
-                {occupant.isSourceOfTransit && (
-                  <div className="flex items-center gap-1.5 px-2 py-1 bg-amber-600 text-white rounded-lg text-[7px] font-black uppercase shadow-sm">
-                    <LogOut size={8} /> Saliendo hacia: {p.transitTargetBed}
+            return (
+                <div className="flex flex-col mb-4">
+                  <div className="flex justify-between items-start">
+                    <div className="flex flex-col">
+                      <span className={`text-[10px] font-black ${hasAnyPatient ? (isSourceOfTransit ? 'text-amber-600' : 'text-blue-400') : 'text-slate-300'}`}>{id}</span>
+                      {!isEditMode && staffMember && (
+                        <span className={`text-[8px] font-bold uppercase mt-1 ${hasAnyPatient ? 'text-slate-400' : 'text-blue-600'}`}>
+                          {staffMember.name}
+                        </span>
+                      )}
+                    </div>
+                    {isEditMode && !hasAnyPatient && (
+                      <div className="flex gap-2">
+                        <button 
+                          onClick={(e) => { e.stopPropagation(); handleOpenRename(id, module === ModuleType.OUTPATIENT ? 'outpatient' : module === ModuleType.EMERGENCY ? 'emergency' : 'hosp', module === ModuleType.HOSPITALIZATION ? activeHospArea : undefined); }} 
+                          className="p-1.5 bg-white rounded-lg shadow-sm text-slate-400 hover:text-blue-600 border border-slate-100"
+                        >
+                          <Edit2 size={12}/>
+                        </button>
+                        <button 
+                          onClick={(e) => { e.stopPropagation(); handleOpenDelete(id, module === ModuleType.OUTPATIENT ? 'outpatient' : module === ModuleType.EMERGENCY ? 'emergency' : 'hosp', module === ModuleType.HOSPITALIZATION ? activeHospArea : undefined); }} 
+                          className="p-1.5 bg-white rounded-lg shadow-sm text-slate-400 hover:text-rose-600 border border-slate-100"
+                        >
+                          <Trash2 size={12}/>
+                        </button>
+                      </div>
+                    )}
+                    {activePatient && !isSourceOfTransit && (
+                      <button onClick={(e) => { e.stopPropagation(); setPatientInTransit(activePatient); }} className="text-white/40 hover:text-white"><MoveHorizontal size={14} /></button>
+                    )}
                   </div>
-                )}
-                {occupant.isTargetOfTransit && (
-                  <div className="flex items-center gap-1.5 px-2 py-1 bg-amber-200 text-amber-900 rounded-lg text-[7px] font-black uppercase animate-pulse">
-                    <Truck size={8} /> Por arribar...
-                  </div>
-                )}
-             </div>
+                  
+                  {isEditMode && (
+                      <div className="mt-4" onClick={(e) => e.stopPropagation()}>
+                         <select 
+                           value={assignedStaffId || ''}
+                           onChange={(e) => handleAssignStaff(assignmentKey, e.target.value)}
+                           className="w-full text-[9px] p-2 bg-white border border-slate-200 rounded-xl font-bold text-slate-600"
+                         >
+                           <option value="">+ Asignar Personal</option>
+                           {staffArray.filter((s:any) => s.assignedArea && (
+                             (module === ModuleType.OUTPATIENT && s.assignedArea.includes('Consulta Externa')) ||
+                             (module === ModuleType.EMERGENCY && s.assignedArea.includes('Urgencias')) ||
+                             (module === ModuleType.HOSPITALIZATION && s.assignedArea.includes(activeHospArea === 'UCI' ? 'UCI' : activeHospArea === 'Quirófano' ? 'Quirófano' : 'Hospitalización'))
+                           )).map((s:any) => (
+                             <option key={s.id} value={s.id}>{s.name} - {s.role}</option>
+                           ))}
+                         </select>
+                      </div>
+                  )}
+                </div>
+            );
+        })()}
 
-             <div className="flex gap-2">
-                {occupant.isTargetOfTransit ? (
-                  <button 
-                    onClick={(e) => { e.stopPropagation(); handleConfirmArrival(p); }} 
-                    className="w-full py-3 bg-amber-600 text-white rounded-xl text-[8px] font-black uppercase flex items-center justify-center gap-2 shadow-lg hover:bg-slate-900 transition-all"
-                  >
-                    <Check size={12} /> Confirmar Arribo
-                  </button>
-                ) : occupant.isSourceOfTransit ? (
-                  <div className="w-full py-2.5 bg-slate-900/5 text-slate-400 border border-dashed border-slate-200 rounded-xl text-[8px] font-black uppercase flex items-center justify-center">Bloqueado por Traslado</div>
-                ) : (
-                  <>
-                    <button onClick={(e) => { e.stopPropagation(); navigate(`/patient/${p.id}`); }} className="flex-1 py-2 bg-white/10 text-white rounded-xl text-[8px] font-black uppercase hover:bg-white/20">Ficha</button>
-                    <button onClick={(e) => { e.stopPropagation(); navigate(`/patient/${p.id}/note/${module === ModuleType.EMERGENCY ? 'emergency' : 'evolution'}`); }} className={`flex-1 py-2 bg-${themeColor}-600 text-white rounded-xl text-[8px] font-black uppercase hover:opacity-80`}>Nota</button>
-                  </>
-                )}
-             </div>
+        {hasAnyPatient ? (
+          <div className="space-y-4">
+             {/* Active Patient */}
+             {activePatient && (
+               <div className="space-y-2 border-b border-white/10 pb-4">
+                  <div className="flex gap-2 items-center justify-between">
+                    <p className={`text-xs font-black uppercase truncate ${isSourceOfTransit ? 'text-amber-900' : 'text-white'}`}>{activePatient.name}</p>
+                    <span className="text-[8px] px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-300 font-bold uppercase">Activo</span>
+                  </div>
+                  {isSourceOfTransit && (
+                    <div className="flex items-center gap-1.5 px-2 py-1 bg-amber-600 text-white rounded-lg text-[7px] font-black uppercase shadow-sm">
+                      <LogOut size={8} /> Saliendo hacia: {activePatient.transitTargetBed}
+                    </div>
+                  )}
+
+                  {!isSourceOfTransit && (
+                    <div className="flex gap-2">
+                      <button onClick={(e) => { e.stopPropagation(); navigate(`/patient/${activePatient.id}`); }} className="flex-1 py-2 bg-white/10 text-white rounded-xl text-[8px] font-black uppercase hover:bg-white/20">Ficha</button>
+                      <button onClick={(e) => { e.stopPropagation(); navigate(`/patient/${activePatient.id}/note/${module === ModuleType.EMERGENCY ? 'emergency' : 'evolution'}`); }} className={`flex-1 py-2 bg-${themeColor}-600 text-white rounded-xl text-[8px] font-black uppercase hover:opacity-80`}>Nota</button>
+                    </div>
+                  )}
+               </div>
+             )}
+
+             {/* Waiting List */}
+             {waitingPatients.length > 0 && (
+               <div className="space-y-2">
+                 <p className="text-[8px] text-white/50 uppercase tracking-widest font-bold">Pacientes en Espera ({waitingPatients.length})</p>
+                 {waitingPatients.map(wp => (
+                    <div key={wp.id} className="flex flex-col gap-1 bg-white/5 p-2 rounded-xl">
+                      <p className="text-[10px] text-white/80 font-bold truncate">{wp.name}</p>
+                      <div className="flex gap-2">
+                        <button 
+                          onClick={(e) => { 
+                            e.stopPropagation(); 
+                            if (!activePatient) {
+                              onUpdatePatient?.({ ...wp, status: module === ModuleType.HOSPITALIZATION ? PatientStatus.ADMITTED : PatientStatus.IN_CONSULTATION });
+                            }
+                          }}
+                          disabled={!!activePatient}
+                          className={`flex-1 py-1.5 text-white text-[8px] font-bold rounded-lg uppercase transition-all ${activePatient ? 'bg-slate-600/50 cursor-not-allowed opacity-50' : 'bg-blue-600/80 hover:bg-blue-600'}`}
+                        >
+                          {activePatient ? 'Ocupado' : 'Atender'}
+                        </button>
+                        <button onClick={(e) => { e.stopPropagation(); setPatientInTransit(wp); }} className="px-2 py-1.5 bg-white/10 hover:bg-white/20 text-white/70 text-[8px] rounded-lg">
+                          <MoveHorizontal size={10} />
+                        </button>
+                      </div>
+                   </div>
+                 ))}
+               </div>
+             )}
+
+             {/* In Transit targeting this bed */}
+             {transitTargetPatients.length > 0 && (
+               <div className="space-y-2">
+                 <p className="text-[8px] text-white/50 uppercase tracking-widest font-bold">Por Arribar ({transitTargetPatients.length})</p>
+                 {transitTargetPatients.map(tp => (
+                   <div key={tp.id} className="flex flex-col gap-2 bg-amber-500/10 border border-amber-500/20 p-2 rounded-xl">
+                      <p className="text-[10px] text-amber-200 font-bold truncate">{tp.name}</p>
+                      <div className="flex gap-2">
+                        <button 
+                          onClick={(e) => { e.stopPropagation(); handleConfirmArrival(tp); }} 
+                          className="flex-1 py-1.5 bg-amber-600 hover:bg-amber-500 text-white text-[8px] rounded-lg font-bold uppercase transition-all"
+                        >
+                          Arribo
+                        </button>
+                        <button 
+                          onClick={(e) => { e.stopPropagation(); handleCancelTransit(tp); }} 
+                          className="flex-1 py-1.5 bg-rose-600 hover:bg-rose-500 text-white text-[8px] rounded-lg font-bold uppercase transition-all"
+                        >
+                          Cancelar
+                        </button>
+                      </div>
+                   </div>
+                 ))}
+               </div>
+             )}
           </div>
         ) : (
-          <div className="flex flex-col items-center opacity-20"><UserPlus size={24} /></div>
+          <div className="flex flex-col items-center justify-center h-full opacity-60">
+            <UserPlus size={24} className="text-slate-300 pointer-events-none" />
+          </div>
         )}
       </div>
     );
@@ -290,6 +502,18 @@ const HospitalMonitor: React.FC<HospitalMonitorProps> = ({ patients, onUpdatePat
 
   return (
     <div className="max-w-full space-y-10 pb-20 animate-in fade-in">
+      <style>{`
+        @media print {
+          .no-print, nav, aside, button { display: none !important; }
+          body { background: white !important; margin: 0 !important; }
+          main { margin: 0 !important; padding: 0.5cm !important; width: 100% !important; left: 0 !important; top: 0 !important; }
+          .max-w-full { max-width: 100% !important; }
+          .bg-slate-900 { background: #000 !important; color: #fff !important; -webkit-print-color-adjust: exact; }
+          .border { border: 1px solid #000 !important; }
+          .shadow-sm, .shadow-md, .shadow-lg, .shadow-xl, .shadow-2xl { box-shadow: none !important; }
+          @page { margin: 0.5cm; size: landscape; }
+        }
+      `}</style>
       <div className="flex flex-col xl:flex-row xl:items-end justify-between gap-8">
         <div>
           <p className="text-[10px] font-black text-blue-600 uppercase tracking-[0.3em] mb-2">Infraestructura y Gestión Operativa</p>
@@ -399,7 +623,7 @@ const HospitalMonitor: React.FC<HospitalMonitorProps> = ({ patients, onUpdatePat
                <div className={`bg-white border-2 border-${AREA_CONFIG[activeHospArea].color}-100 rounded-[3.5rem] p-12 shadow-2xl`}>
                   <div className="flex justify-between items-center mb-12">
                      <h3 className="text-xl font-black text-slate-900 uppercase flex items-center gap-4">
-                        <Bed className={`text-${AREA_CONFIG[activeHospArea].color}-600`} /> Ala de {activeHospArea}
+                        <Bed className={`text-${AREA_CONFIG[activeHospArea].color}-600`} /> Sala de {activeHospArea}
                      </h3>
                   </div>
                   <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-8">

@@ -17,11 +17,14 @@ import {
 } from 'lucide-react';
 import { Patient, MedicationPrescription, MedicationStock, Vitals, DoctorInfo, ClinicalNote, PriceItem, PriceType, ChargeItem } from '../types';
 import { VADEMECUM_DB, INITIAL_STOCK, INITIAL_PRICES } from '../constants';
+import { useAuth } from '../contexts/AuthContext';
+import PDFViewer from '../src/components/PDFViewer';
 
 const Prescription: React.FC<{ patients: Patient[], doctorInfo: DoctorInfo, onSaveNote: (n: ClinicalNote) => void, onUpdatePatient: (p: Patient) => void }> = ({ patients, doctorInfo, onSaveNote, onUpdatePatient }) => {
   const { id } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
+  const { globalSettings } = useAuth();
   const patient = patients.find(p => p.id === id);
 
   const [isPreview, setIsPreview] = useState(false);
@@ -169,14 +172,19 @@ const Prescription: React.FC<{ patients: Patient[], doctorInfo: DoctorInfo, onSa
 
   const generateId = (prefix: string) => `${prefix}-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
 
+  const [showAlertModal, setShowAlertModal] = useState(false);
+  const [alertMessage, setAlertMessage] = useState('');
+
   const handleSaveToExpedient = () => {
     if (medications.length === 0 && selectedProcedures.length === 0) {
-      alert("Debe agregar al menos un medicamento o procedimiento para guardar.");
+      setAlertMessage("Debe agregar al menos un medicamento o procedimiento para guardar.");
+      setShowAlertModal(true);
       return;
     }
     
     if(!prescriptionData.diagnostico) {
-        alert("El diagnóstico es obligatorio por ley.");
+        setAlertMessage("El diagnóstico es obligatorio por ley.");
+        setShowAlertModal(true);
         return;
     }
 
@@ -195,7 +203,8 @@ const Prescription: React.FC<{ patients: Patient[], doctorInfo: DoctorInfo, onSa
         alarmSigns: prescriptionData.alarmSigns,
         nextAppointment: prescriptionData.nextAppointment,
         folio: prescriptionData.folio,
-        vitals: vitals
+        vitals: vitals,
+        doctorInfo: doctorInfo
       },
       isSigned: true,
       hash: `CERT-REC-${Math.random().toString(36).substr(2, 10).toUpperCase()}`
@@ -268,8 +277,20 @@ const Prescription: React.FC<{ patients: Patient[], doctorInfo: DoctorInfo, onSa
 
   return (
     <div className="max-w-7xl mx-auto pb-32 animate-in fade-in">
+      <style>{`
+        @media print {
+          .no-print, nav, aside, button { display: none !important; }
+          body { background: white !important; margin: 0 !important; }
+          main { margin: 0 !important; padding: 0 !important; width: 100% !important; left: 0 !important; top: 0 !important; }
+          .max-w-7xl { max-width: 100% !important; }
+          .bg-slate-900 { background: #000 !important; color: #fff !important; -webkit-print-color-adjust: exact; }
+          .border { border: 1px solid #000 !important; }
+          .shadow-sm, .shadow-md, .shadow-lg, .shadow-xl, .shadow-2xl { box-shadow: none !important; }
+          @page { margin: 0; size: portrait; }
+        }
+      `}</style>
       {/* TOOLBAR */}
-      <div className="bg-white p-5 rounded-[2.5rem] border border-slate-200 shadow-2xl mb-8 flex flex-wrap items-center justify-between gap-4 no-print sticky top-20 z-50">
+      <div className="bg-white p-5 rounded-[2.5rem] border border-slate-200 shadow-2xl mb-8 flex flex-wrap items-center justify-between gap-4 no-print relative z-30">
         <div className="flex items-center gap-6">
           <button 
             onClick={() => isSaved ? navigate(`/patient/${id}`) : navigate(-1)} 
@@ -371,17 +392,26 @@ const Prescription: React.FC<{ patients: Patient[], doctorInfo: DoctorInfo, onSa
             {/* BARRA DE VITALES RAPIDA */}
             <div className="bg-slate-900 text-white p-6 rounded-[2rem] shadow-lg flex justify-between items-center overflow-x-auto no-scrollbar gap-4">
                 {[
-                   { l: 'Peso', v: vitals?.weight + ' kg', i: <Scale size={14}/> },
-                   { l: 'Talla', v: vitals?.height + ' cm', i: <Activity size={14}/> },
-                   { l: 'IMC', v: vitals?.bmi, i: <Activity size={14}/> },
-                   { l: 'Temp', v: vitals?.temp + '°C', i: <Thermometer size={14}/> },
-                   { l: 'T.A.', v: vitals?.bp, i: <Heart size={14}/> },
+                   { l: 'Peso', k: 'weight', v: vitals?.weight || '', i: <Scale size={14}/>, u: 'kg' },
+                   { l: 'Talla', k: 'height', v: vitals?.height || '', i: <Activity size={14}/>, u: 'cm' },
+                   { l: 'IMC', k: 'bmi', v: vitals?.bmi || '', i: <Activity size={14}/>, u: '' },
+                   { l: 'Temp', k: 'temp', v: vitals?.temp || '', i: <Thermometer size={14}/>, u: '°C' },
+                   { l: 'T.A.', k: 'bp', v: vitals?.bp || '', i: <Heart size={14}/>, u: 'mmHg' },
                 ].map(v => (
-                    <div key={v.l} className="flex items-center gap-2 bg-white/10 px-4 py-2 rounded-xl border border-white/5 min-w-[100px]">
+                    <div key={v.l} className="flex items-center gap-2 bg-white/10 px-4 py-2 rounded-xl border border-white/5 min-w-[120px]">
                         {v.i}
-                        <div>
+                        <div className="flex-1">
                             <p className="text-[8px] font-bold text-slate-400 uppercase">{v.l}</p>
-                            <p className="text-xs font-black">{v.v || '--'}</p>
+                            <div className="flex items-center gap-1">
+                               <input 
+                                  type="text" 
+                                  value={v.v}
+                                  onChange={(e) => setVitals({...vitals, [v.k]: e.target.value} as Vitals)}
+                                  className="w-full bg-transparent text-xs font-black text-white outline-none placeholder:text-slate-500"
+                                  placeholder="--"
+                               />
+                               <span className="text-[8px] text-slate-400">{v.u}</span>
+                            </div>
                         </div>
                     </div>
                 ))}
@@ -515,33 +545,59 @@ const Prescription: React.FC<{ patients: Patient[], doctorInfo: DoctorInfo, onSa
       ) : (
         <div className="bg-white shadow-2xl rounded-[3.5rem] overflow-hidden flex flex-col print:shadow-none print:rounded-none">
            {/* El componente de impresión PrescriptionDoc se reutiliza aquí */}
-           <PrescriptionDoc patient={patient} vitals={vitals} meds={medications} procedures={selectedProcedures} data={prescriptionData} doctor={doctorInfo} label="ORIGINAL - FARMACIA / PACIENTE" />
+           <PrescriptionDoc patient={patient} vitals={vitals} meds={medications} procedures={selectedProcedures} data={prescriptionData} doctor={doctorInfo} label="ORIGINAL - FARMACIA / PACIENTE" globalSettings={globalSettings} />
            <div className="h-12 bg-slate-50 flex items-center justify-center no-print border-y border-slate-100 relative">
               <div className="w-full border-t-2 border-dashed border-slate-300 mx-10"></div>
               <span className="absolute px-8 py-1.5 bg-white border border-slate-200 rounded-full text-[9px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-3">
                 <Landmark size={12} /> Copia Expediente
               </span>
            </div>
-           <PrescriptionDoc patient={patient} vitals={vitals} meds={medications} procedures={selectedProcedures} data={prescriptionData} doctor={doctorInfo} label="COPIA - EXPEDIENTE" />
+           <PrescriptionDoc patient={patient} vitals={vitals} meds={medications} procedures={selectedProcedures} data={prescriptionData} doctor={doctorInfo} label="COPIA - EXPEDIENTE" globalSettings={globalSettings} />
+        </div>
+      )}
+      {/* MODAL DE ALERTA */}
+      {showAlertModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-8 max-w-md w-full shadow-2xl animate-in zoom-in-95 duration-200">
+            <div className="flex items-center gap-4 mb-6 text-rose-600">
+              <AlertOctagon size={32} />
+              <h3 className="text-xl font-black uppercase tracking-tight text-slate-900">Atención</h3>
+            </div>
+            <p className="text-slate-600 mb-8 text-sm leading-relaxed">
+              {alertMessage}
+            </p>
+            <div className="flex justify-end">
+              <button 
+                onClick={() => setShowAlertModal(false)}
+                className="px-6 py-3 bg-blue-600 text-white rounded-xl font-bold uppercase text-xs tracking-widest hover:bg-blue-700 transition-all shadow-lg shadow-blue-600/20"
+              >
+                Entendido
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
   );
 };
 
-const PrescriptionDoc = ({ patient, vitals, meds, procedures, data, doctor, label }: any) => (
+const PrescriptionDoc = ({ patient, vitals, meds, procedures, data, doctor, label, globalSettings }: any) => (
   <div className="relative p-12 bg-white flex flex-col border-b border-slate-100 last:border-b-0 print:p-10 print:h-[50vh] print:border-none">
      {/* HEADER LEGAL (DOCTOR INFO) */}
      <div className="flex justify-between border-b-4 border-slate-900 pb-6 mb-6">
         <div className="flex gap-6">
-           <div className="w-16 h-16 bg-slate-900 rounded-2xl flex items-center justify-center text-white shadow-lg print:border print:border-black print:text-black print:bg-transparent"><Heart size={32} /></div>
+           {globalSettings?.logoUrl ? (
+             <img src={globalSettings.logoUrl} alt="Logo" className="w-16 h-16 object-contain rounded-2xl shadow-lg print:border print:border-black print:shadow-none" referrerPolicy="no-referrer" />
+           ) : (
+             <div className="w-16 h-16 bg-slate-900 rounded-2xl flex items-center justify-center text-white shadow-lg print:border print:border-black print:text-black print:bg-transparent"><Heart size={32} /></div>
+           )}
            <div className="space-y-0.5">
               <h2 className="text-xl font-black text-slate-900 tracking-tighter uppercase leading-none">{doctor.name}</h2>
               <p className="text-[10px] font-bold text-blue-700 uppercase tracking-widest">{doctor.specialty}</p>
               <div className="pt-2 text-[8px] font-medium text-slate-600 uppercase leading-tight space-y-0.5">
                  <p><span className="font-bold">Cédula Prof:</span> {doctor.cedula}</p>
                  <p><span className="font-bold">Título expedido por:</span> {doctor.institution}</p>
-                 <p><span className="font-bold">Dirección:</span> {doctor.address} • Tel: {doctor.phone}</p>
+                 <p><span className="font-bold">Dirección:</span> {globalSettings?.address || doctor.address} • Tel: {globalSettings?.phone || doctor.phone}</p>
               </div>
            </div>
         </div>

@@ -7,12 +7,13 @@ import {
   Save, CheckCircle2, Clock, Info, Check, Plus, Lock, AlertTriangle,
   ClipboardList, BookOpen, MessageSquare, HeartHandshake, Leaf, Apple,
   Thermometer, FileText, TrendingUp, Accessibility, Target, Calculator,
-  ChevronDown, ChevronUp, AlertCircle, ChevronRight, X, History as HistoryIcon
+  ChevronDown, ChevronUp, AlertCircle, ChevronRight, X, History as HistoryIcon, Trash2
 } from 'lucide-react';
 import { 
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer 
 } from 'recharts';
 import { Patient, ClinicalNote, HealthControlRecord, PreventiveVisit, VaccineRecord, ScreeningRecord, PromotionTopic, GeriatricAssessment, AdolescentAssessment } from '../types';
+import { useAuth } from '../contexts/AuthContext';
 
 // --- INTERFACES ---
 interface ScaleOption { label: string; points: number; }
@@ -28,7 +29,8 @@ interface MedicalScale {
 // --- HELPER: CALCULATE AGE IN MONTHS ---
 const calculateAgeInMonths = (birthDate: string) => {
     if (!birthDate) return 0;
-    const birth = new Date(birthDate);
+    const [year, month, day] = birthDate.split('-').map(Number);
+    const birth = new Date(year, month - 1, day);
     const now = new Date();
     const months = (now.getFullYear() - birth.getFullYear()) * 12 + (now.getMonth() - birth.getMonth());
     return months; // Puede devolver 0 si es recien nacido
@@ -36,7 +38,8 @@ const calculateAgeInMonths = (birthDate: string) => {
 
 const getDetailedAge = (birthDate: string) => {
     if (!birthDate) return '';
-    const birth = new Date(birthDate);
+    const [year, month, day] = birthDate.split('-').map(Number);
+    const birth = new Date(year, month - 1, day);
     const now = new Date();
     let years = now.getFullYear() - birth.getFullYear();
     let months = now.getMonth() - birth.getMonth();
@@ -50,6 +53,17 @@ const getDetailedAge = (birthDate: string) => {
         months += 12;
     }
     return `${years > 0 ? years + 'a ' : ''}${months}m ${days}d`;
+};
+
+const STAGE_AGE_RANGES: Record<string, string> = {
+    'Recién Nacido': '0-1 mes',
+    'Lactante': '2-24 meses',
+    'Preescolar': '2-5 años',
+    'Escolar': '6-9 años',
+    'Adolescente': '10-19 años',
+    'Adulto Joven': '20-39 años',
+    'Adulto': '40-59 años',
+    'Adulto Mayor': '60+ años'
 };
 
 // --- BASE DE CONOCIMIENTOS DE ESCALAS EDI (AUTOMATIZADAS POR GRUPO DE EDAD) ---
@@ -380,10 +394,13 @@ const LIFE_STAGES_CONFIG: Record<string, {
         ],
         screenings: [
              { name: 'Papanicolau / VPH', cat: 'Cáncer', freq: '21-29a: Papanicolau 3a. 30+: Co-test 5a', gender: 'F' },
+             { name: 'Preconcepción / Ácido Fólico (USPSTF)', cat: 'Prevención', freq: 'Todas muj. fértiles', gender: 'F' },
              { name: 'Exploración Mamaria', cat: 'Cáncer', freq: 'Anual', gender: 'F' },
-             { name: 'Perfil de Lípidos', cat: 'Metabólico', freq: 'Cada 4-6 años (si bajo riesgo)' },
-             { name: 'Presión Arterial', cat: 'Cardiovascular', freq: 'Cada 2 años (<120/80)' },
-             { name: 'Glucosa Ayuno', cat: 'Metabólico', freq: 'Trienal (si sobrepeso + factor)' }
+             { name: 'Tamizaje VIH / ITS (USPSTF)', cat: 'Infeccioso', freq: 'Única vez o anual si hay riesgo' },
+             { name: 'Perfil de Lípidos (USPSTF)', cat: 'Metabólico', freq: 'Cada 4-6 años (si bajo riesgo)' },
+             { name: 'Presión Arterial (USPSTF)', cat: 'Cardiovascular', freq: 'Anual o cada 2 años (<120/80)' },
+             { name: 'Glucosa Ayuno / HbA1c (USPSTF)', cat: 'Metabólico', freq: 'Trienal (si sobrepeso 35+)' },
+             { name: 'Tamizaje Depresión Mayor (USPSTF)', cat: 'Salud Mental', freq: 'Anual' }
         ],
         promotion: [
             'Planificación Familiar',
@@ -402,11 +419,14 @@ const LIFE_STAGES_CONFIG: Record<string, {
             { name: 'Influenza', age: 'Anual', doses: ['Anual'] }
         ],
         screenings: [
-             { name: 'Mastografía', cat: 'Cáncer', freq: 'Bienal (40-74 años)', gender: 'F' },
-             { name: 'Cáncer Colorrectal (FIT/Colono)', cat: 'Cáncer', freq: 'Inicio 45 años' },
-             { name: 'Antígeno Prostático (APE)', cat: 'Cáncer', freq: 'Anual (55-69 años)', gender: 'M' },
-             { name: 'Detección Diabetes/Hipertensión', cat: 'Metabólico', freq: 'Anual (o cada 3 años si sano)' },
-             { name: 'Cáncer Pulmón (LDCT)', cat: 'Cáncer', freq: 'Anual (Fumadores 50+)' }
+             { name: 'Mastografía (USPSTF)', cat: 'Cáncer', freq: 'Bienal (40-74 años)', gender: 'F' },
+             { name: 'Cáncer Colorrectal (FIT/Colono - USPSTF)', cat: 'Cáncer', freq: 'Inicio 45 años' },
+             { name: 'Antígeno Prostático (APE)', cat: 'Cáncer', freq: 'Anual (55-69 años, decisión inf.)', gender: 'M' },
+             { name: 'Tamizaje Diabetes/Hipertensión (USPSTF)', cat: 'Metabólico', freq: 'Anual (o cada 3 años si sano)' },
+             { name: 'Evaluación de Riesgo CV (AHA/ACC)', cat: 'Cardiovascular', freq: 'Cada 4-6 años (Estatinas si riego elevado)' },
+             { name: 'Hepatitis C (USPSTF)', cat: 'Infeccioso', freq: 'Tamizaje única vez' },
+             { name: 'Cáncer Pulmón (LDCT - USPSTF)', cat: 'Cáncer', freq: 'Anual (Fumadores 50+ con 20 pack-year)' },
+             { name: 'Tamizaje Depresión Mayor (USPSTF)', cat: 'Salud Mental', freq: 'Anual' }
         ],
         promotion: [
             'Climaterio y Menopausia / Andropausia',
@@ -458,6 +478,11 @@ const ComprehensiveHealthControl: React.FC<{ patients: Patient[], onSaveNote: (n
   const [completedScales, setCompletedScales] = useState<Record<string, {score: number, interpretation: string, date: string}>>({});
 
   const [patientAgeInMonths, setPatientAgeInMonths] = useState(0);
+  const [selectedLifeStage, setSelectedLifeStage] = useState<string | null>(null);
+
+  const { user } = useAuth();
+  const isPatient = user?.role === 'PACIENTE';
+  const authorMarker = isPatient ? '(Paciente)' : '(Médico)';
 
   // Calcular edad en meses al cargar
   useEffect(() => {
@@ -465,7 +490,8 @@ const ComprehensiveHealthControl: React.FC<{ patients: Patient[], onSaveNote: (n
         setPatientAgeInMonths(calculateAgeInMonths(patient.birthDate));
     } else if (patient?.age && patient?.ageUnit === 'Meses') {
         setPatientAgeInMonths(patient.age);
-    } else if (patient?.age && patient?.ageUnit === 'Años') {
+    } else if (patient?.age) {
+        // Asumir años si no hay unidad o es 'Años'
         setPatientAgeInMonths(patient.age * 12);
     }
   }, [patient]);
@@ -490,21 +516,26 @@ const ComprehensiveHealthControl: React.FC<{ patients: Patient[], onSaveNote: (n
   }, [patientAgeInMonths]);
 
   // Determinación de Etapa de Vida (Actualizada)
-  const currentStage = useMemo(() => {
+  const autoCalculatedStage = useMemo(() => {
       if (!patient) return 'Adulto';
       if (patientAgeInMonths <= 1) return 'Recién Nacido';
       if (patientAgeInMonths <= 24) return 'Lactante';
       if (patientAgeInMonths <= 71) return 'Preescolar';
-      if (patient.age >= 6 && patient.age <= 9) return 'Escolar';
-      if (patient.age >= 10 && patient.age <= 19) return 'Adolescente';
-      if (patient.age >= 20 && patient.age <= 39) return 'Adulto Joven';
-      if (patient.age >= 40 && patient.age <= 59) return 'Adulto';
-      if (patient.age >= 60) return 'Adulto Mayor';
+      
+      const realAgeYears = Math.floor(patientAgeInMonths / 12);
+      if (realAgeYears >= 6 && realAgeYears <= 9) return 'Escolar';
+      if (realAgeYears >= 10 && realAgeYears <= 19) return 'Adolescente';
+      if (realAgeYears >= 20 && realAgeYears <= 39) return 'Adulto Joven';
+      if (realAgeYears >= 40 && realAgeYears <= 59) return 'Adulto';
+      if (realAgeYears >= 60) return 'Adulto Mayor';
       return 'Adulto';
   }, [patient, patientAgeInMonths]);
 
+  const currentStage = selectedLifeStage || autoCalculatedStage;
+
   const stageConfig = useMemo(() => {
-      const config = LIFE_STAGES_CONFIG[currentStage];
+      let config = LIFE_STAGES_CONFIG[currentStage as keyof typeof LIFE_STAGES_CONFIG];
+      if (!config) config = LIFE_STAGES_CONFIG['Adulto']; // Fallback
       // Insertar EDI Dinámico si aplica
       if ((currentStage === 'Lactante' || currentStage === 'Preescolar') && currentEdiScaleId) {
           return { ...config, availableScales: [currentEdiScaleId] };
@@ -603,13 +634,9 @@ const ComprehensiveHealthControl: React.FC<{ patients: Patient[], onSaveNote: (n
   // --- ACTIONS ---
   
   const handleAddVisit = () => {
-      if (!visitForm.weight || !visitForm.height) {
-          alert("Peso y Talla son obligatorios para el registro de crecimiento.");
-          return;
-      }
-      
+      // Las alertas no son obligatorias para permitir registro retrospectivo por el paciente.
       const heightM = (visitForm.height || 100) / 100;
-      const bmi = parseFloat(( (visitForm.weight || 1) / (heightM * heightM) ).toFixed(1));
+      const bmi = visitForm.height && visitForm.weight ? parseFloat(( (visitForm.weight || 1) / (heightM * heightM) ).toFixed(1)) : 0;
 
       // 1. Crear registro de Visita
       const newVisit: PreventiveVisit = {
@@ -622,7 +649,7 @@ const ComprehensiveHealthControl: React.FC<{ patients: Patient[], onSaveNote: (n
           headCircumference: Number(visitForm.headCircumference),
           developmentMilestones: visitForm.developmentMilestones,
           nutritionAssessment: visitForm.nutritionAssessment,
-          notes: visitForm.notes || ''
+          notes: `${visitForm.notes || ''} \n\nRegistrado por: ${user?.name || 'Sistema'} ${authorMarker}`.trim()
       };
 
       // 2. Actualizar Vacunas
@@ -632,7 +659,7 @@ const ComprehensiveHealthControl: React.FC<{ patients: Patient[], onSaveNote: (n
           doseNumber: v.dose,
           targetAge: currentStage,
           applicationDate: new Date().toISOString().split('T')[0],
-          notes: 'Aplicada en consulta de control'
+          notes: `Aplicada en consulta de control. Registrado por: ${user?.name || 'Sistema'} ${authorMarker}`
       }));
 
       // 3. Actualizar Tamizajes
@@ -647,7 +674,7 @@ const ComprehensiveHealthControl: React.FC<{ patients: Patient[], onSaveNote: (n
               status: scr.status,
               lastDate: new Date().toISOString().split('T')[0],
               nextDueDate: '', 
-              resultSummary: `Evaluado en consulta: ${scr.status}`
+              resultSummary: `Evaluado en consulta: ${scr.status}. Registrado por: ${authorMarker}`
           };
           if (index >= 0) updatedScreenings[index] = newRecord;
           else updatedScreenings.push(newRecord);
@@ -685,33 +712,35 @@ const ComprehensiveHealthControl: React.FC<{ patients: Patient[], onSaveNote: (n
       setCompletedScales({}); // Reset scales
       setModalTab('somatometry'); 
       
-      // Nota automática
-      const scalesSummary = Object.values(completedScales).map((s: {interpretation: string}) => s.interpretation).join(', ');
-      
-      const noteSummary = `
-          Se realiza Control Integral de Salud (${currentStage}).
-          Somatometría: Peso ${newVisit.weight}kg, Talla ${newVisit.height}cm, IMC ${bmi}.
-          Vacunas aplicadas: ${visitForm.appliedVaccines.map(v => `${v.name} (${v.dose})`).join(', ') || 'Ninguna'}.
-          Tamizajes: ${visitForm.performedScreenings.map(s => `${s.name}: ${s.status}`).join(', ') || 'Ninguno'}.
-          Educación: ${visitForm.topicsDiscussed.length} temas abordados.
-          Escalas Realizadas: ${scalesSummary || 'Ninguna'}
-      `;
+      // Solo generar nota clinica en la bitacora PSOAP si es Medico, para evitar inundar la bitácora si es el paciente
+      if (!isPatient) {
+          const scalesSummary = Object.values(completedScales).map((s: {interpretation: string}) => s.interpretation).join(', ');
+          
+          const noteSummary = `
+              Se realiza Control Integral de Salud (${currentStage}).
+              Somatometría: Peso ${newVisit.weight}kg, Talla ${newVisit.height}cm, IMC ${bmi}.
+              Vacunas aplicadas: ${visitForm.appliedVaccines.map(v => `${v.name} (${v.dose})`).join(', ') || 'Ninguna'}.
+              Tamizajes: ${visitForm.performedScreenings.map(s => `${s.name}: ${s.status}`).join(', ') || 'Ninguno'}.
+              Educación: ${visitForm.topicsDiscussed.length} temas abordados.
+              Escalas Realizadas: ${scalesSummary || 'Ninguna'}
+          `;
 
-      const note: ClinicalNote = {
-          id: `NOTE-PREV-${Date.now()}`,
-          patientId: patient.id,
-          type: `Control de Salud Integral (${currentStage})`,
-          date: new Date().toLocaleString('es-MX'),
-          author: 'Medicina Preventiva',
-          content: {
-              ...newVisit,
-              analysis: `Paciente en etapa ${currentStage} acude a control de salud.`,
-              plan: `Continuar esquema de prevención. Próxima cita: ${visitForm.nextAppointment}.`,
-              summary: noteSummary
-          },
-          isSigned: true
-      };
-      onSaveNote(note);
+          const note: ClinicalNote = {
+              id: `NOTE-PREV-${Date.now()}`,
+              patientId: patient.id,
+              type: `Control de Salud Integral (${currentStage})`,
+              date: new Date().toLocaleString('es-MX'),
+              author: user?.name || 'Médico',
+              content: {
+                  ...newVisit,
+                  analysis: `Paciente en etapa ${currentStage} acude a control de salud.`,
+                  plan: `Continuar esquema de prevención. Próxima cita: ${visitForm.nextAppointment}.`,
+                  summary: noteSummary
+              },
+              isSigned: true
+          };
+          onSaveNote(note);
+      }
   };
 
   // ... (Toggle Helpers similar to previous) ...
@@ -766,9 +795,16 @@ const ComprehensiveHealthControl: React.FC<{ patients: Patient[], onSaveNote: (n
                 <div>
                     <h1 className="text-3xl font-black uppercase tracking-tighter">Carnet de Salud Integral</h1>
                     <div className="flex items-center gap-3 mt-1">
-                        <span className={`px-3 py-1 rounded-lg text-[10px] font-black uppercase bg-white/20 text-white border border-white/30`}>
-                            {currentStage}
-                        </span>
+                        <select 
+                            value={currentStage} 
+                            onChange={(e) => setSelectedLifeStage(e.target.value)}
+                            className={`px-3 py-1 rounded-lg text-[10px] font-black uppercase bg-white/20 text-white border border-white/30 outline-none hover:bg-white/30 cursor-pointer appearance-none pr-8 relative z-10`}
+                            style={{ backgroundImage: `url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 0.5rem center', backgroundSize: '1em' }}
+                        >
+                            {Object.keys(LIFE_STAGES_CONFIG).map(stage => (
+                                <option key={stage} value={stage} className="text-slate-900">{stage} ({STAGE_AGE_RANGES[stage]})</option>
+                            ))}
+                        </select>
                         <p className="text-[10px] font-bold uppercase tracking-widest opacity-80">
                             {getDetailedAge(patient.birthDate || '') || `${patient.age} ${patient.ageUnit || 'Años'}`}
                         </p>
@@ -864,6 +900,55 @@ const ComprehensiveHealthControl: React.FC<{ patients: Patient[], onSaveNote: (n
                                  <button onClick={() => setShowVisitModal(true)} className="w-full py-4 bg-white text-slate-900 rounded-2xl font-black text-xs uppercase hover:bg-emerald-400 transition-all flex items-center justify-center gap-2 shadow-lg">
                                      <Plus size={16}/> Registrar Control
                                  </button>
+                             </div>
+                             
+                             {/* HISTORIAL DE CONTROLES */}
+                             <div className="col-span-1 md:col-span-2 bg-slate-50 border border-slate-200 rounded-[2.5rem] p-8 shadow-sm">
+                                 <h3 className="text-xs font-black uppercase text-slate-500 mb-6 flex items-center gap-2"><Clock size={16}/> Historial de Revisiones / Intervenciones</h3>
+                                 <div className="space-y-4 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
+                                     {healthRecord.visits.length === 0 ? (
+                                         <p className="text-xs text-slate-400 text-center py-8">No hay visitas de control registradas.</p>
+                                     ) : (
+                                         [...healthRecord.visits].reverse().map(v => (
+                                             <div key={v.id} className="p-5 bg-white border border-slate-200 rounded-2xl flex justify-between items-start group shadow-sm">
+                                                 <div>
+                                                     <div className="flex items-center gap-2 mb-1">
+                                                         <p className="text-sm font-black text-slate-900">{v.date}</p>
+                                                         <span className="text-[9px] font-bold uppercase text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">{v.ageGroup}</span>
+                                                         {v.notes.includes('(Paciente)') && (
+                                                             <span className="text-[9px] font-bold uppercase text-blue-500 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-full">Por Paciente</span>
+                                                         )}
+                                                     </div>
+                                                     <p className="text-xs text-slate-600 max-w-2xl whitespace-pre-line mt-2 leading-relaxed">{v.notes || 'Sin detalles.'}</p>
+                                                     {(v.weight || v.height || v.bp || v.temp) && (
+                                                         <div className="flex gap-4 mt-3 text-[10px] font-bold uppercase text-slate-400 bg-slate-50 border border-slate-100 p-2 rounded-xl inline-flex">
+                                                             {v.weight && <span>Peso: {v.weight} kg</span>}
+                                                             {v.height && <span>Talla: {v.height} m</span>}
+                                                             {v.bp && <span>TA: {v.bp}</span>}
+                                                             {v.temp && <span>Temp: {v.temp} °C</span>}
+                                                         </div>
+                                                     )}
+                                                 </div>
+                                                 <button 
+                                                    onClick={() => {
+                                                        if(window.confirm('¿Seguro que desea eliminar este registro de control y todo lo añadido en él? Esto no revertirá el estatus individual de las vacunas o tamizajes registrados previamente en otras notas en el expediente de forma automática.')) {
+                                                            const newRecord = {
+                                                                ...healthRecord,
+                                                                visits: healthRecord.visits.filter(visit => visit.id !== v.id)
+                                                            };
+                                                            if (onUpdatePatient) {
+                                                                onUpdatePatient({...patient, preventiveCare: newRecord});
+                                                            }
+                                                        }
+                                                    }}
+                                                    className="opacity-0 group-hover:opacity-100 p-2 text-rose-500 hover:bg-rose-50 rounded-xl transition-all"
+                                                 >
+                                                     <Trash2 size={16}/>
+                                                 </button>
+                                             </div>
+                                         ))
+                                     )}
+                                 </div>
                              </div>
                         </div>
                     </div>
@@ -1251,6 +1336,43 @@ const ComprehensiveHealthControl: React.FC<{ patients: Patient[], onSaveNote: (n
                                             </button>
                                         );
                                     })}
+                                    
+                                    {visitForm.topicsDiscussed.filter(t => !stageConfig.promotion.includes(t)).map((customTopic, i) => (
+                                        <button 
+                                            key={`custom-${i}`}
+                                            onClick={() => toggleModalTopic(customTopic)}
+                                            className={`w-full text-left p-4 rounded-2xl border-2 transition-all flex justify-between items-center bg-indigo-50 border-indigo-500 shadow-sm`}
+                                        >
+                                            <span className={`text-xs font-bold uppercase text-indigo-900`}>{customTopic} (Manual)</span>
+                                            <CheckCircle2 size={16} className="text-indigo-600"/>
+                                        </button>
+                                    ))}
+
+                                    <div className="flex gap-2 items-center mt-2">
+                                        <input 
+                                            type="text" 
+                                            placeholder="Añadir otro tema..." 
+                                            className="flex-1 p-4 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-bold uppercase outline-none focus:ring-2 focus:ring-indigo-500"
+                                            onKeyDown={(e) => {
+                                                if (e.key === 'Enter' && e.currentTarget.value.trim()) {
+                                                    const newTopic = e.currentTarget.value.trim();
+                                                    if (!visitForm.topicsDiscussed.includes(newTopic)) {
+                                                        setVisitForm(prev => ({...prev, topicsDiscussed: [...prev.topicsDiscussed, newTopic]}));
+                                                    }
+                                                    e.currentTarget.value = '';
+                                                }
+                                            }}
+                                        />
+                                        <button className="p-4 bg-indigo-100 text-indigo-600 rounded-2xl hover:bg-indigo-200" onClick={(e) => {
+                                            const input = e.currentTarget.previousElementSibling as HTMLInputElement;
+                                            if (input.value.trim() && !visitForm.topicsDiscussed.includes(input.value.trim())) {
+                                                setVisitForm(prev => ({...prev, topicsDiscussed: [...prev.topicsDiscussed, input.value.trim()]}));
+                                                input.value = '';
+                                            }
+                                        }}>
+                                            <Plus size={18}/>
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
                         )}

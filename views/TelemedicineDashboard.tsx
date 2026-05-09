@@ -105,6 +105,8 @@ const COST_PER_KM = 20; // Costo por kilómetro
 // Posición simulada del paciente (Centro CDMX aprox)
 const PATIENT_MOCK_LOCATION = { lat: 19.4326, lng: -99.1332 };
 
+import PaymentModal from '../src/components/PaymentModal';
+
 // --- SUB-COMPONENT: PORTAL DEL PACIENTE (RESPONSIVO) ---
 const PatientAppView: React.FC<{
     currentUser: DoctorInfo;
@@ -119,9 +121,15 @@ const PatientAppView: React.FC<{
 }> = ({ currentUser, doctors, myAppointments, notes, onBookAppointment, onRequestHomeService, onGoBack, currentWaitingPatient, onCancelAppointment }) => {
     const [appTab, setAppTab] = useState<'home' | 'doctors' | 'history' | 'vitals'>('home');
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+    const [toastMsg, setToastMsg] = useState<{title: string, type: 'error' | 'success'} | null>(null);
+
+    const showToast = (title: string, type: 'error' | 'success' = 'error') => {
+        setToastMsg({ title, type });
+        setTimeout(() => setToastMsg(null), 3000);
+    };
     
     // Flow States
-    const [flowStep, setFlowStep] = useState<'none' | 'profile' | 'schedule' | 'consent' | 'intake' | 'waiting'>('none');
+    const [flowStep, setFlowStep] = useState<'none' | 'profile' | 'schedule' | 'consent' | 'intake' | 'payment' | 'waiting'>('none');
     const [selectedDoc, setSelectedDoc] = useState<DoctorInfo | null>(null);
     const [consentSigned, setConsentSigned] = useState(false);
     const [intakeForm, setIntakeForm] = useState<TeleIntakeForm>({
@@ -131,6 +139,9 @@ const PatientAppView: React.FC<{
     // Scheduling State
     const [selectedDate, setSelectedDate] = useState<Date>(new Date());
     const [selectedSlot, setSelectedSlot] = useState<string | null>(null);
+
+    // Payment State
+    const [pendingPaymentInfo, setPendingPaymentInfo] = useState<{amount: number, description: string, onSuccess: () => void} | null>(null);
 
     // Modales de Servicios
     const [activeServiceModal, setActiveServiceModal] = useState<'none' | 'pharmacy' | 'home_care' | 'logistics'>('none');
@@ -190,18 +201,26 @@ const PatientAppView: React.FC<{
     };
 
     const handleConfirmSchedule = () => {
-        if (!selectedSlot) return alert("Seleccione una hora");
+        if (!selectedSlot) return showToast("Seleccione una hora");
         setFlowStep('consent');
     };
 
     const handleConsent = () => {
-        if (!consentSigned) return alert("Debe aceptar el consentimiento informado.");
+        if (!consentSigned) return showToast("Debe aceptar el consentimiento informado.");
         setFlowStep('intake');
     };
 
     const handleSubmitIntake = () => {
-        if (!intakeForm.mainSymptom) return alert("Describa su síntoma principal.");
-        
+        if (!intakeForm.mainSymptom) return showToast("Describa su síntoma principal.");
+        setPendingPaymentInfo({
+            amount: selectedDoc?.price || 500,
+            description: `Consulta de Telemedicina con ${selectedDoc?.name || 'Médico'}`,
+            onSuccess: handlePaymentSuccess
+        });
+    };
+
+    const handlePaymentSuccess = () => {
+        setPendingPaymentInfo(null);
         onBookAppointment(
             selectedDoc, 
             selectedSlot || new Date().toLocaleTimeString('es-MX', {hour:'2-digit', minute:'2-digit'}), 
@@ -221,7 +240,7 @@ const PatientAppView: React.FC<{
     
     // Iniciar Flujo Logístico (Selección de Clínica)
     const initiateLogisticsFlow = (data: any) => {
-        if (!homeConsent) return alert("Debe aceptar el consentimiento de servicio a domicilio.");
+        if (!homeConsent) return showToast("Debe aceptar el consentimiento de servicio a domicilio.");
         setPendingRequestData(data);
         setLogisticsStep('select_clinic');
         setActiveServiceModal('logistics'); // Cambiar a modal de logística
@@ -237,7 +256,7 @@ const PatientAppView: React.FC<{
     };
 
     const confirmServiceRequest = () => {
-        if (!selectedClinic || !pendingRequestData) return alert("Seleccione una clínica proveedora.");
+        if (!selectedClinic || !pendingRequestData) return showToast("Seleccione una clínica proveedora.");
         
         const deliveryFee = BASE_DELIVERY_FEE + (calculatedDistance * COST_PER_KM);
         let serviceTotal = 0;
@@ -254,53 +273,67 @@ const PatientAppView: React.FC<{
 
         const totalCost = serviceTotal + deliveryFee;
 
-        onRequestHomeService(requestType, {
-            ...pendingRequestData,
-            selectedClinicId: selectedClinic.id || selectedClinic.cedula,
-            selectedClinicName: selectedClinic.hospital || selectedClinic.name,
-            distanceKm: calculatedDistance,
-            deliveryFee: deliveryFee,
-            totalCost: totalCost,
-            isHospitalizationRequest: pendingRequestData.type === 'hospitalization',
-            consentSigned: true
-        });
+        setPendingPaymentInfo({
+            amount: totalCost,
+            description: pendingRequestData.type === 'hospitalization' ? 'Traslado en Ambulancia' : (pendingRequestData.type === 'lab' ? 'Estudios de Laboratorio a Domicilio' : 'Médico a Domicilio'),
+            onSuccess: () => {
+                setPendingPaymentInfo(null);
+                onRequestHomeService(requestType, {
+                    ...pendingRequestData,
+                    selectedClinicId: selectedClinic.id || selectedClinic.cedula,
+                    selectedClinicName: selectedClinic.hospital || selectedClinic.name,
+                    distanceKm: calculatedDistance,
+                    deliveryFee: deliveryFee,
+                    totalCost: totalCost,
+                    isHospitalizationRequest: pendingRequestData.type === 'hospitalization',
+                    consentSigned: true
+                });
 
-        alert(pendingRequestData.type === 'hospitalization' ? "SOLICITUD DE TRASLADO ENVIADA. Una ambulancia ha sido notificada." : "Solicitud enviada exitosamente. Un coordinador confirmará su servicio.");
-        setActiveServiceModal('none');
-        setPendingRequestData(null);
-        setSelectedClinic(null);
-        setHomeAddress('');
-        setSelectedLabTests([]);
-        setHomeConsent(false);
+                showToast(pendingRequestData.type === 'hospitalization' ? "SOLICITUD DE TRASLADO ENVIADA. Una ambulancia ha sido notificada." : "Solicitud enviada exitosamente. Un coordinador confirmará su servicio.", 'success');
+                setActiveServiceModal('none');
+                setPendingRequestData(null);
+                setSelectedClinic(null);
+                setHomeAddress('');
+                setSelectedLabTests([]);
+                setHomeConsent(false);
+            }
+        });
     };
 
     // Service Actions (Initial Steps)
     const handlePharmacyOrder = () => {
-        if(cart.length === 0) return alert("El carrito está vacío");
-        if(!pharmacyAddress) return alert("Por favor ingrese la dirección de entrega.");
+        if(cart.length === 0) return showToast("El carrito está vacío");
+        if(!pharmacyAddress) return showToast("Por favor ingrese la dirección de entrega.");
         
         // Farmacia es directo (sin selección de clínica compleja por ahora, se asigna auto)
         const dist = 3.5; // Mock dist
         const fee = BASE_DELIVERY_FEE + (dist * COST_PER_KM);
         const productsTotal = cart.reduce((a,b)=>a+b.price,0);
 
-        onRequestHomeService('pharmacy', { 
-            items: cart, 
-            address: pharmacyAddress,
-            distanceKm: dist,
-            deliveryFee: fee,
-            totalCost: productsTotal + fee
+        setPendingPaymentInfo({
+            amount: productsTotal + fee,
+            description: `Pedido de Farmacia a Domicilio (${cart.length} artículos)`,
+            onSuccess: () => {
+                setPendingPaymentInfo(null);
+                onRequestHomeService('pharmacy', { 
+                    items: cart, 
+                    address: pharmacyAddress,
+                    distanceKm: dist,
+                    deliveryFee: fee,
+                    totalCost: productsTotal + fee
+                });
+                showToast("Pedido de farmacia enviado. Un repartidor se pondrá en contacto.", 'success');
+                setCart([]);
+                setPharmacyAddress('');
+                setActiveServiceModal('none');
+            }
         });
-        alert("Pedido de farmacia enviado. Un repartidor se pondrá en contacto.");
-        setCart([]);
-        setPharmacyAddress('');
-        setActiveServiceModal('none');
     };
 
     const handleUnifiedHomeCareOrder = () => {
-        if(!homeAddress) return alert("Ingrese su dirección");
+        if(!homeAddress) return showToast("Ingrese su dirección");
 
-        if (homeCareType === 'lab' && selectedLabTests.length === 0) return alert("Seleccione al menos un estudio.");
+        if (homeCareType === 'lab' && selectedLabTests.length === 0) return showToast("Seleccione al menos un estudio.");
 
         initiateLogisticsFlow({ 
             type: homeCareType,
@@ -331,7 +364,8 @@ const PatientAppView: React.FC<{
             return t.includes('receta') || 
                    t.includes('solicitud de estudios') || 
                    t.includes('reporte de resultados') || 
-                   t.includes('informe de imagenología');
+                   t.includes('informe de imagenología') ||
+                   t.includes('teleconsulta');
         });
     }, [notes]);
 
@@ -342,8 +376,8 @@ const PatientAppView: React.FC<{
         if (flowStep === 'profile' && selectedDoc) {
             return (
                 <div className="space-y-6 animate-in slide-in-from-right-4 max-w-3xl mx-auto">
-                     <button onClick={() => setFlowStep('none')} className="flex items-center text-slate-500 hover:text-slate-800 transition-colors mb-4 font-bold text-xs uppercase">
-                        <ChevronLeft size={16}/> Volver al directorio
+                     <button onClick={() => setFlowStep('none')} className="flex items-center text-slate-500 hover:text-slate-800 transition-colors mb-4 font-bold text-xs uppercase focus:outline-none focus:ring-2 focus:ring-blue-500 rounded-lg px-2 py-1">
+                        <ChevronLeft size={16} aria-hidden="true" /> Volver al directorio
                      </button>
                      
                      <div className="bg-white rounded-[3rem] shadow-xl overflow-hidden border border-slate-100">
@@ -412,8 +446,8 @@ const PatientAppView: React.FC<{
             const availableSlots = generateTimeSlots(selectedDoc.schedule, selectedDate);
             return (
                 <div className="max-w-2xl mx-auto space-y-8 animate-in slide-in-from-right-4">
-                     <button onClick={() => setFlowStep('profile')} className="flex items-center text-slate-500 hover:text-slate-800 transition-colors font-bold text-xs uppercase">
-                        <ChevronLeft size={16}/> Volver al perfil
+                     <button onClick={() => setFlowStep('profile')} className="flex items-center text-slate-500 hover:text-slate-800 transition-colors font-bold text-xs uppercase focus:outline-none focus:ring-2 focus:ring-blue-500 rounded-lg px-2 py-1">
+                        <ChevronLeft size={16} aria-hidden="true" /> Volver al perfil
                      </button>
                      
                      <div className="bg-white p-8 rounded-[3rem] shadow-xl border border-slate-200">
@@ -429,7 +463,7 @@ const PatientAppView: React.FC<{
                                      prev.setDate(prev.getDate() - 1);
                                      // Prevent past dates
                                      if(prev >= new Date(new Date().setHours(0,0,0,0))) setSelectedDate(prev);
-                                 }} className="p-2 bg-slate-100 rounded-full hover:bg-slate-200"><ChevronLeft/></button>
+                                 }} aria-label="Día anterior" className="p-2 bg-slate-100 rounded-full hover:bg-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500"><ChevronLeft aria-hidden="true" /></button>
                                  
                                  <div className="text-center">
                                      <p className="text-lg font-black uppercase text-slate-800">
@@ -444,7 +478,7 @@ const PatientAppView: React.FC<{
                                      const next = new Date(selectedDate);
                                      next.setDate(next.getDate() + 1);
                                      setSelectedDate(next);
-                                 }} className="p-2 bg-slate-100 rounded-full hover:bg-slate-200"><ChevronRight/></button>
+                                 }} aria-label="Día siguiente" className="p-2 bg-slate-100 rounded-full hover:bg-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500"><ChevronRight aria-hidden="true" /></button>
                              </div>
 
                              {availableSlots.length > 0 ? (
@@ -453,7 +487,8 @@ const PatientAppView: React.FC<{
                                          <button 
                                             key={slot}
                                             onClick={() => setSelectedSlot(slot)}
-                                            className={`py-3 px-2 rounded-xl text-xs font-black transition-all ${selectedSlot === slot ? 'bg-[#0057B8] text-white shadow-lg scale-105' : 'bg-slate-50 text-slate-600 hover:bg-blue-50'}`}
+                                            aria-pressed={selectedSlot === slot}
+                                            className={`py-3 px-2 rounded-xl text-xs font-black transition-all focus:outline-none focus:ring-2 focus:ring-blue-500 ${selectedSlot === slot ? 'bg-[#0057B8] text-white shadow-lg scale-105' : 'bg-slate-50 text-slate-600 hover:bg-blue-50'}`}
                                          >
                                              {slot}
                                          </button>
@@ -482,8 +517,8 @@ const PatientAppView: React.FC<{
         if (flowStep === 'consent') {
             return (
                 <div className="max-w-2xl mx-auto space-y-8 animate-in fade-in">
-                    <button onClick={() => setFlowStep(selectedDoc ? 'schedule' : 'none')} className="flex items-center text-slate-500 hover:text-slate-800 transition-colors font-bold text-xs uppercase">
-                        <ChevronLeft size={16}/> Cancelar
+                    <button onClick={() => setFlowStep(selectedDoc ? 'schedule' : 'none')} className="flex items-center text-slate-500 hover:text-slate-800 transition-colors font-bold text-xs uppercase focus:outline-none focus:ring-2 focus:ring-blue-500 rounded-lg px-2 py-1">
+                        <ChevronLeft size={16} aria-hidden="true" /> Cancelar
                     </button>
                     
                     <div className="bg-white p-10 rounded-[3rem] shadow-xl border border-slate-200">
@@ -503,11 +538,15 @@ const PatientAppView: React.FC<{
                         </div>
 
                         <div 
+                            role="checkbox"
+                            aria-checked={consentSigned}
+                            tabIndex={0}
+                            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setConsentSigned(!consentSigned); } }}
                             onClick={() => setConsentSigned(!consentSigned)}
-                            className={`p-4 rounded-2xl border-2 cursor-pointer transition-all flex items-center gap-4 ${consentSigned ? 'bg-emerald-50 border-emerald-500 text-emerald-800' : 'bg-white border-slate-200 hover:border-blue-300'}`}
+                            className={`p-4 rounded-2xl border-2 cursor-pointer transition-all flex items-center gap-4 focus:outline-none focus:ring-2 focus:ring-blue-500 ${consentSigned ? 'bg-emerald-50 border-emerald-500 text-emerald-800' : 'bg-white border-slate-200 hover:border-blue-300'}`}
                         >
                             <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${consentSigned ? 'border-emerald-600 bg-emerald-600 text-white' : 'border-slate-300'}`}>
-                                {consentSigned && <Check size={14}/>}
+                                {consentSigned && <Check size={14} aria-hidden="true" />}
                             </div>
                             <span className="text-xs font-black uppercase">He leído y acepto los términos legales</span>
                         </div>
@@ -576,32 +615,49 @@ const PatientAppView: React.FC<{
                             />
                         </div>
 
-                        <button onClick={handleSubmitIntake} className="w-full py-5 bg-[#0057B8] text-white rounded-2xl font-black uppercase text-xs tracking-widest shadow-xl hover:bg-emerald-500 transition-all flex items-center justify-center gap-2">
-                            Solicitar Atención <ArrowRight size={18}/>
-                        </button>
+                        <div className="flex gap-4">
+                            <button onClick={handleSubmitIntake} className="flex-[2] py-5 bg-[#0057B8] text-white rounded-2xl font-black uppercase text-xs tracking-widest shadow-xl hover:bg-emerald-500 transition-all flex items-center justify-center gap-2">
+                                Solicitar Atención <ArrowRight size={18}/>
+                            </button>
+                            <button 
+                                onClick={() => {
+                                    setIntakeForm({ ...intakeForm, mainSymptom: 'Mock Symptom (Prueba Rápida)' });
+                                    handlePaymentSuccess();
+                                }} 
+                                className="flex-1 py-5 bg-emerald-100 text-emerald-700 border-2 border-emerald-300 border-dashed rounded-2xl font-black uppercase text-xs tracking-widest hover:bg-emerald-200 transition-all flex items-center justify-center gap-2"
+                            >
+                                <Video size={16}/> Prueba Rápida
+                            </button>
+                        </div>
                     </div>
                 </div>
             );
         }
 
         // --- 4. WAITING ROOM ---
-        if (flowStep === 'waiting' && currentWaitingPatient) {
-            const status = currentWaitingPatient.status;
-            let message = "Esperando médico...";
-            let subMessage = "Por favor no cierre esta ventana.";
-            let icon = <Clock size={64} className="text-white animate-pulse"/>;
-            let bgClass = "bg-[#0057B8]";
+        if (flowStep === 'waiting') {
+            const status = currentWaitingPatient?.status || PatientStatus.ONLINE_QUEUE;
+            let message = "Conectando al sistema...";
+            let subMessage = "Generando sala segura...";
+            let icon = <Clock size={64} className="text-white animate-pulse" />;
+            let bgClass = "bg-slate-300";
 
-            if (status === PatientStatus.ONLINE_REVIEWING) {
-                message = "El Médico ha aceptado su solicitud";
-                subMessage = "Está leyendo su historial clínico y motivo de consulta.";
-                icon = <FileText size={64} className="text-white animate-bounce"/>;
-                bgClass = "bg-indigo-600";
-            } else if (status === PatientStatus.ONLINE_IN_CALL) {
-                message = "Llamada Entrante";
-                subMessage = "Conectando sala segura...";
-                icon = <Video size={64} className="text-white animate-ping"/>;
-                bgClass = "bg-emerald-600";
+            if (currentWaitingPatient) {
+                message = "Esperando médico...";
+                subMessage = "Por favor no cierre esta ventana.";
+                bgClass = "bg-[#0057B8]";
+
+                if (status === PatientStatus.ONLINE_REVIEWING) {
+                    message = "El Médico ha aceptado su solicitud";
+                    subMessage = "Está leyendo su historial clínico y motivo de consulta.";
+                    icon = <FileText size={64} className="text-white animate-bounce"/>;
+                    bgClass = "bg-indigo-600";
+                } else if (status === PatientStatus.ONLINE_IN_CALL) {
+                    message = "Llamada Entrante";
+                    subMessage = "Conectando sala segura...";
+                    icon = <Video size={64} className="text-white animate-ping"/>;
+                    bgClass = "bg-emerald-600";
+                }
             }
 
             return (
@@ -790,14 +846,61 @@ const PatientAppView: React.FC<{
                                      </>
                                  )}
 
-                                 {(viewingNote.type.includes('Estudios') || viewingNote.type.includes('Reporte') || viewingNote.type.includes('Imagen')) && (
+                                 {(viewingNote.type.includes('Estudios') || viewingNote.type.includes('Reporte') || viewingNote.type.includes('Imagen') || viewingNote.type.includes('Informe')) && (
                                      <div className="space-y-4 text-xs font-medium uppercase leading-relaxed text-justify">
                                          {Object.entries(viewingNote.content).map(([key, val]) => {
-                                             if (['meds', 'vitals', 'date', 'author'].includes(key) || typeof val === 'object') return null;
+                                             if (['meds', 'vitals', 'date', 'author', 'isAttachment', 'fileUrl', 'fileName', 'fileType', 'reportType', 'studyTitle'].includes(key)) return null;
+                                             
+                                             if (key === 'labResults' && Array.isArray(val)) {
+                                               return (
+                                                 <div key={key} className="mb-4">
+                                                   <span className="font-black text-slate-500 block text-[10px] mb-2">RESULTADOS DE LABORATORIO</span>
+                                                   <table className="w-full text-left border-collapse border border-slate-200">
+                                                     <thead className="bg-slate-50">
+                                                       <tr className="text-[9px] font-black uppercase text-slate-500">
+                                                         <th className="p-2 border-b border-slate-200">Analito</th>
+                                                         <th className="p-2 border-b border-slate-200 text-center">Resultado</th>
+                                                         <th className="p-2 border-b border-slate-200 text-center">Unidad</th>
+                                                         <th className="p-2 border-b border-slate-200 text-center">Ref.</th>
+                                                         <th className="p-2 border-b border-slate-200 text-center">Estatus</th>
+                                                       </tr>
+                                                     </thead>
+                                                     <tbody>
+                                                       {val.map((r: any, i: number) => (
+                                                         <tr key={i} className="border-b border-slate-100 text-[10px] font-bold">
+                                                           <td className="p-2">{r.analyte}</td>
+                                                           <td className="p-2 text-center text-blue-700">{r.value}</td>
+                                                           <td className="p-2 text-center text-slate-500">{r.unit}</td>
+                                                           <td className="p-2 text-center text-slate-500">{r.refRange}</td>
+                                                           <td className="p-2 text-center">
+                                                             <span className={`px-1 py-0.5 rounded ${r.status === 'Normal' ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>
+                                                               {r.status}
+                                                             </span>
+                                                           </td>
+                                                         </tr>
+                                                       ))}
+                                                     </tbody>
+                                                   </table>
+                                                 </div>
+                                               );
+                                             }
+
+                                             if (key === 'requestedStudies' && Array.isArray(val)) {
+                                               if (val.length === 0) return null;
+                                               return (
+                                                 <div key={key} className="mb-2">
+                                                   <span className="font-black text-slate-500 block text-[10px] mb-1">ESTUDIOS SOLICITADOS</span>
+                                                   <span className="block border-l-2 border-slate-200 pl-3">{val.join(', ')}</span>
+                                                 </div>
+                                               );
+                                             }
+
+                                             if (typeof val === 'object') return null;
+
                                              return (
                                                  <div key={key} className="mb-2">
                                                      <span className="font-black text-slate-500 block text-[10px] mb-1">{key.replace(/([A-Z])/g, ' $1')}</span>
-                                                     <span className="block border-l-2 border-slate-200 pl-3">{String(val)}</span>
+                                                     <span className="block border-l-2 border-slate-200 pl-3 whitespace-pre-wrap">{String(val)}</span>
                                                  </div>
                                              );
                                          })}
@@ -814,6 +917,15 @@ const PatientAppView: React.FC<{
                              </div>
                         </div>
                     </div>
+                    <style>{`
+                      @media print {
+                        .no-print { display: none !important; }
+                        body { background: white !important; margin: 0 !important; padding: 0 !important; }
+                        .fixed { position: absolute !important; inset: 0 !important; background: white !important; }
+                        .min-h-screen { min-height: auto !important; }
+                        @page { margin: 1.5cm; size: letter portrait; }
+                      }
+                    `}</style>
                 </div>
             );
         }
@@ -1391,6 +1503,26 @@ const PatientAppView: React.FC<{
 
     return (
         <div className="min-h-screen bg-slate-50 flex flex-col">
+            {/* Toast Message */}
+            {toastMsg && (
+                <div className={`fixed top-4 right-4 z-[200] max-w-sm w-full p-4 rounded-2xl shadow-2xl flex items-start gap-4 transition-all animate-in slide-in-from-right-8 border-2 ${toastMsg.type === 'error' ? 'bg-white border-rose-200' : 'bg-emerald-900 border-emerald-800'}`}>
+                    <div className={`p-2 rounded-xl mt-1 ${toastMsg.type === 'error' ? 'bg-rose-100 text-rose-600' : 'bg-emerald-800 text-emerald-400'}`}>
+                        {toastMsg.type === 'error' ? <AlertOctagon size={20} /> : <CheckCircle2 size={20} />}
+                    </div>
+                    <div className="flex-1 pr-6">
+                        <h4 className={`text-sm font-black uppercase tracking-tight mb-1 ${toastMsg.type === 'error' ? 'text-slate-900' : 'text-white'}`}>
+                            {toastMsg.type === 'error' ? 'Atención Requerida' : 'Operación Exitosa'}
+                        </h4>
+                        <p className={`text-xs font-medium leading-relaxed ${toastMsg.type === 'error' ? 'text-slate-500' : 'text-emerald-100'}`}>
+                            {toastMsg.title}
+                        </p>
+                    </div>
+                    <button onClick={() => setToastMsg(null)} className={`absolute top-4 right-4 p-1.5 rounded-lg opacity-50 hover:opacity-100 transition-colors ${toastMsg.type === 'error' ? 'text-slate-500 hover:bg-slate-100' : 'text-white hover:bg-emerald-800'}`}>
+                        <X size={14} />
+                    </button>
+                </div>
+            )}
+            
             {/* Navbar Responsivo */}
             <nav className="bg-white border-b border-slate-200 sticky top-0 z-50 px-4 md:px-8 py-4 no-print">
                 <div className="max-w-7xl mx-auto flex justify-between items-center">
@@ -1412,7 +1544,7 @@ const PatientAppView: React.FC<{
                         <div className="w-px h-6 bg-slate-200"></div>
                         <div className="flex items-center gap-3">
                             <div className="text-right">
-                                <p className="text-xs font-black text-slate-900">Paciente Demo</p>
+                                <p className="text-xs font-black text-slate-900">{currentUser?.name || 'Paciente Demo'}</p>
                                 <p className="text-[10px] text-emerald-600 font-bold uppercase">Activo</p>
                             </div>
                             <div className="w-10 h-10 bg-slate-100 rounded-full flex items-center justify-center text-slate-500 border border-slate-200">
@@ -1449,13 +1581,25 @@ const PatientAppView: React.FC<{
             <main className="flex-1 max-w-7xl mx-auto w-full p-4 md:p-8">
                 {renderContent()}
             </main>
+
+            <PaymentModal 
+                isOpen={!!pendingPaymentInfo}
+                onClose={() => setPendingPaymentInfo(null)}
+                amount={pendingPaymentInfo?.amount || 0}
+                description={pendingPaymentInfo?.description || ''}
+                onSuccess={pendingPaymentInfo?.onSuccess || (() => {})}
+            />
         </div>
     );
 };
 
 const TelemedicineDashboard: React.FC<TelemedicineDashboardProps> = ({ patients, onUpdateStatus, onAddPatient, onAddHomeRequest, onUpdateHomeRequest, doctorsList = MOCK_DOCTORS, currentUser, homeRequests = [], staffList = [], notes = [], onUpdatePatient }) => {
   const navigate = useNavigate();
-  const [viewMode, setViewMode] = useState<'landing' | 'doctor' | 'patient_app'>('landing');
+  const [viewMode, setViewMode] = useState<'landing' | 'doctor' | 'patient_app'>(() => {
+    if (currentUser?.userType === 'Paciente') return 'patient_app';
+    if (currentUser?.userType === 'Médico' || currentUser?.userType === 'Administrador') return 'doctor';
+    return 'landing';
+  });
   
   // DOCTOR VIEW STATES
   const [docTab, setDocTab] = useState<'waiting' | 'agenda' | 'finance'>('waiting');
@@ -1521,14 +1665,18 @@ const TelemedicineDashboard: React.FC<TelemedicineDashboardProps> = ({ patients,
   const handlePatientBook = (doc: DoctorInfo | null, time: string, intake: TeleIntakeForm, date?: string) => {
       if (onAddPatient) {
           const isImmediate = !doc;
+          const getToday = () => {
+            const d = new Date();
+            return new Date(d.getTime() - (d.getTimezoneOffset() * 60000)).toISOString().split('T')[0];
+          };
           const newP: Patient = {
               id: `APP-${Date.now()}`,
-              name: 'Paciente Demo',
+              name: currentUser?.name || 'Paciente Demo',
               age: 30, sex: 'M', curp: '', bloodType: '', allergies: [intake.allergies], chronicDiseases: intake.chronicConditions,
               status: isImmediate ? PatientStatus.ONLINE_QUEUE : PatientStatus.ONLINE_WAITING,
               priority: intake.painLevel > 7 ? PriorityLevel.HIGH : PriorityLevel.ROUTINE,
               assignedModule: ModuleType.TELEMEDICINE,
-              scheduledDate: date || new Date().toISOString().split('T')[0],
+              scheduledDate: date || getToday(),
               appointmentTime: time,
               reason: isImmediate ? 'Atención Inmediata' : 'Cita Programada',
               assignedDoctorId: doc?.cedula,
@@ -1564,8 +1712,8 @@ const TelemedicineDashboard: React.FC<TelemedicineDashboardProps> = ({ patients,
 
           onAddHomeRequest({
               id: `REQ-${Date.now()}`,
-              patientId: 'DEMO-PATIENT',
-              patientName: 'Paciente Demo',
+              patientId: currentUser?.id || 'DEMO-PATIENT',
+              patientName: currentUser?.name || 'Paciente Demo',
               patientAddress: details?.address || 'Dirección Registrada en App',
               requestedBy: 'Paciente (App)',
               requestedDate: new Date().toISOString(),
@@ -1638,7 +1786,7 @@ const TelemedicineDashboard: React.FC<TelemedicineDashboardProps> = ({ patients,
 
   // --- PATIENT APP VIEW ---
   if (viewMode === 'patient_app') {
-      const myPatientRecords = patients.filter(p => p.name === 'Paciente Demo');
+      const myPatientRecords = patients.filter(p => p.id === currentUser?.id || p.name === currentUser?.name);
       const myPatientIds = myPatientRecords.map(p => p.id);
       
       // Active one for flow state (waiting room)

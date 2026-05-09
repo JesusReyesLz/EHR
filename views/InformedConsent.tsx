@@ -732,6 +732,15 @@ const InformedConsent: React.FC<InformedConsentProps> = ({ patients, notes, onSa
                       <button onClick={() => window.print()} className="px-8 py-3 bg-slate-900 text-white rounded-xl font-bold uppercase text-xs flex items-center gap-2"><Printer size={16}/> Imprimir</button>
                       <button onClick={() => navigate(`/patient/${id}`)} className="px-8 py-3 bg-slate-100 text-slate-600 rounded-xl font-bold uppercase text-xs">Salir</button>
                   </div>
+                  <style>{`
+                    @media print {
+                      .no-print { display: none !important; }
+                      body { background: white !important; margin: 0 !important; padding: 0 !important; }
+                      .fixed { position: absolute !important; inset: 0 !important; background: white !important; }
+                      .min-h-screen { min-height: auto !important; }
+                      @page { margin: 1.5cm; size: letter portrait; }
+                    }
+                  `}</style>
               </div>
           </div>
       );

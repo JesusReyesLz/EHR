@@ -11,6 +11,17 @@ import {
 import { Patient, ClinicalNote, PatientStatus, HomeServiceRequest, Vitals, DoctorInfo, MedicationPrescription, MedicationStock, PriceItem, PriceType } from '../types';
 import { LAB_CATALOG, NOTE_CATEGORIES, VADEMECUM_DB, INITIAL_STOCK, INITIAL_PRICES, MOCK_DOCTORS } from '../constants';
 
+// Document Components
+import MedicalHistory from './MedicalHistory';
+import Prescription from './Prescription';
+import PerinatalCard from './PerinatalCard';
+import ChronicDiseaseControl from './ChronicDiseaseControl';
+import ComprehensiveHealthControl from './ComprehensiveHealthControl';
+import MedicalCertificate from './notes/MedicalCertificate';
+import AuxiliaryOrder from './AuxiliaryOrder';
+import InformedConsent from './InformedConsent';
+import EvolutionNote from './notes/EvolutionNote';
+
 interface TelemedicineProps {
   patients?: Patient[]; 
   notes?: ClinicalNote[]; 
@@ -65,6 +76,8 @@ const Telemedicine: React.FC<TelemedicineProps> = ({ patients = [], notes = [], 
   const [elapsedTime, setElapsedTime] = useState(0);
   const [chatMessage, setChatMessage] = useState('');
 
+  const [activeDocumentType, setActiveDocumentType] = useState<string | null>(null);
+
   // --- DATA LOADING FOR PRESCRIPTION ENGINE ---
   const [inventory] = useState<MedicationStock[]>(() => {
     const saved = localStorage.getItem('med_inventory_v6');
@@ -104,6 +117,9 @@ const Telemedicine: React.FC<TelemedicineProps> = ({ patients = [], notes = [], 
   
   // Finalize / SUIVE Modal State
   const [showFinalizeModal, setShowFinalizeModal] = useState(false);
+  const [showInviteModal, setShowInviteModal] = useState(false);
+  const [inviteInput, setInviteInput] = useState('');
+  const [waitingInterconsultants, setWaitingInterconsultants] = useState<any[]>([]);
   const [finalizeData, setFinalizeData] = useState({
       diagnosis: '',
       consultationType: 'Subsecuente',
@@ -116,6 +132,34 @@ const Telemedicine: React.FC<TelemedicineProps> = ({ patients = [], notes = [], 
       notes: ''
   });
 
+  const [sidebarWidth, setSidebarWidth] = useState(550);
+  const [isDragging, setIsDragging] = useState(false);
+
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isDragging) return;
+      // Calculate new width: window width - mouse X position
+      // Add limits to constrain the sidebar
+      const newWidth = window.innerWidth - e.clientX;
+      if (newWidth > 300 && newWidth < window.innerWidth - 300) {
+        setSidebarWidth(newWidth);
+      }
+    };
+
+    const handleMouseUp = () => {
+      setIsDragging(false);
+    };
+
+    if (isDragging) {
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+    }
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isDragging]);
+
   const [messages, setMessages] = useState<{sender: string, text: string, time: string, isSystem?: boolean}[]>([
       {sender: 'Sistema', text: 'Conexión cifrada E2EE establecida (AES-256).', time: '10:00', isSystem: true},
       {sender: 'Sistema', text: 'El paciente ha ingresado a la sala virtual.', time: '10:01', isSystem: true},
@@ -123,6 +167,9 @@ const Telemedicine: React.FC<TelemedicineProps> = ({ patients = [], notes = [], 
   ]);
 
   // PSOAP State
+  const [currentNoteId, setCurrentNoteId] = useState<string | null>(null);
+  const [currentPrescriptionId, setCurrentPrescriptionId] = useState<string | null>(null);
+  
   const [clinicalNote, setClinicalNote] = useState({
       subjective: '', 
       objectiveVitals: { temp: '', hr: '', rr: '', o2: '', bp: '' }, 
@@ -285,23 +332,44 @@ const Telemedicine: React.FC<TelemedicineProps> = ({ patients = [], notes = [], 
       }
   };
 
+  const handleInvite = () => {
+      if(!inviteInput.trim()) return;
+      alert(`Invitación enviada a: ${inviteInput}\n\nSe ha enviado un enlace seguro para unirse a la teleconsulta.`);
+      setInviteInput('');
+      setShowInviteModal(false);
+  };
+
+  const handleInviteDoctor = (doc: any) => {
+      alert(`Solicitud de interconsulta enviada a: ${doc.name} (${doc.specialty})\n\nEl sistema le notificará para que ingrese a la sala de espera.`);
+      setShowInviteModal(false);
+      
+      // Simular que el doctor entra a la sala de espera en un par de segundos
+      setTimeout(() => {
+          setWaitingInterconsultants(prev => [...prev, doc]);
+      }, 3000);
+  };
+
   const handleSaveNote = () => {
       if (!onSaveNote || !patient) return;
       
+      const noteId = currentNoteId || `TELE-${Date.now()}`;
+      if (!currentNoteId) setCurrentNoteId(noteId);
+
       const newNote: ClinicalNote = {
-          id: `TELE-${Date.now()}`,
+          id: noteId,
           patientId: patient.id,
           type: 'Nota de Teleconsulta (Evolución)',
           date: new Date().toLocaleString('es-MX'),
-          author: currentUser?.name || 'Dr. Alejandro Méndez', 
+          author: currentUser?.name || 'Dr. Médico', 
           content: {
               subjective: clinicalNote.subjective,
               objective: `Signos Vitales (IoT/Reportados): T:${clinicalNote.objectiveVitals.temp}, FC:${clinicalNote.objectiveVitals.hr}, FR:${clinicalNote.objectiveVitals.rr}, SatO2:${clinicalNote.objectiveVitals.o2}, TA:${clinicalNote.objectiveVitals.bp}.\n\nExploración (Video): ${clinicalNote.objectiveExam}`,
               analysis: clinicalNote.analysis,
               plan: clinicalNote.plan,
-              prescriptions: medications, 
+              meds: medications, 
               procedures: selectedProcedures, 
-              duration: formatTime(elapsedTime)
+              duration: formatTime(elapsedTime),
+              doctorInfo: currentUser || null
           },
           isSigned: true,
           hash: `CERT-TELE-${Math.random().toString(36).substr(2, 9).toUpperCase()}`,
@@ -312,19 +380,23 @@ const Telemedicine: React.FC<TelemedicineProps> = ({ patients = [], notes = [], 
 
       // GENERAR NOTA DE RECETA SEPARADA SI HAY MEDICAMENTOS
       if (medications.length > 0) {
+          const recId = currentPrescriptionId || `REC-${Date.now()}`;
+          if (!currentPrescriptionId) setCurrentPrescriptionId(recId);
+          
           const prescriptionNote: ClinicalNote = {
-              id: `REC-${Date.now()}`,
+              id: recId,
               patientId: patient.id,
               type: 'Receta Médica', 
               date: new Date().toLocaleString('es-MX'),
-              author: currentUser?.name || 'Dr. Alejandro Méndez',
+              author: currentUser?.name || 'Dr. Médico',
               content: {
                   diagnosis: clinicalNote.analysis,
                   meds: medications,
                   procedures: selectedProcedures,
                   instructions: clinicalNote.plan,
                   folio: `REC-TELE-${Date.now().toString().slice(-6)}`,
-                  isTelemedicine: true
+                  isTelemedicine: true,
+                  doctorInfo: currentUser || null
               },
               isSigned: true,
               hash: `CERT-REC-${Math.random().toString(36).substr(2, 9).toUpperCase()}`,
@@ -334,6 +406,22 @@ const Telemedicine: React.FC<TelemedicineProps> = ({ patients = [], notes = [], 
       }
 
       alert('Nota de evolución y receta guardadas exitosamente.');
+  };
+
+  const handleNewNote = () => {
+      if(window.confirm("¿Desea iniciar una nueva nota en blanco? Asegúrese de haber guardado la actual.")) {
+          setClinicalNote({
+              subjective: '', 
+              objectiveVitals: { temp: '', hr: '', rr: '', o2: '', bp: '' }, 
+              objectiveExam: '', 
+              analysis: '', 
+              plan: '' 
+          });
+          setMedications([]);
+          setSelectedProcedures([]);
+          setCurrentNoteId(null);
+          setCurrentPrescriptionId(null);
+      }
   };
 
   const handleSubmitHomeLab = () => {
@@ -357,8 +445,28 @@ const Telemedicine: React.FC<TelemedicineProps> = ({ patients = [], notes = [], 
       setActiveSidePanel('notes');
   };
 
-  const handleOpenDocInSidebar = (noteType: string) => {
-      setViewingDocType(noteType);
+  // --- LOGIC TO OPEN EXTERNAL NOTES WITHOUT DROPPING CALL ---
+  const getNoteRoute = (type: string) => {
+    const typeMap: any = { 
+      'Historia Clínica Medica': `/patient/${id}/history`, 
+      'Nota de Evolución': `/patient/${id}/note/evolution`, 
+      'Receta Médica': `/patient/${id}/prescription`,
+      'Carnet Perinatal / Control Prenatal': `/patient/${id}/perinatal-card`,
+      'Tarjeta de Control de Enfermedades Crónicas': `/patient/${id}/chronic-card`,
+      'Carnet de Salud Integral': `/patient/${id}/health-control`,
+      'Certificado Médico': `/patient/${id}/note/medical-certificate`,
+      'Solicitud de Estudios': `/patient/${id}/auxiliary-order`,
+      'Carta de Consentimiento Informado': `/patient/${id}/consent`
+    };
+    return typeMap[type] || `/patient/${id}/note/generic/${type}`;
+  };
+
+  const handleOpenNoteExternal = (noteType: string) => {
+      setActiveDocumentType(noteType);
+  };
+
+  const handleCancelInlineDoc = () => {
+      setActiveDocumentType(null);
   };
 
   const handleConfirmFinalize = () => {
@@ -366,7 +474,7 @@ const Telemedicine: React.FC<TelemedicineProps> = ({ patients = [], notes = [], 
      if (!patient || !onSaveNote || !onUpdatePatient) return;
 
      // 1. Guardar Nota de Teleconsulta si hay datos escritos
-     if (clinicalNote.subjective || clinicalNote.analysis || medications.length > 0) {
+     if (clinicalNote.subjective || clinicalNote.objectiveExam || clinicalNote.analysis || clinicalNote.plan || medications.length > 0 || selectedProcedures.length > 0) {
          handleSaveNote(); // Incluye lógica de receta separada
      }
 
@@ -381,7 +489,8 @@ const Telemedicine: React.FC<TelemedicineProps> = ({ patients = [], notes = [], 
              ...finalizeData, 
              medico: currentUser?.name || 'Dr. Médico', 
              timestamp: new Date().toISOString(),
-             origin: 'Telemedicine' 
+             origin: 'Telemedicine',
+             doctorInfo: currentUser || null
          },
          isSigned: true,
          hash: `SUIVE-TELE-${Math.random().toString(36).substr(2,8)}`
@@ -483,10 +592,10 @@ const Telemedicine: React.FC<TelemedicineProps> = ({ patients = [], notes = [], 
       </div>
 
       {/* --- MAIN CONTENT AREA (SPLIT SCREEN) --- */}
-      <div className="flex-1 flex relative">
+      <div className="flex-1 flex relative overflow-hidden">
           
           {/* LEFT: MAIN VIDEO (PATIENT) */}
-          <div className={`flex-1 bg-slate-900 flex items-center justify-center relative transition-all duration-300 ${activeSidePanel !== 'notes' ? 'w-full' : 'w-1/2'}`}>
+          <div className="flex-1 bg-slate-900 flex items-center justify-center relative transition-all duration-300">
               <div className="relative w-full h-full flex items-center justify-center bg-slate-800">
                   <div className="text-center opacity-40 animate-pulse">
                     <div className="w-48 h-48 bg-slate-700 rounded-full flex items-center justify-center text-6xl font-black text-slate-500 mx-auto mb-6 border-4 border-slate-600 shadow-2xl">
@@ -506,6 +615,35 @@ const Telemedicine: React.FC<TelemedicineProps> = ({ patients = [], notes = [], 
                           </div>
                       </div>
                   )}
+
+                  {/* SALA DE ESPERA / INTERCONSULTA */}
+                  {waitingInterconsultants.length > 0 && (
+                      <div className="absolute top-24 right-6 z-50 space-y-3">
+                          {waitingInterconsultants.map(doc => (
+                              <div key={doc.id} className="bg-slate-900/90 backdrop-blur border-2 border-blue-500/50 rounded-2xl p-4 shadow-2xl flex flex-col gap-3 animate-in slide-in-from-right w-72">
+                                  <div className="flex items-center gap-3">
+                                      <div className="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center shrink-0">
+                                          <User className="text-white w-5 h-5" />
+                                      </div>
+                                      <div>
+                                         <p className="text-white font-bold text-xs">{doc.name}</p>
+                                         <p className="text-blue-400 text-[10px] font-bold uppercase">{doc.specialty}</p>
+                                         <p className="text-slate-400 text-[9px]">Solicita entrar a la sala</p>
+                                      </div>
+                                  </div>
+                                  <div className="flex gap-2">
+                                      <button onClick={() => {
+                                          setWaitingInterconsultants(prev => prev.filter(d => d.id !== doc.id));
+                                          alert(`${doc.name} ha sido admitido en la sala y ya puede ver y escuchar la consulta.`);
+                                      }} className="flex-1 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-[10px] uppercase tracking-widest font-black transition-all">Admitir</button>
+                                      <button onClick={() => {
+                                           setWaitingInterconsultants(prev => prev.filter(d => d.id !== doc.id));
+                                      }} className="flex-1 py-2 bg-slate-700 hover:bg-rose-600 text-white rounded-xl text-[10px] uppercase tracking-widest font-black transition-all">Rechazar</button>
+                                  </div>
+                              </div>
+                          ))}
+                      </div>
+                  )}
               </div>
 
               <div className="absolute bottom-24 left-6 w-48 aspect-video bg-black rounded-2xl border border-white/10 shadow-2xl overflow-hidden z-20 group hover:border-blue-500/50 transition-all">
@@ -522,8 +660,28 @@ const Telemedicine: React.FC<TelemedicineProps> = ({ patients = [], notes = [], 
               </div>
           </div>
 
+          {/* DRAG HANDLE FOR RESIZING */}
+          <div 
+             className="w-3 bg-slate-100 hover:bg-[#0057B8] cursor-col-resize z-[500] transition-colors flex items-center justify-center border-l border-slate-200 shadow-[rgba(0,0,0,0.1)_0px_0px_15px_-3px] group relative"
+             onMouseDown={() => setIsDragging(true)}
+          >
+              <div className="flex flex-col gap-1.5 opacity-30 group-hover:opacity-100 transition-opacity p-1 bg-white group-hover:bg-[#0057B8] rounded-full border border-slate-200 group-hover:border-transparent">
+                  <div className="w-1 h-1 bg-slate-400 group-hover:bg-white rounded-full"></div>
+                  <div className="w-1 h-1 bg-slate-400 group-hover:bg-white rounded-full"></div>
+                  <div className="w-1 h-1 bg-slate-400 group-hover:bg-white rounded-full"></div>
+              </div>
+              
+              {/* Overlay active during drag to prevent iframe jumping */}
+              {isDragging && (
+                  <div className="fixed inset-0 z-[9999] cursor-col-resize bg-black/5" />
+              )}
+          </div>
+
           {/* RIGHT: SOAP EDITOR / TOOLS (The "Split Screen") */}
-          <div className="w-[550px] bg-white border-l border-slate-200 shadow-2xl z-40 flex flex-col">
+          <div 
+              className="h-full overflow-hidden bg-white border-l border-slate-200 shadow-2xl z-40 flex flex-col"
+              style={{ width: `${sidebarWidth}px` }}
+          >
               {/* Tabs */}
               <div className="flex border-b border-slate-100 bg-slate-50 overflow-x-auto no-scrollbar">
                   <button onClick={() => setActiveSidePanel('notes')} className={`flex-1 py-4 px-2 text-[10px] font-black uppercase tracking-widest whitespace-nowrap ${activeSidePanel === 'notes' ? 'bg-white text-[#0057B8] border-b-2 border-[#0057B8]' : 'text-slate-400'}`}>Nota SOAP</button>
@@ -536,113 +694,67 @@ const Telemedicine: React.FC<TelemedicineProps> = ({ patients = [], notes = [], 
               {/* Content */}
               <div className="flex-1 overflow-y-auto custom-scrollbar p-6 bg-slate-50/50">
                   
-                  {/* PESTAÑA: DOCUMENTOS EN BARRA LATERAL (VIEWER) */}
+                  {/* PESTAÑA: DOCUMENTOS EN BARRA LATERAL (VIEWER/EDITOR) */}
                   {activeSidePanel === 'docs' && (
-                      <div className="space-y-6 animate-in slide-in-from-right-4 h-full flex flex-col">
-                          {!viewingDocType ? (
-                              <>
-                                <div className="bg-indigo-50 border border-indigo-100 p-4 rounded-2xl flex items-start gap-3">
-                                    <Info size={16} className="text-indigo-600 mt-1 flex-shrink-0"/>
-                                    <p className="text-[10px] text-indigo-800 font-medium leading-relaxed">
-                                        Seleccione un documento para visualizarlo o editarlo en este panel sin salir de la consulta.
-                                    </p>
-                                </div>
-                                <div className="space-y-6">
-                                    {NOTE_CATEGORIES.map(cat => (
-                                        <div key={cat.title}>
-                                            <h5 className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2 border-b border-slate-200 pb-1">{cat.title}</h5>
-                                            <div className="space-y-2">
-                                                {cat.notes.map(note => (
-                                                    <button 
-                                                        key={note}
-                                                        onClick={() => handleOpenDocInSidebar(note)}
-                                                        className="w-full text-left p-3 bg-white border border-slate-200 rounded-xl hover:bg-blue-50 hover:border-blue-200 transition-all flex justify-between items-center group"
-                                                    >
-                                                        <span className="text-[10px] font-bold text-slate-700 uppercase group-hover:text-blue-700">{note}</span>
-                                                        <ChevronRight size={12} className="text-slate-300 group-hover:text-blue-500"/>
-                                                    </button>
-                                                ))}
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                              </>
-                          ) : (
-                              // VISOR DE DOCUMENTO (SIMPLE SUMMARY VIEW)
-                              <div className="flex flex-col h-full">
-                                  <div className="flex items-center gap-2 mb-4">
-                                      <button onClick={() => setViewingDocType(null)} className="p-2 hover:bg-slate-200 rounded-lg"><ArrowLeft size={16}/></button>
-                                      <h3 className="text-sm font-black uppercase text-slate-900">{viewingDocType}</h3>
+                      <div className="space-y-6 animate-in slide-in-from-right-4 flex flex-col pb-20">
+                          {activeDocumentType ? (
+                              <div className="bg-white border flex flex-col border-slate-200 rounded-3xl p-6 shadow-sm relative overflow-hidden h-[800px]">
+                                  <div className="absolute top-0 left-0 w-1 h-full bg-[#0057B8]"></div>
+                                  <div className="flex justify-between items-center mb-6 shrink-0">
+                                      <div>
+                                          <h4 className="text-xs font-black text-slate-900 uppercase tracking-widest leading-tight">{activeDocumentType}</h4>
+                                          <p className="text-[10px] text-slate-500 font-bold uppercase mt-1">Guardado Directo en Expediente</p>
+                                      </div>
+                                      <button onClick={handleCancelInlineDoc} className="p-2 hover:bg-slate-100 border border-slate-200 rounded-xl transition-all shadow-sm">
+                                          <span className="text-[10px] font-black uppercase text-slate-600 flex items-center gap-1"><X size={12}/> Cerrar Documento</span>
+                                      </button>
                                   </div>
                                   
-                                  <div className="flex-1 bg-white border border-slate-200 rounded-2xl p-6 overflow-y-auto">
-                                      {(() => {
-                                          const relevantNote = patientHistory.find(n => n.type.includes(viewingDocType || '') || (viewingDocType && viewingDocType.includes(n.type)));
-                                          
-                                          if (viewingDocType === 'Receta Médica') {
-                                              return (
-                                                  <>
-                                                    <div className="text-center mb-6 border-b pb-4">
-                                                        <h2 className="text-lg font-black uppercase text-slate-900">Receta Médica</h2>
-                                                        <p className="text-[10px] text-slate-500 font-bold">Vista Previa del Plan Actual</p>
-                                                    </div>
-                                                    {medications.length > 0 || selectedProcedures.length > 0 ? (
-                                                        <div className="space-y-4">
-                                                            {medications.map((m, i) => (
-                                                                <div key={i} className="text-xs border-b border-dashed pb-2">
-                                                                    <p className="font-bold text-slate-900">{m.name} ({m.genericName})</p>
-                                                                    <p className="text-slate-600">{m.dosage} - {m.frequency}</p>
-                                                                    <p className="text-slate-500 italic">{m.instructions}</p>
-                                                                </div>
-                                                            ))}
-                                                        </div>
-                                                    ) : (
-                                                        <p className="text-center text-xs text-slate-400 italic">Agregue medicamentos en la pestaña SOAP para visualizarlos aquí.</p>
-                                                    )}
-                                                    <div className="mt-8 text-center">
-                                                        <p className="text-[10px] font-black uppercase text-blue-600">Firma Digital Pre-autorizada</p>
-                                                    </div>
-                                                  </>
-                                              );
-                                          }
-
-                                          if (relevantNote) {
-                                              return (
-                                                  <div className="space-y-4">
-                                                      <div className="border-b pb-2">
-                                                          <p className="font-bold text-sm text-slate-900">{relevantNote.type}</p>
-                                                          <p className="text-xs text-slate-500">{relevantNote.date} • {relevantNote.author}</p>
-                                                      </div>
-                                                      <div className="space-y-3 text-xs">
-                                                          {Object.entries(relevantNote.content).map(([key, val]) => {
-                                                              if (key === 'vitals' || typeof val === 'object') return null;
-                                                              return (
-                                                                  <div key={key}>
-                                                                      <p className="font-bold text-slate-700 uppercase text-[10px] tracking-wide">{key.replace(/([A-Z])/g, ' $1')}</p>
-                                                                      <p className="text-slate-600 whitespace-pre-wrap">{String(val)}</p>
-                                                                  </div>
-                                                              );
-                                                          })}
-                                                      </div>
-                                                  </div>
-                                              );
-                                          } else {
-                                              return (
-                                                  <div className="flex flex-col items-center justify-center h-full text-center opacity-50">
-                                                      <FileText size={32} className="text-slate-400 mb-2"/>
-                                                      <p className="text-xs font-bold text-slate-500">No se encontraron registros previos de este tipo.</p>
-                                                      <button 
-                                                          onClick={() => window.open(`/#/patient/${id}/note/generic/${viewingDocType}`, '_blank', 'width=1000,height=800')} 
-                                                          className="mt-4 px-4 py-2 bg-slate-100 text-slate-600 rounded-lg text-[9px] font-bold uppercase hover:bg-slate-200 flex items-center gap-2"
-                                                      >
-                                                          <ExternalLink size={12}/> Abrir en Ventana Nueva
-                                                      </button>
-                                                  </div>
-                                              );
-                                          }
-                                      })()}
+                                  <div className="w-full flex-1 overflow-auto custom-scrollbar bg-slate-50 border border-slate-200 rounded-xl">
+                                    <div className="min-w-[800px] h-full">
+                                        {activeDocumentType === 'Historia Clínica Medica' && <MedicalHistory patients={patients} notes={notes} onSaveNote={onSaveNote} onUpdatePatient={onUpdatePatient} doctorInfo={currentUser} />}
+                                        {activeDocumentType === 'Nota de Evolución' && <EvolutionNote patients={patients} notes={notes} onSaveNote={onSaveNote} onUpdatePatient={onUpdatePatient} doctorInfo={currentUser} />}
+                                        {activeDocumentType === 'Receta Médica' && <Prescription patients={patients} doctorInfo={currentUser} onSaveNote={onSaveNote} onUpdatePatient={onUpdatePatient} />}
+                                        {activeDocumentType === 'Carnet Perinatal / Control Prenatal' && <PerinatalCard patients={patients} onSaveNote={onSaveNote} onUpdatePatient={onUpdatePatient} />}
+                                        {activeDocumentType === 'Tarjeta de Control de Enfermedades Crónicas' && <ChronicDiseaseControl patients={patients} onSaveNote={onSaveNote} onUpdatePatient={onUpdatePatient} />}
+                                        {activeDocumentType === 'Carnet de Salud Integral' && <ComprehensiveHealthControl patients={patients} onSaveNote={onSaveNote} onUpdatePatient={onUpdatePatient} />}
+                                        {activeDocumentType === 'Certificado Médico' && <MedicalCertificate patients={patients} onSaveNote={onSaveNote} doctorInfo={currentUser} />}
+                                        {activeDocumentType === 'Solicitud de Estudios' && <AuxiliaryOrder patients={patients} onSaveNote={onSaveNote} />}
+                                        {activeDocumentType === 'Carta de Consentimiento Informado' && <InformedConsent patients={patients} onSaveNote={onSaveNote} />}
+                                        {!['Historia Clínica Medica', 'Nota de Evolución', 'Receta Médica', 'Carnet Perinatal / Control Prenatal', 'Tarjeta de Control de Enfermedades Crónicas', 'Carnet de Salud Integral', 'Certificado Médico', 'Solicitud de Estudios', 'Carta de Consentimiento Informado'].includes(activeDocumentType) && (
+                                            <div className="p-8 text-center text-slate-500 font-medium">Este documento no está disponible para llenado en modo incrustado. Por favor ábralo desde el perfil del paciente.</div>
+                                        )}
+                                    </div>
                                   </div>
                               </div>
+                          ) : (
+                              <>
+                                  <div className="bg-indigo-50 border border-indigo-100 p-4 rounded-2xl flex items-start gap-3">
+                                      <Info size={16} className="text-indigo-600 mt-1 flex-shrink-0"/>
+                                      <p className="text-[10px] text-indigo-800 font-medium leading-relaxed">
+                                          Seleccione un documento para registrarlo en el expediente. Se guardará directamente desde aquí en el historial.
+                                      </p>
+                                  </div>
+                                  <div className="space-y-6">
+                                      {NOTE_CATEGORIES.map(cat => (
+                                          <div key={cat.title}>
+                                              <h5 className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2 border-b border-slate-200 pb-1">{cat.title}</h5>
+                                              <div className="space-y-2">
+                                                  {cat.notes.map(note => (
+                                                      <button 
+                                                          key={note}
+                                                          onClick={() => handleOpenNoteExternal(note)}
+                                                          className="w-full text-left p-3 bg-white border border-slate-200 rounded-xl hover:bg-blue-50 hover:border-blue-200 transition-all flex justify-between items-center group"
+                                                      >
+                                                          <span className="text-[10px] font-bold text-slate-700 uppercase group-hover:text-blue-700">{note}</span>
+                                                          <ChevronRight size={12} className="text-slate-300 group-hover:text-blue-500"/>
+                                                      </button>
+                                                  ))}
+                                              </div>
+                                          </div>
+                                      ))}
+                                  </div>
+                              </>
                           )}
                       </div>
                   )}
@@ -673,12 +785,70 @@ const Telemedicine: React.FC<TelemedicineProps> = ({ patients = [], notes = [], 
                                   <p className="text-xs font-medium text-slate-700">{patient.chronicDiseases?.join(', ') || 'Ninguna reportada'}</p>
                               </div>
                           </div>
+
+                          {/* ANTECEDENTES (LLENADOS POR EL PACIENTE) */}
+                          {patient.medicalBackground && (
+                              <div className="bg-white p-6 rounded-3xl border border-blue-200 shadow-sm space-y-4 relative overflow-hidden">
+                                  <div className="absolute top-0 left-0 w-1 h-full bg-blue-500"></div>
+                                  <div className="flex items-center justify-between">
+                                      <h3 className="text-[10px] font-black uppercase text-blue-700 tracking-widest flex items-center gap-2">
+                                          <ShieldCheck size={14}/> Antecedentes (Portal Paciente)
+                                      </h3>
+                                      <span className="text-[8px] bg-blue-50 text-blue-600 px-2 py-1 rounded-md font-bold uppercase">Sincronizado</span>
+                                  </div>
+                                  
+                                  <div className="space-y-3">
+                                      <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
+                                          <p className="text-[9px] font-black text-slate-500 uppercase mb-1">Heredo-Familiares</p>
+                                          <div className="flex gap-2 flex-wrap mb-2">
+                                              {patient.medicalBackground.familyHistory.diabetes && <span className="text-[9px] bg-white border border-slate-200 px-2 py-0.5 rounded-full font-bold text-slate-700">Diabetes</span>}
+                                              {patient.medicalBackground.familyHistory.hypertension && <span className="text-[9px] bg-white border border-slate-200 px-2 py-0.5 rounded-full font-bold text-slate-700">Hipertensión</span>}
+                                              {patient.medicalBackground.familyHistory.cancer && <span className="text-[9px] bg-white border border-slate-200 px-2 py-0.5 rounded-full font-bold text-slate-700">Cáncer</span>}
+                                              {patient.medicalBackground.familyHistory.cardiac && <span className="text-[9px] bg-white border border-slate-200 px-2 py-0.5 rounded-full font-bold text-slate-700">Cardíacas</span>}
+                                          </div>
+                                          {patient.medicalBackground.familyHistory.patientNotes && (
+                                              <p className="text-[10px] text-slate-600 italic">"{patient.medicalBackground.familyHistory.patientNotes}"</p>
+                                          )}
+                                      </div>
+
+                                      <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
+                                          <p className="text-[9px] font-black text-slate-500 uppercase mb-1">Patológicos Personales</p>
+                                          <div className="flex gap-2 flex-wrap mb-2">
+                                              {patient.medicalBackground.pathological.surgeries && <span className="text-[9px] bg-white border border-slate-200 px-2 py-0.5 rounded-full font-bold text-slate-700">Cirugías</span>}
+                                              {patient.medicalBackground.pathological.allergies && <span className="text-[9px] bg-white border border-slate-200 px-2 py-0.5 rounded-full font-bold text-slate-700">Alergias</span>}
+                                              {patient.medicalBackground.pathological.chronicDiseases && <span className="text-[9px] bg-white border border-slate-200 px-2 py-0.5 rounded-full font-bold text-slate-700">Crónicas</span>}
+                                              {patient.medicalBackground.pathological.transfusions && <span className="text-[9px] bg-white border border-slate-200 px-2 py-0.5 rounded-full font-bold text-slate-700">Transfusiones</span>}
+                                          </div>
+                                          {patient.medicalBackground.pathological.patientNotes && (
+                                              <p className="text-[10px] text-slate-600 italic">"{patient.medicalBackground.pathological.patientNotes}"</p>
+                                          )}
+                                      </div>
+
+                                      <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
+                                          <p className="text-[9px] font-black text-slate-500 uppercase mb-1">Hábitos</p>
+                                          <div className="flex gap-2 flex-wrap mb-2">
+                                              {patient.medicalBackground.nonPathological.smoking && <span className="text-[9px] bg-white border border-slate-200 px-2 py-0.5 rounded-full font-bold text-slate-700">Tabaquismo</span>}
+                                              {patient.medicalBackground.nonPathological.alcohol && <span className="text-[9px] bg-white border border-slate-200 px-2 py-0.5 rounded-full font-bold text-slate-700">Alcohol</span>}
+                                              {patient.medicalBackground.nonPathological.drugs && <span className="text-[9px] bg-white border border-slate-200 px-2 py-0.5 rounded-full font-bold text-slate-700">Drogas</span>}
+                                          </div>
+                                          {patient.medicalBackground.nonPathological.patientNotes && (
+                                              <p className="text-[10px] text-slate-600 italic">"{patient.medicalBackground.nonPathological.patientNotes}"</p>
+                                          )}
+                                      </div>
+
+                                      <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
+                                          <p className="text-[9px] font-black text-slate-500 uppercase mb-1">Tratamientos Actuales</p>
+                                          <p className="text-[10px] text-slate-600 italic">{patient.medicalBackground.currentTreatments.patientNotes || 'Ninguno reportado'}</p>
+                                      </div>
+                                  </div>
+                              </div>
+                          )}
                       </div>
                   )}
 
                   {/* NOTA SOAP - CON MOTOR DE PRESCRIPCIÓN INTEGRADO */}
                   {activeSidePanel === 'notes' && (
-                      <div className="space-y-6">
+                      <div className="space-y-6 pb-20">
                           <div className="flex justify-between items-center">
                               <h3 className="text-xs font-black uppercase text-slate-500 tracking-widest flex items-center gap-2"><FileText size={14}/> Nota Clínica (En Vivo)</h3>
                               {!isIoTConnected && (
@@ -694,11 +864,12 @@ const Telemedicine: React.FC<TelemedicineProps> = ({ patients = [], notes = [], 
                                   <textarea className="w-full p-3 bg-white border border-slate-200 rounded-xl text-xs font-medium h-24 resize-none outline-none focus:border-blue-400 transition-all" value={clinicalNote.subjective} onChange={e => setClinicalNote({...clinicalNote, subjective: e.target.value})} placeholder="Síntomas referidos..." />
                               </div>
                               <div className="space-y-1">
-                                  <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">(O) Objetivo / Vitales</label>
-                                  <div className="grid grid-cols-3 gap-2 mb-2">
-                                      <input className="p-2 bg-white border border-slate-200 rounded-lg text-[10px] text-center font-bold" placeholder="FC" value={clinicalNote.objectiveVitals.hr} onChange={e => setClinicalNote({...clinicalNote, objectiveVitals: {...clinicalNote.objectiveVitals, hr: e.target.value}})} />
-                                      <input className="p-2 bg-white border border-slate-200 rounded-lg text-[10px] text-center font-bold" placeholder="SpO2" value={clinicalNote.objectiveVitals.o2} onChange={e => setClinicalNote({...clinicalNote, objectiveVitals: {...clinicalNote.objectiveVitals, o2: e.target.value}})} />
-                                      <input className="p-2 bg-white border border-slate-200 rounded-lg text-[10px] text-center font-bold" placeholder="Temp" value={clinicalNote.objectiveVitals.temp} onChange={e => setClinicalNote({...clinicalNote, objectiveVitals: {...clinicalNote.objectiveVitals, temp: e.target.value}})} />
+                                  <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">(O) Objetivo / Vitales (Automáticos / Manuales)</label>
+                                  <div className="grid grid-cols-4 gap-2 mb-2">
+                                      <input className="p-2 bg-white border border-slate-200 rounded-lg text-[10px] text-center font-bold" placeholder="FC/LPM" value={clinicalNote.objectiveVitals.hr} onChange={e => setClinicalNote({...clinicalNote, objectiveVitals: {...clinicalNote.objectiveVitals, hr: e.target.value}})} />
+                                      <input className="p-2 bg-white border border-slate-200 rounded-lg text-[10px] text-center font-bold" placeholder="SpO2 %" value={clinicalNote.objectiveVitals.o2} onChange={e => setClinicalNote({...clinicalNote, objectiveVitals: {...clinicalNote.objectiveVitals, o2: e.target.value}})} />
+                                      <input className="p-2 bg-white border border-slate-200 rounded-lg text-[10px] text-center font-bold" placeholder="Temp °C" value={clinicalNote.objectiveVitals.temp} onChange={e => setClinicalNote({...clinicalNote, objectiveVitals: {...clinicalNote.objectiveVitals, temp: e.target.value}})} />
+                                      <input className="p-2 bg-white border border-slate-200 rounded-lg text-[10px] text-center font-bold" placeholder="T/A" value={clinicalNote.objectiveVitals.bp} onChange={e => setClinicalNote({...clinicalNote, objectiveVitals: {...clinicalNote.objectiveVitals, bp: e.target.value}})} />
                                   </div>
                                   <textarea className="w-full p-3 bg-white border border-slate-200 rounded-xl text-xs font-medium h-16 resize-none outline-none focus:border-blue-400 transition-all" value={clinicalNote.objectiveExam} onChange={e => setClinicalNote({...clinicalNote, objectiveExam: e.target.value})} placeholder="Hallazgos visuales..." />
                               </div>
@@ -797,7 +968,7 @@ const Telemedicine: React.FC<TelemedicineProps> = ({ patients = [], notes = [], 
                                       <span className="text-[9px] font-black uppercase text-slate-400">{note.date}</span>
                                       <span className="text-[8px] bg-blue-50 text-blue-600 px-2 py-0.5 rounded font-bold uppercase">{note.type}</span>
                                   </div>
-                                  {note.content.diagnosis && <p className="text-xs font-medium text-slate-700">{note.content.diagnosis}</p>}
+                                  {(note.content.diagnosis || note.content.analysis) && <p className="text-xs font-medium text-slate-700">{note.content.diagnosis || note.content.analysis}</p>}
                               </div>
                            ))}
                            {patientHistory.length === 0 && <p className="text-center text-[10px] text-slate-400 uppercase mt-10">Sin historial previo</p>}
@@ -841,11 +1012,14 @@ const Telemedicine: React.FC<TelemedicineProps> = ({ patients = [], notes = [], 
               </div>
 
               {/* Footer Actions */}
-              <div className="p-4 border-t border-slate-100 bg-white grid grid-cols-2 gap-3">
-                  <button onClick={handleSaveNote} className="py-3 bg-slate-100 text-slate-600 rounded-xl text-[10px] font-black uppercase hover:bg-slate-200 transition-all flex items-center justify-center gap-2">
-                      <Save size={14}/> Guardar Nota
+              <div className="p-4 border-t border-slate-100 bg-white grid grid-cols-3 gap-2">
+                  <button onClick={handleNewNote} className="py-3 bg-slate-50 text-slate-500 border border-slate-200 rounded-xl text-[9px] font-black uppercase hover:bg-slate-100 transition-all flex items-center justify-center gap-1">
+                      <Plus size={14}/> Nueva
                   </button>
-                  <button onClick={() => setShowFinalizeModal(true)} className="py-3 bg-[#0057B8] text-white rounded-xl text-[10px] font-black uppercase hover:bg-blue-700 transition-all shadow-lg flex items-center justify-center gap-2">
+                  <button onClick={handleSaveNote} className="py-3 bg-slate-100 text-slate-600 rounded-xl text-[9px] font-black uppercase hover:bg-slate-200 transition-all flex items-center justify-center gap-1">
+                      <Save size={14}/> Guardar
+                  </button>
+                  <button onClick={() => setShowFinalizeModal(true)} className="py-3 bg-[#0057B8] text-white rounded-xl text-[9px] font-black uppercase hover:bg-blue-700 transition-all shadow-lg flex items-center justify-center gap-1">
                       <PhoneOff size={14}/> Finalizar
                   </button>
               </div>
@@ -861,11 +1035,78 @@ const Telemedicine: React.FC<TelemedicineProps> = ({ patients = [], notes = [], 
               <button onClick={() => setIsVideoOn(!isVideoOn)} className={`w-12 h-12 rounded-full flex items-center justify-center transition-all ${isVideoOn ? 'bg-white/10 text-white hover:bg-white/20' : 'bg-rose-600 text-white'}`}>
                 {isVideoOn ? <Video size={20} /> : <VideoOff size={20} />}
               </button>
-              <button className="w-12 h-12 rounded-full bg-white/10 text-white flex items-center justify-center hover:bg-white/20 transition-all">
+              <button onClick={() => setShowInviteModal(true)} className="w-12 h-12 rounded-full bg-white/10 text-white flex items-center justify-center hover:bg-white/20 transition-all" title="Invitar a la llamada">
                 <Share size={20} />
               </button>
           </div>
       </div>
+
+      {/* MODAL DE INVITACIÓN / INTERCONSULTA */}
+      {showInviteModal && (
+          <div className="fixed inset-0 z-[200] bg-slate-900/95 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
+              <div className="bg-white w-full max-w-md rounded-[3rem] shadow-2xl p-10 flex flex-col">
+                  <div className="flex justify-between items-center mb-6">
+                      <div className="space-y-1">
+                          <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tight">Tele-Interconsulta</h3>
+                          <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Invitar Especialista o Familiar</p>
+                      </div>
+                      <button onClick={() => setShowInviteModal(false)} className="p-3 hover:bg-slate-100 rounded-full"><X size={24}/></button>
+                  </div>
+
+                  <div className="space-y-6 mb-6">
+                      <div className="space-y-2">
+                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Especialistas Disponibles</label>
+                          <div className="h-48 overflow-y-auto custom-scrollbar border-2 border-slate-100 rounded-2xl p-2 space-y-2 bg-slate-50">
+                              {MOCK_DOCTORS.filter(d => d.id !== currentUser?.id).map(doc => (
+                                  <div key={doc.id} className="flex justify-between items-center p-3 bg-white rounded-xl border border-slate-100 shadow-sm hover:border-blue-200 transition-all">
+                                      <div className="flex items-center gap-3">
+                                          <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center">
+                                              <Stethoscope size={14} className="text-blue-600" />
+                                          </div>
+                                          <div>
+                                              <p className="text-xs font-bold text-slate-800">{doc.name}</p>
+                                              <p className="text-[10px] text-slate-400 font-medium">{doc.specialty}</p>
+                                          </div>
+                                      </div>
+                                      <button onClick={() => handleInviteDoctor(doc)} className="px-3 py-1.5 bg-[#0057B8] text-white text-[10px] font-bold rounded-lg hover:bg-blue-700 transition">Invitar</button>
+                                  </div>
+                              ))}
+                          </div>
+                      </div>
+
+                      <div className="space-y-2">
+                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">O Invitar por Correo Electrónico (Familiar / Externo)</label>
+                          <div className="flex gap-2">
+                              <input 
+                                  type="text"
+                                  className="w-full p-3 bg-slate-50 border-2 border-slate-200 rounded-xl text-sm font-bold outline-none focus:border-blue-500" 
+                                  placeholder="Ej: familiar@mail.com"
+                                  value={inviteInput}
+                                  onChange={e => setInviteInput(e.target.value)}
+                              />
+                              <button 
+                                  onClick={handleInvite}
+                                  className="px-4 py-3 bg-slate-200 text-slate-700 rounded-xl font-black text-xs hover:bg-slate-300 transition-all flex items-center justify-center"
+                              >
+                                  <Send size={16} />
+                              </button>
+                          </div>
+                      </div>
+                      
+                      <div className="bg-blue-50 border border-blue-100 p-4 rounded-2xl flex items-start gap-3">
+                          <Info size={16} className="text-blue-600 mt-1 flex-shrink-0"/>
+                          <p className="text-[10px] text-blue-800 font-medium leading-relaxed">
+                              Solo el creador de la sala puede aceptar el acceso de los invitados en la sala de espera.
+                          </p>
+                      </div>
+                  </div>
+
+                  <div className="flex pt-4 border-t border-slate-100">
+                      <button onClick={() => setShowInviteModal(false)} className="w-full py-4 bg-slate-100 text-slate-500 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-slate-200 transition-all">Cerrar</button>
+                  </div>
+              </div>
+          </div>
+      )}
 
       {/* MODAL DE FINALIZACIÓN Y CIERRE (SUIVE) */}
       {showFinalizeModal && (

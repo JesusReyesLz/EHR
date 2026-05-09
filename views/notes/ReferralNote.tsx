@@ -52,7 +52,7 @@ const ReferralNote: React.FC<{ patients: Patient[], notes: ClinicalNote[], onSav
     // Administrativo
     departureDate: new Date().toISOString().split('T')[0],
     departureTime: new Date().toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' }),
-    responsibleDoctor: doctorInfo?.name || 'Dr. Alejandro Méndez'
+    responsibleDoctor: doctorInfo?.name || 'Dr. Médico'
   });
 
   const [showPrintView, setShowPrintView] = useState(false);
@@ -224,6 +224,14 @@ const ReferralNote: React.FC<{ patients: Patient[], notes: ClinicalNote[], onSav
                                   <div className="bg-slate-50 p-2 border border-slate-200 print:border-slate-300">
                                       <span className="font-black block text-slate-500 text-[10px] mb-1">Terapéutica Empleada:</span>
                                       {form.treatmentsApplied}
+                                  </div>
+                                  <div className="bg-slate-50 p-2 border border-slate-200 print:border-slate-300">
+                                      <span className="font-black block text-slate-500 text-[10px] mb-1">Estudios Realizados:</span>
+                                      {form.labResults || 'No se reportan.'}
+                                  </div>
+                                  <div className="bg-slate-50 p-2 border border-slate-200 print:border-slate-300">
+                                      <span className="font-black block text-slate-500 text-[10px] mb-1">Pronóstico:</span>
+                                      {form.prognosis}
                                   </div>
                               </div>
                           </div>

@@ -10,14 +10,16 @@ import {
   Calendar as CalendarIcon, Timer, Wind, Droplet, Users, ShieldAlert, Check,
   LogOut, Info, AlertOctagon, ChevronLeft, Save
 } from 'lucide-react';
-import { ClinicalNote, Vitals, MedicationPrescription, MedicationStock } from '../types';
+import { ClinicalNote, Vitals, MedicationPrescription, MedicationStock, DoctorInfo } from '../types';
 import { VADEMECUM_DB } from '../constants';
+import { OccupationalAdmissionForm } from './notes/OccupationalAdmissionForm';
 
 interface NoteEditorProps {
   onSave: (note: ClinicalNote) => void;
+  doctorInfo: DoctorInfo;
 }
 
-const NoteEditor: React.FC<NoteEditorProps> = ({ onSave }) => {
+const NoteEditor: React.FC<NoteEditorProps> = ({ onSave, doctorInfo }) => {
   const { id, noteType } = useParams();
   const navigate = useNavigate();
   const type = decodeURIComponent(noteType || 'Nota Clínica');
@@ -28,6 +30,12 @@ const NoteEditor: React.FC<NoteEditorProps> = ({ onSave }) => {
   const isAnesthesia = type.toLowerCase().includes('anestésica') || type.toLowerCase().includes('anestesia');
   const isDischarge = type.toLowerCase().includes('egreso') || type.toLowerCase().includes('alta');
   const isEmergency = type.toLowerCase().includes('urgencias');
+  const isOccupationalAdmission = type.toLowerCase().includes('admisión laboral');
+
+  const getToday = () => {
+    const d = new Date();
+    return new Date(d.getTime() - (d.getTimezoneOffset() * 60000)).toISOString().split('T')[0];
+  };
 
   const [form, setForm] = useState({
     subjective: '', 
@@ -51,8 +59,8 @@ const NoteEditor: React.FC<NoteEditorProps> = ({ onSave }) => {
     airwayEval: 'Mallampati I',
     anesthesiaProposed: 'General Balanceada',
     // Campos Egreso
-    admissionDate: new Date().toISOString().split('T')[0],
-    dischargeDate: new Date().toISOString().split('T')[0],
+    admissionDate: getToday(),
+    dischargeDate: getToday(),
     dischargeReason: 'Mejoría',
     finalDiagnosis: '',
     evolutionSummary: '',
@@ -71,7 +79,7 @@ const NoteEditor: React.FC<NoteEditorProps> = ({ onSave }) => {
       patientId: id || '',
       type: type,
       date: new Date().toLocaleString('es-MX'),
-      author: 'JESUS REYES LOZANO',
+      author: doctorInfo?.name || 'Dr. Médico',
       content: { ...form, vitals },
       isSigned: true,
       hash: `CERT-SHA256-${Math.random().toString(36).substr(2, 12).toUpperCase()}`
@@ -82,6 +90,18 @@ const NoteEditor: React.FC<NoteEditorProps> = ({ onSave }) => {
 
   return (
     <div className="max-w-5xl mx-auto pb-40 animate-in fade-in duration-500">
+      <style>{`
+        @media print {
+          .no-print, nav, aside, button { display: none !important; }
+          body { background: white !important; margin: 0 !important; }
+          main { margin: 0 !important; padding: 0.5cm !important; width: 100% !important; left: 0 !important; top: 0 !important; }
+          .max-w-5xl { max-width: 100% !important; }
+          .bg-slate-900 { background: #000 !important; color: #fff !important; -webkit-print-color-adjust: exact; }
+          .border { border: 1px solid #000 !important; }
+          .shadow-sm, .shadow-md, .shadow-lg, .shadow-xl, .shadow-2xl { box-shadow: none !important; }
+          @page { margin: 0.5cm; size: portrait; }
+        }
+      `}</style>
       {/* Header Bar */}
       <div className="bg-white border border-slate-200 p-8 rounded-[3rem] shadow-2xl mb-8 flex flex-col md:flex-row justify-between items-center gap-6 no-print">
         <div className="flex items-center gap-6">
@@ -121,24 +141,28 @@ const NoteEditor: React.FC<NoteEditorProps> = ({ onSave }) => {
             </div>
           </div>
 
-          <div className="bg-white border border-slate-200 rounded-[3.5rem] p-12 shadow-sm space-y-8">
-             <div className="space-y-6">
-                <div className="space-y-2">
-                   <label className="text-[10px] font-black text-slate-900 uppercase block ml-2">Diagnóstico / Resumen del caso</label>
-                   <textarea className="w-full p-6 bg-slate-50 border border-slate-200 rounded-2xl h-24 text-sm font-black uppercase outline-none focus:bg-white" value={form.diagnosis} onChange={e => setForm({...form, diagnosis: e.target.value})} />
-                </div>
-                {isAnesthesia && (
-                   <div className="space-y-2">
-                      <label className="text-[10px] font-black text-blue-600 uppercase block ml-2">Evaluación de Vía Aérea</label>
-                      <input className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold" value={form.airwayEval} onChange={e => setForm({...form, airwayEval: e.target.value})} />
-                   </div>
-                )}
-                <div className="space-y-2">
-                   <label className="text-[10px] font-black text-slate-900 uppercase block ml-2">Descripción Clínica / Hallazgos</label>
-                   <textarea className="w-full p-8 bg-slate-50 border border-slate-200 rounded-[2.5rem] h-64 text-sm font-medium italic leading-relaxed outline-none shadow-inner" value={form.subjective} onChange={e => setForm({...form, subjective: e.target.value})} />
-                </div>
-             </div>
-          </div>
+          {isOccupationalAdmission ? (
+            <OccupationalAdmissionForm form={form} setForm={setForm} />
+          ) : (
+            <div className="bg-white border border-slate-200 rounded-[3.5rem] p-12 shadow-sm space-y-8">
+               <div className="space-y-6">
+                  <div className="space-y-2">
+                     <label className="text-[10px] font-black text-slate-900 uppercase block ml-2">Diagnóstico / Resumen del caso</label>
+                     <textarea className="w-full p-6 bg-slate-50 border border-slate-200 rounded-2xl h-24 text-sm font-black uppercase outline-none focus:bg-white" value={form.diagnosis} onChange={e => setForm({...form, diagnosis: e.target.value})} />
+                  </div>
+                  {isAnesthesia && (
+                     <div className="space-y-2">
+                        <label className="text-[10px] font-black text-blue-600 uppercase block ml-2">Evaluación de Vía Aérea</label>
+                        <input className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold" value={form.airwayEval} onChange={e => setForm({...form, airwayEval: e.target.value})} />
+                     </div>
+                  )}
+                  <div className="space-y-2">
+                     <label className="text-[10px] font-black text-slate-900 uppercase block ml-2">Descripción Clínica / Hallazgos</label>
+                     <textarea className="w-full p-8 bg-slate-50 border border-slate-200 rounded-[2.5rem] h-64 text-sm font-medium italic leading-relaxed outline-none shadow-inner" value={form.subjective} onChange={e => setForm({...form, subjective: e.target.value})} />
+                  </div>
+               </div>
+            </div>
+          )}
 
           <button 
              onClick={() => setIsSigning(true)}

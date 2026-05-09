@@ -5,9 +5,173 @@ import {
   ChevronLeft, ShieldCheck, Save, Activity, Stethoscope, 
   ClipboardList, HeartPulse, Thermometer, Wind, Droplet, Scale, Ruler,
   AlertTriangle, FileText, Brain, Utensils, Syringe, Bed, 
-  RotateCcw, AlertCircle, CheckCircle2, Lock, User, FlaskConical
+  RotateCcw, AlertCircle, CheckCircle2, Lock, User, FlaskConical, Printer
 } from 'lucide-react';
 import { Patient, ClinicalNote, Vitals, DoctorInfo } from '../../types';
+
+const HospitalAdmissionNotePrint: React.FC<{ 
+  data: any, 
+  vitals: any, 
+  patient: Patient, 
+  doctor: DoctorInfo, 
+  noteId: string,
+  onClose: () => void
+}> = ({ data, vitals, patient, doctor, noteId, onClose }) => {
+  return (
+    <div className="min-h-screen bg-slate-100 flex justify-center p-4 lg:p-8 animate-in fade-in fixed inset-0 z-[100] overflow-y-auto">
+      <div className="w-full max-w-[215mm] bg-white shadow-2xl flex flex-col relative print:shadow-none print:w-full print:m-0 print:p-0 h-fit min-h-[279mm]">
+        <div className="bg-slate-900 p-4 flex justify-between items-center no-print sticky top-0 z-50 shadow-lg">
+           <div className="flex items-center gap-4 text-white">
+               <ShieldCheck className="text-emerald-400" />
+               <div>
+                   <p className="text-xs font-black uppercase tracking-widest">Nota Certificada</p>
+                   <p className="text-[10px] text-slate-400">Folio: {noteId}</p>
+               </div>
+           </div>
+           <div className="flex gap-3">
+               <button onClick={() => window.print()} className="px-6 py-2 bg-blue-600 text-white rounded-xl text-xs font-black uppercase tracking-widest hover:bg-blue-500 transition-all flex items-center gap-2">
+                   <Printer size={16}/> Imprimir
+               </button>
+               <button onClick={onClose} className="px-6 py-2 bg-slate-700 text-white rounded-xl text-xs font-black uppercase tracking-widest hover:bg-emerald-600 transition-all">
+                   Cerrar y Salir
+               </button>
+           </div>
+        </div>
+
+        <div className="p-[15mm] text-slate-900 flex-1 flex flex-col">
+           <div className="border-b-4 border-slate-900 pb-6 mb-6 flex justify-between items-start">
+               <div>
+                   <h1 className="text-2xl font-black uppercase tracking-tighter">{doctor.hospital || 'CONSULTORIO MÉDICO'}</h1>
+                   <p className="text-xs font-bold text-slate-500 uppercase tracking-[0.2em] mt-1">Nota de Ingreso Hospitalario</p>
+                   <p className="text-[10px] font-medium text-slate-400 mt-1">NOM-004-SSA3-2012</p>
+               </div>
+               <div className="text-right">
+                   <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Fecha de Ingreso</p>
+                   <p className="text-sm font-black uppercase">{new Date().toLocaleDateString('es-MX', {weekday: 'long', day:'numeric', month:'long', year:'numeric'})}</p>
+                   <p className="text-[10px] font-bold text-slate-500 uppercase">{new Date().toLocaleTimeString('es-MX', {hour:'2-digit', minute:'2-digit'})} HRS</p>
+               </div>
+           </div>
+
+           <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 mb-8 flex flex-wrap gap-x-8 gap-y-2 text-xs uppercase">
+               <div><span className="font-bold text-slate-500">Paciente:</span> <span className="font-black text-slate-900 text-sm">{patient.name}</span></div>
+               <div><span className="font-bold text-slate-500">Edad:</span> <span className="font-black text-slate-900">{patient.age} Años</span></div>
+               <div><span className="font-bold text-slate-500">Sexo:</span> <span className="font-black text-slate-900">{patient.sex}</span></div>
+               <div><span className="font-bold text-slate-500">Expediente:</span> <span className="font-black text-slate-900">{patient.id}</span></div>
+               <div className="w-full border-t border-slate-200 my-1"></div>
+               <div><span className="font-bold text-slate-500">Alergias:</span> <span className="font-black text-rose-600">{patient.allergies?.join(', ') || 'NEGADAS'}</span></div>
+               <div><span className="font-bold text-slate-500">Servicio:</span> <span className="font-black text-slate-900">{data.service}</span></div>
+               <div><span className="font-bold text-slate-500">Cama:</span> <span className="font-black text-slate-900">{data.bed || 'PENDIENTE'}</span></div>
+               <div><span className="font-bold text-slate-500">Origen:</span> <span className="font-black text-slate-900">{data.source}</span></div>
+               <div><span className="font-bold text-slate-500">Tipo:</span> <span className="font-black text-slate-900">{data.isReadmission ? 'REINGRESO' : 'PRIMERA VEZ'}</span></div>
+           </div>
+
+           <div className="flex gap-8 flex-1">
+               <div className="w-48 flex-shrink-0 border-r-2 border-slate-100 pr-6 space-y-6">
+                   <div className="bg-slate-900 text-white p-2 text-center rounded-lg mb-4">
+                       <p className="text-[10px] font-black uppercase tracking-widest">Signos Vitales</p>
+                   </div>
+                   <div className="space-y-4 text-center">
+                       <div className="border-b border-slate-100 pb-2">
+                           <p className="text-[9px] font-bold text-slate-400 uppercase mb-1">Tensión Arterial</p>
+                           <p className="text-xl font-black text-slate-900">{vitals?.bp || '--/--'}</p>
+                           <p className="text-[8px] text-slate-400">mmHg</p>
+                       </div>
+                       <div className="border-b border-slate-100 pb-2">
+                           <p className="text-[9px] font-bold text-slate-400 uppercase mb-1">Frec. Cardiaca</p>
+                           <p className="text-xl font-black text-slate-900">{vitals?.hr || '--'}</p>
+                           <p className="text-[8px] text-slate-400">lpm</p>
+                       </div>
+                       <div className="border-b border-slate-100 pb-2">
+                           <p className="text-[9px] font-bold text-slate-400 uppercase mb-1">Frec. Respiratoria</p>
+                           <p className="text-xl font-black text-slate-900">{vitals?.rr || '--'}</p>
+                           <p className="text-[8px] text-slate-400">rpm</p>
+                       </div>
+                       <div className="border-b border-slate-100 pb-2">
+                           <p className="text-[9px] font-bold text-slate-400 uppercase mb-1">Temperatura</p>
+                           <p className="text-xl font-black text-slate-900">{vitals?.temp || '--'}</p>
+                           <p className="text-[8px] text-slate-400">°C</p>
+                       </div>
+                       <div className="border-b border-slate-100 pb-2">
+                           <p className="text-[9px] font-bold text-slate-400 uppercase mb-1">Saturación O2</p>
+                           <p className="text-xl font-black text-slate-900">{vitals?.o2 || '--'}</p>
+                           <p className="text-[8px] text-slate-400">%</p>
+                       </div>
+                       <div className="pt-4 space-y-2">
+                           <div className="flex justify-between text-xs">
+                               <span className="font-bold text-slate-500">Peso:</span>
+                               <span className="font-black">{vitals?.weight} kg</span>
+                           </div>
+                           <div className="flex justify-between text-xs">
+                               <span className="font-bold text-slate-500">Talla:</span>
+                               <span className="font-black">{vitals?.height} cm</span>
+                           </div>
+                           <div className="flex justify-between text-xs">
+                               <span className="font-bold text-slate-500">IMC:</span>
+                               <span className="font-black">{vitals?.bmi}</span>
+                           </div>
+                       </div>
+                   </div>
+               </div>
+
+               <div className="flex-1 space-y-6 text-sm text-justify leading-relaxed">
+                   <div>
+                       <h3 className="text-xs font-black text-slate-900 uppercase tracking-widest border-b border-slate-300 pb-1 mb-2">I. Interrogatorio Clínico</h3>
+                       <p className="text-slate-700 whitespace-pre-wrap"><span className="font-bold">Motivo de Ingreso:</span> {data.motivoIngreso || 'No especificado.'}</p>
+                       <p className="text-slate-700 whitespace-pre-wrap mt-2"><span className="font-bold">Padecimiento Actual:</span> {data.padecimientoActual || 'No especificado.'}</p>
+                       <div className="mt-2 grid grid-cols-2 gap-4">
+                           <p className="text-slate-700 whitespace-pre-wrap"><span className="font-bold">AHFM:</span> {data.ahfm || 'Negados.'}</p>
+                           <p className="text-slate-700 whitespace-pre-wrap"><span className="font-bold">APP:</span> {data.app || 'Negados.'}</p>
+                           <p className="text-slate-700 whitespace-pre-wrap"><span className="font-bold">APNP:</span> {data.apnp || 'Negados.'}</p>
+                           <p className="text-slate-700 whitespace-pre-wrap"><span className="font-bold">IPAYS:</span> {data.ipays || 'Negados.'}</p>
+                       </div>
+                   </div>
+                   <div>
+                       <h3 className="text-xs font-black text-slate-900 uppercase tracking-widest border-b border-slate-300 pb-1 mb-2">II. Exploración Física</h3>
+                       <p className="text-slate-700 whitespace-pre-wrap"><span className="font-bold">Habitus Exterior:</span> {data.habitusExterior || 'No especificado.'}</p>
+                       <p className="text-slate-700 whitespace-pre-wrap mt-2">{data.exploracionFisica || 'No especificado.'}</p>
+                       <p className="text-slate-700 whitespace-pre-wrap mt-2"><span className="font-bold">Estado Mental:</span> {data.estadoMental || 'No especificado.'}</p>
+                       <p className="text-slate-700 whitespace-pre-wrap mt-2"><span className="font-bold">Resultados Auxiliares:</span> {data.resultadosEstudios || 'No especificado.'}</p>
+                   </div>
+                   <div>
+                       <h3 className="text-xs font-black text-slate-900 uppercase tracking-widest border-b border-slate-300 pb-1 mb-2">III. Diagnóstico de Ingreso</h3>
+                       <p className="text-slate-700 whitespace-pre-wrap font-bold">{data.diagnosticoIngreso || 'No especificado.'}</p>
+                   </div>
+                   <div>
+                       <h3 className="text-xs font-black text-slate-900 uppercase tracking-widest border-b border-slate-300 pb-1 mb-2">IV. Plan de Manejo Inmediato</h3>
+                       <p className="text-slate-700 whitespace-pre-wrap"><span className="font-bold">Dieta:</span> {data.dieta || 'No especificado.'}</p>
+                       <p className="text-slate-700 whitespace-pre-wrap"><span className="font-bold">Soluciones IV:</span> {data.soluciones || 'No especificado.'}</p>
+                       <p className="text-slate-700 whitespace-pre-wrap"><span className="font-bold">Medicamentos:</span> {data.medicamentos || 'No especificado.'}</p>
+                       <p className="text-slate-700 whitespace-pre-wrap"><span className="font-bold">Medidas Generales:</span> {data.medidasGenerales || 'No especificado.'}</p>
+                   </div>
+                   <div>
+                       <h3 className="text-xs font-black text-slate-900 uppercase tracking-widest border-b border-slate-300 pb-1 mb-2">V. Pronóstico y Riesgos</h3>
+                       <p className="text-slate-700 whitespace-pre-wrap"><span className="font-bold">Pronóstico:</span> {data.pronostico || 'Reservado.'}</p>
+                       <p className="text-slate-700 whitespace-pre-wrap"><span className="font-bold">Riesgo Caída:</span> {data.riesgoCaida || 'Bajo.'}</p>
+                   </div>
+               </div>
+           </div>
+
+           <div className="mt-12 pt-8 border-t-2 border-slate-200">
+               <div className="flex justify-between items-end">
+                   <div className="w-64 text-center">
+                       <div className="border-b border-slate-400 pb-2 mb-2 h-16 flex items-end justify-center">
+                           <span className="font-['Dancing_Script'] text-3xl text-slate-700">{doctor.name}</span>
+                       </div>
+                       <p className="text-[10px] font-black uppercase tracking-widest text-slate-900">{doctor.name}</p>
+                       <p className="text-[9px] font-bold text-slate-500 uppercase">{doctor.specialty || 'Médico General'}</p>
+                       <p className="text-[9px] font-bold text-slate-500 uppercase">Cédula: {doctor.cedula || 'En trámite'}</p>
+                   </div>
+                   <div className="text-right">
+                       <p className="text-[8px] font-bold text-slate-400 uppercase">Firma Electrónica Avanzada</p>
+                       <p className="text-[10px] font-mono text-slate-600 mt-1">{data.hash || 'BORRADOR'}</p>
+                   </div>
+               </div>
+           </div>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 interface HospitalAdmissionProps {
   patients: Patient[];
@@ -89,14 +253,25 @@ const HospitalAdmissionNote: React.FC<HospitalAdmissionProps> = ({ patients, not
 
   if (!patient) return null;
 
-  if (isNoteFinalized) return (
-    <div className="p-20 text-center space-y-6">
-       <ShieldCheck className="w-20 h-20 text-blue-600 mx-auto opacity-50" />
-       <h2 className="text-4xl font-black uppercase text-slate-900 tracking-tighter">Nota de Ingreso Archivada</h2>
-       <p className="text-slate-500 max-w-md mx-auto font-medium">Este documento médico-legal ha sido certificado y no admite modificaciones posteriores.</p>
-       <button onClick={() => navigate(`/patient/${id}`)} className="px-10 py-5 bg-slate-900 text-white rounded-2xl font-black uppercase text-xs tracking-widest hover:bg-slate-800 transition-all shadow-xl">Regresar al Expediente</button>
-    </div>
-  );
+  if (isNoteFinalized) {
+      const displayDoctor = doctorInfo || { 
+          name: 'Dr. No Identificado', 
+          hospital: 'Clínica', 
+          cedula: '', 
+          specialty: '',
+          email: '', address: '', phone: '' 
+      };
+      return (
+          <HospitalAdmissionNotePrint 
+              data={form} 
+              vitals={vitals} 
+              patient={patient} 
+              doctor={displayDoctor} 
+              noteId={noteId || 'BORRADOR'}
+              onClose={() => navigate(`/patient/${id}`)}
+          />
+      );
+  }
 
   const handleSave = (finalize: boolean) => {
     if (finalize) {
@@ -113,7 +288,7 @@ const HospitalAdmissionNote: React.FC<HospitalAdmissionProps> = ({ patients, not
       patientId: patient.id,
       type: 'Nota de Ingreso a Hospitalización',
       date: new Date().toLocaleString('es-MX'),
-      author: doctorInfo?.name || 'Dr. Alejandro Méndez',
+      author: doctorInfo?.name || 'Dr. Médico',
       content: { ...form, vitals },
       isSigned: finalize,
       hash: finalize ? `CERT-HOSP-${Math.random().toString(36).substr(2, 9).toUpperCase()}` : undefined
@@ -194,14 +369,14 @@ const HospitalAdmissionNote: React.FC<HospitalAdmissionProps> = ({ patients, not
 
                 <div className="space-y-3">
                     <label className="text-[10px] font-black text-slate-400 uppercase ml-2">Servicio Tratante</label>
-                    <select className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-black uppercase outline-none" value={form.service} onChange={e => setForm({...form, service: e.target.value})}>
-                        <option>Medicina Interna</option><option>Cirugía General</option><option>Gineco-Obstetricia</option><option>Pediatría</option><option>Traumatología</option><option>UCI</option>
+                    <select className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-black uppercase outline-none" value={form.service || ''} onChange={e => setForm({...form, service: e.target.value})}>
+                        <option>Medicina Interna</option><option>Cirugía General</option><option>Gineco-Obstetricia</option><option>Pediatría</option><option>Traumatología</option><option>UCI</option><option>Urgencias</option>
                     </select>
                 </div>
 
                 <div className="space-y-3">
                     <label className="text-[10px] font-black text-slate-400 uppercase ml-2">Número de Cama</label>
-                    <input className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-black text-center" placeholder="EJ: 201-A" value={form.bed} onChange={e => setForm({...form, bed: e.target.value})} />
+                    <input className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-black text-center" placeholder="EJ: 201-A" value={form.bed || ''} onChange={e => setForm({...form, bed: e.target.value})} />
                 </div>
             </div>
         </div>
@@ -221,25 +396,25 @@ const HospitalAdmissionNote: React.FC<HospitalAdmissionProps> = ({ patients, not
                         <label className="text-[11px] font-black text-slate-900 uppercase tracking-widest ml-2 flex items-center gap-2">
                             <Activity size={16} className="text-rose-600"/> Motivo de Ingreso
                         </label>
-                        <textarea className="w-full p-6 bg-slate-50 border border-slate-200 rounded-[2rem] h-24 text-sm font-bold text-slate-800 outline-none focus:bg-white focus:ring-4 focus:ring-blue-100 transition-all shadow-inner" value={form.motivoIngreso} onChange={e => setForm({...form, motivoIngreso: e.target.value})} placeholder="Razón clínica para la hospitalización..." />
+                        <textarea className="w-full p-6 bg-slate-50 border border-slate-200 rounded-[2rem] h-24 text-sm font-bold text-slate-800 outline-none focus:bg-white focus:ring-4 focus:ring-blue-100 transition-all shadow-inner" value={form.motivoIngreso || ''} onChange={e => setForm({...form, motivoIngreso: e.target.value})} placeholder="Razón clínica para la hospitalización..." />
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                         <div className="space-y-2">
                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Heredofamiliares (AHFM)</label>
-                           <textarea className="w-full p-5 bg-white border border-slate-200 rounded-2xl h-32 text-xs font-medium resize-none outline-none focus:border-blue-400 shadow-sm" value={form.ahfm} onChange={e => setForm({...form, ahfm: e.target.value})} />
+                           <textarea className="w-full p-5 bg-white border border-slate-200 rounded-2xl h-32 text-xs font-medium resize-none outline-none focus:border-blue-400 shadow-sm" value={form.ahfm || ''} onChange={e => setForm({...form, ahfm: e.target.value})} />
                         </div>
                         <div className="space-y-2">
                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Personales Patológicos (APP)</label>
-                           <textarea className="w-full p-5 bg-white border border-slate-200 rounded-2xl h-32 text-xs font-medium resize-none outline-none focus:border-blue-400 shadow-sm" value={form.app} onChange={e => setForm({...form, app: e.target.value})} />
+                           <textarea className="w-full p-5 bg-white border border-slate-200 rounded-2xl h-32 text-xs font-medium resize-none outline-none focus:border-blue-400 shadow-sm" value={form.app || ''} onChange={e => setForm({...form, app: e.target.value})} />
                         </div>
                         <div className="space-y-2">
                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">No Patológicos (APNP)</label>
-                           <textarea className="w-full p-5 bg-white border border-slate-200 rounded-2xl h-32 text-xs font-medium resize-none outline-none focus:border-blue-400 shadow-sm" value={form.apnp} onChange={e => setForm({...form, apnp: e.target.value})} />
+                           <textarea className="w-full p-5 bg-white border border-slate-200 rounded-2xl h-32 text-xs font-medium resize-none outline-none focus:border-blue-400 shadow-sm" value={form.apnp || ''} onChange={e => setForm({...form, apnp: e.target.value})} />
                         </div>
                         <div className="space-y-2">
                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Aparatos y Sistemas (IPAYS)</label>
-                           <textarea className="w-full p-5 bg-white border border-slate-200 rounded-2xl h-32 text-xs font-medium resize-none outline-none focus:border-blue-400 shadow-sm" value={form.ipays} onChange={e => setForm({...form, ipays: e.target.value})} />
+                           <textarea className="w-full p-5 bg-white border border-slate-200 rounded-2xl h-32 text-xs font-medium resize-none outline-none focus:border-blue-400 shadow-sm" value={form.ipays || ''} onChange={e => setForm({...form, ipays: e.target.value})} />
                         </div>
                     </div>
 
@@ -247,7 +422,7 @@ const HospitalAdmissionNote: React.FC<HospitalAdmissionProps> = ({ patients, not
                         <label className="text-[11px] font-black text-slate-900 uppercase tracking-widest ml-2 flex items-center gap-2">
                             <Stethoscope size={16} className="text-blue-600"/> Padecimiento Actual (Resumen)
                         </label>
-                        <textarea className="w-full p-6 bg-slate-50 border border-slate-200 rounded-[2rem] h-48 text-sm font-medium text-slate-700 outline-none focus:bg-white transition-all shadow-inner leading-relaxed" value={form.padecimientoActual} onChange={e => setForm({...form, padecimientoActual: e.target.value})} placeholder="Evolución cronológica de síntomas, tratamientos previos..." />
+                        <textarea className="w-full p-6 bg-slate-50 border border-slate-200 rounded-[2rem] h-48 text-sm font-medium text-slate-700 outline-none focus:bg-white transition-all shadow-inner leading-relaxed" value={form.padecimientoActual || ''} onChange={e => setForm({...form, padecimientoActual: e.target.value})} placeholder="Evolución cronológica de síntomas, tratamientos previos..." />
                     </div>
                 </div>
 
@@ -261,25 +436,25 @@ const HospitalAdmissionNote: React.FC<HospitalAdmissionProps> = ({ patients, not
                         <div className="space-y-4">
                             <div className="space-y-2">
                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Habitus Exterior</label>
-                               <textarea className="w-full p-5 bg-slate-50 border border-slate-200 rounded-2xl h-24 text-xs font-medium outline-none" value={form.habitusExterior} onChange={e => setForm({...form, habitusExterior: e.target.value})} />
+                               <textarea className="w-full p-5 bg-slate-50 border border-slate-200 rounded-2xl h-24 text-xs font-medium outline-none" value={form.habitusExterior || ''} onChange={e => setForm({...form, habitusExterior: e.target.value})} />
                             </div>
                             <div className="space-y-2">
                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Exploración por Regiones</label>
-                               <textarea className="w-full p-5 bg-white border border-slate-200 rounded-2xl h-48 text-sm font-medium outline-none resize-none shadow-sm" value={form.exploracionFisica} onChange={e => setForm({...form, exploracionFisica: e.target.value})} placeholder="Cabeza, cuello, tórax, abdomen, extremidades..." />
+                               <textarea className="w-full p-5 bg-white border border-slate-200 rounded-2xl h-48 text-sm font-medium outline-none resize-none shadow-sm" value={form.exploracionFisica || ''} onChange={e => setForm({...form, exploracionFisica: e.target.value})} placeholder="Cabeza, cuello, tórax, abdomen, extremidades..." />
                             </div>
                         </div>
                         <div className="space-y-6">
                              <div className="space-y-2">
                                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2 flex items-center gap-1"><Brain size={14}/> Estado Mental</label>
-                                <textarea className="w-full p-4 bg-white border border-slate-200 rounded-2xl text-xs font-bold uppercase outline-none shadow-sm" value={form.estadoMental} onChange={e => setForm({...form, estadoMental: e.target.value})} />
+                                <textarea className="w-full p-4 bg-white border border-slate-200 rounded-2xl text-xs font-bold uppercase outline-none shadow-sm" value={form.estadoMental || ''} onChange={e => setForm({...form, estadoMental: e.target.value})} />
                              </div>
                              <div className="space-y-2">
                                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2 flex items-center gap-1"><FlaskConical size={14}/> Resultados Auxiliares</label>
-                                <textarea className="w-full p-4 bg-white border border-slate-200 rounded-2xl h-28 text-xs font-medium outline-none shadow-sm" value={form.resultadosEstudios} onChange={e => setForm({...form, resultadosEstudios: e.target.value})} placeholder="Labs o gabinete relevantes..." />
+                                <textarea className="w-full p-4 bg-white border border-slate-200 rounded-2xl h-28 text-xs font-medium outline-none shadow-sm" value={form.resultadosEstudios || ''} onChange={e => setForm({...form, resultadosEstudios: e.target.value})} placeholder="Labs o gabinete relevantes..." />
                              </div>
                              <div className="p-6 bg-blue-50 border border-blue-100 rounded-[2rem] space-y-2">
                                 <p className="text-[9px] font-black text-blue-400 uppercase">Diagnóstico Presuntivo</p>
-                                <textarea className="w-full bg-transparent border-none p-0 text-xs font-black text-blue-900 uppercase outline-none" value={form.diagnosticoIngreso} onChange={e => setForm({...form, diagnosticoIngreso: e.target.value})} />
+                                <textarea className="w-full bg-transparent border-none p-0 text-xs font-black text-blue-900 uppercase outline-none" value={form.diagnosticoIngreso || ''} onChange={e => setForm({...form, diagnosticoIngreso: e.target.value})} />
                              </div>
                         </div>
                     </div>
@@ -296,30 +471,30 @@ const HospitalAdmissionNote: React.FC<HospitalAdmissionProps> = ({ patients, not
                         <div className="space-y-4">
                              <div className="space-y-2">
                                 <label className="text-[9px] font-black text-slate-400 uppercase ml-2 flex items-center gap-2"><Utensils size={14}/> Dieta</label>
-                                <input className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none" value={form.dieta} onChange={e => setForm({...form, dieta: e.target.value})} />
+                                <input className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none" value={form.dieta || ''} onChange={e => setForm({...form, dieta: e.target.value})} />
                              </div>
                              <div className="space-y-2">
                                 <label className="text-[9px] font-black text-slate-400 uppercase ml-2 flex items-center gap-2"><Droplet size={14}/> Soluciones IV</label>
-                                <input className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none" value={form.soluciones} onChange={e => setForm({...form, soluciones: e.target.value})} />
+                                <input className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none" value={form.soluciones || ''} onChange={e => setForm({...form, soluciones: e.target.value})} />
                              </div>
                              <div className="space-y-2">
                                 <label className="text-[9px] font-black text-slate-400 uppercase ml-2 flex items-center gap-2"><Syringe size={14}/> Medicamentos</label>
-                                <textarea className="w-full p-4 bg-white border border-slate-200 rounded-2xl h-24 text-xs font-medium outline-none shadow-sm" value={form.medicamentos} onChange={e => setForm({...form, medicamentos: e.target.value})} placeholder="Fármaco, dosis, vía, horario..." />
+                                <textarea className="w-full p-4 bg-white border border-slate-200 rounded-2xl h-24 text-xs font-medium outline-none shadow-sm" value={form.medicamentos || ''} onChange={e => setForm({...form, medicamentos: e.target.value})} placeholder="Fármaco, dosis, vía, horario..." />
                              </div>
                         </div>
                         <div className="space-y-4">
                              <div className="space-y-2">
                                 <label className="text-[9px] font-black text-slate-400 uppercase ml-2">Medidas Generales / Enfermería</label>
-                                <textarea className="w-full p-4 bg-white border border-slate-200 rounded-2xl h-24 text-xs font-medium outline-none shadow-sm" value={form.medidasGenerales} onChange={e => setForm({...form, medidasGenerales: e.target.value})} />
+                                <textarea className="w-full p-4 bg-white border border-slate-200 rounded-2xl h-24 text-xs font-medium outline-none shadow-sm" value={form.medidasGenerales || ''} onChange={e => setForm({...form, medidasGenerales: e.target.value})} />
                              </div>
                              <div className="grid grid-cols-2 gap-4">
                                 <div className="space-y-1">
                                     <label className="text-[8px] font-black text-slate-400 uppercase ml-1">Pronóstico</label>
-                                    <input className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-[10px] font-bold" value={form.pronostico} onChange={e => setForm({...form, pronostico: e.target.value})} />
+                                    <input className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-[10px] font-bold" value={form.pronostico || ''} onChange={e => setForm({...form, pronostico: e.target.value})} />
                                 </div>
                                 <div className="space-y-1">
                                     <label className="text-[8px] font-black text-slate-400 uppercase ml-1">Riesgo Caída</label>
-                                    <select className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-[10px] font-black" value={form.riesgoCaida} onChange={e => setForm({...form, riesgoCaida: e.target.value})}>
+                                    <select className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-[10px] font-black" value={form.riesgoCaida || ''} onChange={e => setForm({...form, riesgoCaida: e.target.value})}>
                                         <option>Bajo</option><option>Medio</option><option>Alto</option>
                                     </select>
                                 </div>

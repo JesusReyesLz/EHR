@@ -85,8 +85,12 @@ const MedicalHistory: React.FC<{
         .filter(n => n.patientId === id && n.type.includes('Historia Clínica') && n.isSigned)
         .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
 
-    if (previousHistory) {
-        setPrefilledDate(previousHistory.date);
+    // 3. Extraer datos del MedicalBackground (Portal del Paciente)
+    const mb = patient.medicalBackground;
+    const hasMedicalBackground = mb && mb.lastSyncDate !== null;
+
+    if (previousHistory || hasMedicalBackground) {
+        if (previousHistory) setPrefilledDate(previousHistory.date);
         
         // Mezclar datos: Traer antecedentes viejos pero intentar usar vitales nuevos
         setForm(prev => {
@@ -99,14 +103,37 @@ const MedicalHistory: React.FC<{
                 weight: patient.currentVitals.weight.toString(),
                 height: patient.currentVitals.height.toString(),
                 bmi: patient.currentVitals.bmi.toString()
-            } : (previousHistory.content as any).exploracionVitals;
+            } : (previousHistory?.content as any)?.exploracionVitals;
+
+            // Construir antecedentes desde MedicalBackground si existe, sino desde nota anterior
+            const hereditaryNote = mb ? 
+              `Diabetes: ${mb.familyHistory.diabetes ? 'Sí' : 'No'}, Hipertensión: ${mb.familyHistory.hypertension ? 'Sí' : 'No'}, Cáncer: ${mb.familyHistory.cancer ? 'Sí' : 'No'}, Cardiacas: ${mb.familyHistory.cardiac ? 'Sí' : 'No'}\nNotas Paciente: ${mb.familyHistory.patientNotes}\nNotas Médico: ${mb.familyHistory.doctorNotes}`
+              : (previousHistory?.content as any)?.hereditary?.note || '';
+
+            const pathologicalNote = mb ? 
+              `Cirugías: ${mb.pathological.surgeries ? 'Sí' : 'No'}, Alergias: ${mb.pathological.allergies ? 'Sí' : 'No'}, Crónicas: ${mb.pathological.chronicDiseases ? 'Sí' : 'No'}, Transfusiones: ${mb.pathological.transfusions ? 'Sí' : 'No'}\nNotas Paciente: ${mb.pathological.patientNotes}\nNotas Médico: ${mb.pathological.doctorNotes}`
+              : (previousHistory?.content as any)?.personalPathological?.note || '';
+
+            const nonPathologicalNote = mb ? 
+              `Tabaquismo: ${mb.nonPathological.smoking ? 'Sí' : 'No'}, Alcohol: ${mb.nonPathological.alcohol ? 'Sí' : 'No'}, Drogas: ${mb.nonPathological.drugs ? 'Sí' : 'No'}\nNotas Paciente: ${mb.nonPathological.patientNotes}\nNotas Médico: ${mb.nonPathological.doctorNotes}`
+              : (previousHistory?.content as any)?.nonPathological?.note || '';
+
+            const treatmentsNote = mb ? 
+              `Notas Paciente: ${mb.currentTreatments.patientNotes}\nNotas Médico: ${mb.currentTreatments.doctorNotes}`
+              : (previousHistory?.content as any)?.terapeuticaPrevia || '';
 
             return {
                 ...prev, // Default structure
-                ...(previousHistory.content as any), // Overwrite with old history data
+                ...(previousHistory?.content as any), // Overwrite with old history data
                 exploracionVitals: currentVitals || prev.exploracionVitals, // Use fresh vitals if avaiable
                 // Reset some fields that should typically be fresh in a new history
-                padecimientoActual: (previousHistory.content as any).padecimientoActual || '', // Keep or clear? Usually keep for reference in subsequent notes
+                padecimientoActual: (previousHistory?.content as any)?.padecimientoActual || '', 
+                
+                // Sobrescribir con datos del portal del paciente si existen
+                hereditary: { ...prev.hereditary, note: hereditaryNote },
+                personalPathological: { ...prev.personalPathological, note: pathologicalNote },
+                nonPathological: { ...prev.nonPathological, note: nonPathologicalNote },
+                terapeuticaPrevia: treatmentsNote || prev.terapeuticaPrevia,
             };
         });
     } else {
@@ -130,6 +157,29 @@ const MedicalHistory: React.FC<{
 
   if (!patient) return null;
 
+  // Función para actualizar el MedicalBackground del paciente al guardar
+  const syncMedicalBackground = () => {
+      const mb = patient.medicalBackground || {
+        familyHistory: { diabetes: false, hypertension: false, cancer: false, cardiac: false, doctorNotes: '', patientNotes: '', lastUpdatedBy: null },
+        pathological: { surgeries: false, allergies: false, chronicDiseases: false, transfusions: false, doctorNotes: '', patientNotes: '', lastUpdatedBy: null },
+        nonPathological: { smoking: false, alcohol: false, drugs: false, doctorNotes: '', patientNotes: '', lastUpdatedBy: null },
+        currentTreatments: { doctorNotes: '', patientNotes: '', lastUpdatedBy: null },
+        lastSyncDate: null
+      };
+
+      // Extraemos las notas del médico del formulario actual
+      const updatedMb = {
+          ...mb,
+          familyHistory: { ...mb.familyHistory, doctorNotes: form.hereditary.note, lastUpdatedBy: 'Médico' as const },
+          pathological: { ...mb.pathological, doctorNotes: form.personalPathological.note, lastUpdatedBy: 'Médico' as const },
+          nonPathological: { ...mb.nonPathological, doctorNotes: form.nonPathological.note, lastUpdatedBy: 'Médico' as const },
+          currentTreatments: { ...mb.currentTreatments, doctorNotes: form.terapeuticaPrevia, lastUpdatedBy: 'Médico' as const },
+          lastSyncDate: new Date().toISOString()
+      };
+
+      onUpdatePatient({ ...patient, medicalBackground: updatedMb });
+  };
+
   const handlePreSave = () => {
     const draftNote: ClinicalNote = {
       id: noteId, 
@@ -142,6 +192,7 @@ const MedicalHistory: React.FC<{
       hash: 'REVISIÓN-EN-PROCESO'
     };
     onSaveNote(draftNote);
+    syncMedicalBackground();
     navigate(`/patient/${id}`, { state: { openNoteId: noteId } });
   };
 
@@ -160,6 +211,7 @@ const MedicalHistory: React.FC<{
         hash: `CERT-HC-${Math.random().toString(36).substr(2, 9).toUpperCase()}`
       };
       onSaveNote(finalNote);
+      syncMedicalBackground();
       navigate(`/patient/${id}`, { state: { openNoteId: noteId, isNewHC: true } });
     }
   };

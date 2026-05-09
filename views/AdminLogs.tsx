@@ -133,6 +133,11 @@ const AdminLogs: React.FC = () => {
 
   const handleUpload = () => {
       if(!uploadForm.name) return;
+      const getToday = () => {
+        const d = new Date();
+        return new Date(d.getTime() - (d.getTimezoneOffset() * 60000)).toISOString().split('T')[0];
+      };
+      
       if (showUploadModal === 'protocol') {
           setDynamicProtocols([...dynamicProtocols, uploadForm.name.toUpperCase()]);
       } else if (showUploadModal === 'marketing') {
@@ -140,7 +145,7 @@ const AdminLogs: React.FC = () => {
               id: Date.now().toString(),
               name: uploadForm.name,
               type: uploadForm.type,
-              date: new Date().toISOString().split('T')[0]
+              date: getToday()
           }]);
       }
       setShowUploadModal(null);
@@ -371,10 +376,21 @@ const BitacoraModal = ({ isOpen, onClose, title, icon, norms, columns, fields, e
   const [showAddForm, setShowAddForm] = useState(false);
   const [showPrintPreview, setShowPrintPreview] = useState(false);
   
+  const getToday = () => {
+    const d = new Date();
+    return new Date(d.getTime() - (d.getTimezoneOffset() * 60000)).toISOString().split('T')[0];
+  };
+
+  const getPastDate = (days: number) => {
+    const d = new Date();
+    d.setDate(d.getDate() - days);
+    return new Date(d.getTime() - (d.getTimezoneOffset() * 60000)).toISOString().split('T')[0];
+  };
+
   // Estado para rango de fechas
   const [dateRange, setDateRange] = useState({
-    start: new Date(new Date().setDate(new Date().getDate() - 7)).toISOString().split('T')[0],
-    end: new Date().toISOString().split('T')[0]
+    start: getPastDate(7),
+    end: getToday()
   });
 
   const filteredEntries = useMemo(() => {
@@ -452,9 +468,9 @@ const BitacoraModal = ({ isOpen, onClose, title, icon, norms, columns, fields, e
       </div>
 
       {showPrintPreview && (
-        <div className="fixed inset-0 z-[200] bg-slate-950 flex flex-col items-center p-4 lg:p-10 no-print overflow-y-auto animate-in fade-in">
+        <div className="fixed inset-0 z-[200] bg-slate-950 flex flex-col items-center p-4 lg:p-10 overflow-y-auto animate-in fade-in print:bg-white print:p-0">
            {/* Barra de Herramientas Flotante Centrada */}
-           <div className="bg-slate-800 p-4 rounded-full shadow-2xl flex gap-6 mb-8 border border-white/10 sticky top-4 z-[210]">
+           <div className="bg-slate-800 p-4 rounded-full shadow-2xl flex gap-6 mb-8 border border-white/10 sticky top-4 z-[210] no-print">
               <button 
                 onClick={() => window.print()} 
                 className="flex items-center gap-3 px-8 py-3 bg-blue-600 text-white rounded-full font-black text-xs uppercase tracking-widest hover:bg-blue-500 transition-all shadow-lg active:scale-95"
@@ -470,7 +486,7 @@ const BitacoraModal = ({ isOpen, onClose, title, icon, norms, columns, fields, e
            </div>
 
            {/* Documento Estilo Hoja Real */}
-           <div className="bg-white w-full max-w-[210mm] min-h-[297mm] shadow-[0_0_80px_rgba(0,0,0,0.5)] rounded-sm flex flex-col text-slate-900">
+           <div className="bg-white w-full max-w-[210mm] min-h-[297mm] shadow-[0_0_80px_rgba(0,0,0,0.5)] rounded-sm flex flex-col text-slate-900 print:shadow-none print:m-0 print:w-full">
               <div className="p-[20mm] flex-1 flex flex-col space-y-12">
                  <div className="flex justify-between items-start border-b-4 border-slate-900 pb-10">
                     <div className="space-y-3">

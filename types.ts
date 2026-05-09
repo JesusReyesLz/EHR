@@ -395,6 +395,7 @@ export interface DoctorInfo {
   isPremium?: boolean;
   isVerified?: boolean; // NEW: Sello de validación
   rating?: number;
+  consultationPrice?: number; // NEW: Precio de consulta
   reviewCount?: number;
   price?: number;
   availableFrom?: string;
@@ -411,6 +412,9 @@ export interface DoctorInfo {
   // Real-time Status
   isOnline?: boolean; // Available for Telemedicine
   walletBalance?: number; // Saldo acumulado por consultas
+
+  // User Role for App Access
+  userType?: 'Médico' | 'Paciente' | 'Recursos Humanos' | 'Administrador';
 
   // Scheduling
   schedule?: DoctorSchedule;
@@ -436,6 +440,7 @@ export interface Vitals {
   // IoT Extensions
   source?: 'Manual' | 'Apple Health' | 'Google Fit' | 'IoT Device';
   glucose?: number;
+  customMetrics?: Record<string, string>;
 }
 
 export interface MedicationPrescription {
@@ -754,6 +759,58 @@ export interface DischargeData {
     timestamp: string;
 }
 
+export interface CurrentMedication {
+    drug: string;
+    dose: string;
+    frequency: string;
+    startDate: string;
+    endDate: string; // If chronic, can be empty or 'Indefinido'
+    isChronic: boolean;
+    indications: string;
+    brandName?: string;
+    compound?: string;
+    times?: string[]; // E.g. ["08:00", "20:00"]
+    durationDays?: number; // E.g. 5
+    frequencyText?: string;
+    dailyLogs?: Record<string, string[]>;
+}
+
+export interface MedicalBackground {
+    familyHistory: {
+        diabetes: boolean;
+        hypertension: boolean;
+        cancer: boolean;
+        cardiac: boolean;
+        doctorNotes: string;
+        patientNotes: string;
+        lastUpdatedBy: 'Paciente' | 'Médico' | null;
+    };
+    pathological: {
+        surgeries: boolean;
+        allergies: boolean;
+        chronicDiseases: boolean;
+        transfusions: boolean;
+        doctorNotes: string;
+        patientNotes: string;
+        lastUpdatedBy: 'Paciente' | 'Médico' | null;
+    };
+    nonPathological: {
+        smoking: boolean;
+        alcohol: boolean;
+        drugs: boolean;
+        doctorNotes: string;
+        patientNotes: string;
+        lastUpdatedBy: 'Paciente' | 'Médico' | null;
+    };
+    currentTreatments: {
+        doctorNotes: string;
+        patientNotes: string;
+        lastUpdatedBy: 'Paciente' | 'Médico' | null;
+        medicationsList?: CurrentMedication[];
+    };
+    lastSyncDate: string | null;
+}
+
 export interface Patient {
   id: string;
   clinicId?: string; // Link to Clinic DB
@@ -814,10 +871,14 @@ export interface Patient {
 
   // Preventive Health Control (New)
   healthControl?: HealthControlRecord;
+
+  // Medical Background (Bidirectional Sync)
+  medicalBackground?: MedicalBackground;
 }
 
 export interface ClinicalNote {
   id: string;
+  clinicId?: string;
   patientId: string;
   type: string;
   date: string;

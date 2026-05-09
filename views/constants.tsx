@@ -1,5 +1,5 @@
 
-import { Patient, PatientStatus, ModuleType, MedicationStock, MedicationCategory, PriorityLevel, AgendaStatus, SupplyType, PriceItem, PriceType, StaffMember, DoctorInfo } from './types';
+import { Patient, PatientStatus, ModuleType, MedicationStock, MedicationCategory, PriorityLevel, AgendaStatus, SupplyType, PriceItem, PriceType, StaffMember, DoctorInfo } from '../types';
 
 // Helper local para asegurar consistencia en fechas de demo
 const getLocalToday = () => {
@@ -139,7 +139,8 @@ export const DEFAULT_INFRASTRUCTURE = {
     'Cirugía': Array.from({ length: 6 }, (_, i) => `CX-${(i+1).toString().padStart(2, '0')}`),
     'Obstetricia': Array.from({ length: 4 }, (_, i) => `OB-${(i+1).toString().padStart(2, '0')}`),
     'Pediatría': Array.from({ length: 4 }, (_, i) => `PD-${(i+1).toString().padStart(2, '0')}`),
-    'UCI': Array.from({ length: 4 }, (_, i) => `ICU-${(i+1).toString().padStart(2, '0')}`)
+    'UCI': Array.from({ length: 4 }, (_, i) => `ICU-${(i+1).toString().padStart(2, '0')}`),
+    'Quirófano': Array.from({ length: 4 }, (_, i) => `Q-${(i+1).toString().padStart(2, '0')}`)
   }
 };
 
@@ -435,7 +436,7 @@ export const NOTE_CATEGORIES = [
       'Nota de Egreso / Alta',
       'Carnet Perinatal / Control Prenatal',
       'Tarjeta de Control de Enfermedades Crónicas',
-      'Carnet de Salud Integral / Niño Sano'
+      'Carnet de Salud Integral'
     ]
   },
   {

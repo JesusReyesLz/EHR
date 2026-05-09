@@ -1,0 +1,174 @@
+{
+  "entities": {
+    "Clinic": {
+      "title": "Clinic",
+      "description": "Represents a tenant/clinic in the SaaS application.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "description": "Name of the clinic" },
+        "logoUrl": { "type": "string", "description": "URL of the clinic's logo" },
+        "address": { "type": "string", "description": "Physical address" },
+        "phone": { "type": "string", "description": "Contact phone number" },
+        "email": { "type": "string", "format": "email", "description": "Contact email" },
+        "activeModules": { "type": "array", "items": { "type": "string" }, "description": "List of active modules for this clinic" }
+      },
+      "required": ["name"]
+    },
+    "User": {
+      "title": "User",
+      "description": "Represents an authenticated user in the system.",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string", "format": "email" },
+        "name": { "type": "string" },
+        "cedula": { "type": "string" },
+        "isActive": { "type": "boolean" },
+        "customModules": { "type": "array", "items": { "type": "string" } },
+        "roleId": { "type": "string" },
+        "clinicId": { "type": "string" }
+      },
+      "required": ["email", "name", "isActive", "roleId", "clinicId"]
+    },
+    "Role": {
+      "title": "Role",
+      "description": "RBAC Role definition for a clinic.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "defaultModules": { "type": "array", "items": { "type": "string" } },
+        "clinicId": { "type": "string" }
+      },
+      "required": ["name", "clinicId"]
+    },
+    "Department": {
+      "title": "Department",
+      "description": "ABAC Department/Area for a clinic.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "clinicId": { "type": "string" }
+      },
+      "required": ["name", "clinicId"]
+    },
+    "PatientRecord": {
+      "title": "PatientRecord",
+      "description": "Patient information isolated by clinic.",
+      "type": "object",
+      "properties": {
+        "clinicId": { "type": "string" },
+        "name": { "type": "string" },
+        "age": { "type": "number" },
+        "sex": { "type": "string" },
+        "curp": { "type": "string" },
+        "bloodType": { "type": "string" },
+        "allergies": { "type": "array", "items": { "type": "string" } },
+        "phone": { "type": "string" },
+        "email": { "type": "string" },
+        "address": { "type": "string" },
+        "status": { "type": "string" },
+        "currentArea": { "type": "string" },
+        "admissionDate": { "type": "string", "format": "date-time" }
+      },
+      "required": ["clinicId", "name", "age", "sex", "status"]
+    },
+    "ClinicalNote": {
+      "title": "ClinicalNote",
+      "description": "Clinical notes and prescriptions for patients.",
+      "type": "object",
+      "properties": {
+        "clinicId": { "type": "string" },
+        "patientId": { "type": "string" },
+        "type": { "type": "string" },
+        "content": { "type": "string" },
+        "authorId": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["clinicId", "patientId", "type", "content", "authorId", "createdAt"]
+    },
+    "InventoryItem": {
+      "title": "InventoryItem",
+      "description": "Medication and supplies inventory.",
+      "type": "object",
+      "properties": {
+        "clinicId": { "type": "string" },
+        "name": { "type": "string" },
+        "genericName": { "type": "string" },
+        "presentation": { "type": "string" },
+        "concentration": { "type": "string" },
+        "category": { "type": "string" },
+        "batches": { "type": "string" },
+        "minStock": { "type": "number" }
+      },
+      "required": ["clinicId", "name", "genericName", "presentation", "category", "batches", "minStock"]
+    },
+    "PriceItem": {
+      "title": "PriceItem",
+      "description": "Pricing for products and services.",
+      "type": "object",
+      "properties": {
+        "clinicId": { "type": "string" },
+        "code": { "type": "string" },
+        "name": { "type": "string" },
+        "type": { "type": "string" },
+        "category": { "type": "string" },
+        "price": { "type": "number" },
+        "taxPercent": { "type": "number" }
+      },
+      "required": ["clinicId", "code", "name", "type", "category", "price", "taxPercent"]
+    },
+    "ClinicDocument": {
+      "title": "ClinicDocument",
+      "description": "Manuals, protocols, and logs.",
+      "type": "object",
+      "properties": {
+        "clinicId": { "type": "string" },
+        "title": { "type": "string" },
+        "type": { "type": "string" },
+        "fileUrl": { "type": "string" },
+        "uploadedById": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["clinicId", "title", "type", "fileUrl", "uploadedById", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/clinics/{clinicId}": {
+      "schema": { "$ref": "#/entities/Clinic" },
+      "description": "Clinics/Tenants"
+    },
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "Users of the system"
+    },
+    "/roles/{roleId}": {
+      "schema": { "$ref": "#/entities/Role" },
+      "description": "Roles defined per clinic"
+    },
+    "/departments/{departmentId}": {
+      "schema": { "$ref": "#/entities/Department" },
+      "description": "Departments defined per clinic"
+    },
+    "/patients/{patientId}": {
+      "schema": { "$ref": "#/entities/PatientRecord" },
+      "description": "Patients registered in a clinic"
+    },
+    "/clinicalNotes/{noteId}": {
+      "schema": { "$ref": "#/entities/ClinicalNote" },
+      "description": "Clinical notes for patients"
+    },
+    "/inventory/{itemId}": {
+      "schema": { "$ref": "#/entities/InventoryItem" },
+      "description": "Inventory items for a clinic"
+    },
+    "/prices/{priceId}": {
+      "schema": { "$ref": "#/entities/PriceItem" },
+      "description": "Price items for a clinic"
+    },
+    "/documents/{documentId}": {
+      "schema": { "$ref": "#/entities/ClinicDocument" },
+      "description": "Documents for a clinic"
+    }
+  }
+}

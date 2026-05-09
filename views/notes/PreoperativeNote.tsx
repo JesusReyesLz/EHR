@@ -31,7 +31,7 @@ const PreoperativeNote: React.FC<PreoperativeNoteProps> = ({ patients, notes, on
     surgeryType: 'Electiva', // Electiva / Urgencia
     
     // Equipo Quirúrgico
-    surgeon: doctorInfo?.name || 'Dr. Alejandro Méndez',
+    surgeon: doctorInfo?.name || 'Dr. Médico',
     anesthesiologist: '',
     surgicalRoom: '',
     

@@ -1,5 +1,8 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
+import { useAuth } from '../contexts/AuthContext';
+import { db } from '../firebase';
+import { doc, setDoc, updateDoc, collection, query, where, onSnapshot } from 'firebase/firestore';
 import { 
   Briefcase, UserPlus, Calendar, Clock, CheckCircle2, XCircle, Search, 
   Filter, Edit2, Trash2, Save, User, ShieldCheck, MapPin, 
@@ -18,7 +21,18 @@ interface StaffManagementProps {
 }
 
 const StaffManagement: React.FC<StaffManagementProps> = ({ staffList, onUpdateStaffList }) => {
+  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState<'directory' | 'roster' | 'attendance' | 'payroll'>('directory');
+  const [dbRoles, setDbRoles] = useState<any[]>([]);
+
+  useEffect(() => {
+    if (!user?.clinicId) return;
+    const qRoles = query(collection(db, 'roles'), where('clinicId', '==', user.clinicId));
+    const unsubRoles = onSnapshot(qRoles, (snapshot) => {
+      setDbRoles(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    });
+    return () => unsubRoles();
+  }, [user?.clinicId]);
   
   // --- STATE ---
   // staffList is now a prop
@@ -48,8 +62,19 @@ const StaffManagement: React.FC<StaffManagementProps> = ({ staffList, onUpdateSt
   const [searchTerm, setSearchTerm] = useState('');
   const [roleFilter, setRoleFilter] = useState<string>('TODOS');
   
+  const getToday = () => {
+    const d = new Date();
+    return new Date(d.getTime() - (d.getTimezoneOffset() * 60000)).toISOString().split('T')[0];
+  };
+
+  const getFutureDate = (days: number) => {
+    const d = new Date();
+    d.setDate(d.getDate() + days);
+    return new Date(d.getTime() - (d.getTimezoneOffset() * 60000)).toISOString().split('T')[0];
+  };
+
   // Roster View State
-  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [selectedDate, setSelectedDate] = useState(getToday());
   const [selectedArea, setSelectedArea] = useState<string>('TODAS');
   
   // Dragging State
@@ -73,8 +98,8 @@ const StaffManagement: React.FC<StaffManagementProps> = ({ staffList, onUpdateSt
   const [shiftConfig, setShiftConfig] = useState({
       staffId: '',
       area: '', 
-      startDate: new Date().toISOString().split('T')[0],
-      endDate: new Date(Date.now() + 86400000 * 30).toISOString().split('T')[0],
+      startDate: getToday(),
+      endDate: getFutureDate(30),
       shiftType: 'Matutino' as ShiftType,
       startTime: '07:00',
       endTime: '15:00',
@@ -94,10 +119,31 @@ const StaffManagement: React.FC<StaffManagementProps> = ({ staffList, onUpdateSt
   useEffect(() => { localStorage.setItem('med_payrolls_v1', JSON.stringify(payrolls)); }, [payrolls]);
   useEffect(() => { localStorage.setItem('med_expenses_v1', JSON.stringify(expenses)); }, [expenses]);
 
+  // Sync shifts from localStorage events (e.g., when Dashboard updates them)
+  useEffect(() => {
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'med_work_shifts_v2') {
+        try { setShifts(JSON.parse(e.newValue || '[]')); } catch (err) {}
+      }
+    };
+    window.addEventListener('storage', handleStorageChange);
+    // Initial sync
+    const initialShifts = localStorage.getItem('med_work_shifts_v2');
+    if (initialShifts) {
+         try {
+             // Only update if differ to prevent loop
+             const parsed = JSON.parse(initialShifts);
+             if (JSON.stringify(parsed) !== JSON.stringify(shifts)) {
+                  setShifts(parsed);
+             }
+         } catch(e) {}
+    }
+    return () => window.removeEventListener('storage', handleStorageChange);
+  }, []);
+
   // --- HELPERS ---
   const generateId = () => `STF-${Date.now()}-${Math.floor(Math.random()*1000)}`;
   
-  const roles: StaffRole[] = ['Médico Especialista', 'Médico General', 'Enfermería', 'Químico / Laboratorio', 'Radiólogo / Imagen', 'Camillero', 'Limpieza / Intendencia', 'Caja / Admisión', 'Administrativo / RRHH', 'Farmacia', 'Repartidor / Chofer'];
   const areas = ['Urgencias', 'Hospitalización', 'UCI', 'Quirófano', 'Consulta Externa', 'Laboratorio', 'Imagenología', 'Farmacia', 'Caja', 'Recepción', 'Limpieza General', 'Logística'];
   const shiftTypes: ShiftType[] = ['Matutino', 'Vespertino', 'Nocturno A', 'Nocturno B', 'Guardia', 'Jornada Acumulada', 'Personalizado'];
   const allModulesList = Object.values(ModuleType);
@@ -397,7 +443,7 @@ const StaffManagement: React.FC<StaffManagementProps> = ({ staffList, onUpdateSt
   };
 
   // --- UI ACTIONS ---
-  const handleSaveStaff = () => {
+  const handleSaveStaff = async () => {
     if (!staffForm.name || !staffForm.role) return alert("Nombre y Rol son obligatorios");
     
     const finalModules = (staffForm.allowedModules && staffForm.allowedModules.length > 0) 
@@ -406,11 +452,14 @@ const StaffManagement: React.FC<StaffManagementProps> = ({ staffList, onUpdateSt
 
     const finalAreas = staffForm.assignedArea || [];
 
+    let staffId = editingStaffId;
+
     if (editingStaffId) {
       setStaffList(prev => prev.map(s => s.id === editingStaffId ? { ...s, ...staffForm, allowedModules: finalModules, assignedArea: finalAreas } as StaffMember : s));
     } else {
+      staffId = generateId();
       const newStaff: StaffMember = {
-        id: generateId(),
+        id: staffId,
         name: staffForm.name!.toUpperCase(),
         role: staffForm.role as StaffRole,
         status: staffForm.status as any || 'Activo',
@@ -423,7 +472,7 @@ const StaffManagement: React.FC<StaffManagementProps> = ({ staffList, onUpdateSt
         paymentPeriod: staffForm.paymentPeriod || 'Quincenal',
         rfc: staffForm.rfc,
         bankAccount: staffForm.bankAccount,
-        joinDate: new Date().toISOString().split('T')[0],
+        joinDate: getToday(),
         allowedModules: finalModules,
         isTelemedicineEnabled: staffForm.isTelemedicineEnabled,
         isHomeServiceEnabled: staffForm.isHomeServiceEnabled,
@@ -431,13 +480,38 @@ const StaffManagement: React.FC<StaffManagementProps> = ({ staffList, onUpdateSt
       };
       setStaffList(prev => [...prev, newStaff]);
     }
+
+    // Sync with users collection if email is provided
+    if (staffForm.email && user?.clinicId) {
+      try {
+        const userId = staffForm.email.toLowerCase().replace(/[^a-z0-9]/g, '');
+        // Find the roleId based on the selected role name
+        const selectedRole = dbRoles.find(r => r.name === staffForm.role);
+        
+        await setDoc(doc(db, 'users', userId), {
+          email: staffForm.email,
+          name: staffForm.name!.toUpperCase(),
+          roleId: selectedRole ? selectedRole.id : staffForm.role, // Fallback to role name if custom role not found
+          cedula: staffForm.cedula || '',
+          clinicId: user.clinicId,
+          customModules: JSON.stringify(finalModules),
+          staffId: staffId,
+          updatedAt: new Date().toISOString()
+        }, { merge: true });
+      } catch (error) {
+        console.error("Error syncing user to Firestore:", error);
+      }
+    }
+
     setShowStaffModal(false);
     setEditingStaffId(null);
-    setStaffForm({ name: '', role: 'Médico General', status: 'Activo', salaryDaily: 0, allowedModules: [], assignedArea: [], isTelemedicineEnabled: false, isHomeServiceEnabled: false, mobileAppAccess: false });
+    const initialRole = dbRoles.length > 0 ? dbRoles[0].name : 'Médico General';
+    setStaffForm({ name: '', role: initialRole, status: 'Activo', salaryDaily: 0, allowedModules: [], assignedArea: [], isTelemedicineEnabled: false, isHomeServiceEnabled: false, mobileAppAccess: false });
   };
 
   const openNewStaff = () => {
-    setStaffForm({ name: '', role: 'Médico General', status: 'Activo', assignedArea: [], cedula: '', email: '', phone: '', salaryDaily: 0, paymentPeriod: 'Quincenal', allowedModules: [ModuleType.MONITOR], isTelemedicineEnabled: false, isHomeServiceEnabled: false, mobileAppAccess: false });
+    const initialRole = dbRoles.length > 0 ? dbRoles[0].name : 'Médico General';
+    setStaffForm({ name: '', role: initialRole, status: 'Activo', assignedArea: [], cedula: '', email: '', phone: '', salaryDaily: 0, paymentPeriod: 'Quincenal', allowedModules: [ModuleType.MONITOR], isTelemedicineEnabled: false, isHomeServiceEnabled: false, mobileAppAccess: false });
     setEditingStaffId(null);
     setShowStaffModal(true);
   };
@@ -604,7 +678,7 @@ const StaffManagement: React.FC<StaffManagementProps> = ({ staffList, onUpdateSt
           </div>
           <h1 className="text-4xl font-black text-slate-900 uppercase tracking-tight">Gestión de Personal</h1>
         </div>
-        <div className="flex bg-white p-1.5 rounded-2xl shadow-sm border border-slate-200 overflow-x-auto">
+      <div className="flex bg-white p-1.5 rounded-2xl shadow-sm border border-slate-200 overflow-x-auto no-print">
            <button onClick={() => setActiveTab('directory')} className={`px-6 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'directory' ? 'bg-slate-900 text-white shadow-lg' : 'text-slate-500 hover:bg-slate-50'}`}>Directorio</button>
            <button onClick={() => setActiveTab('roster')} className={`px-6 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'roster' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-500 hover:bg-slate-50'}`}>Turnos y Roles</button>
            <button onClick={() => setActiveTab('attendance')} className={`px-6 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'attendance' ? 'bg-emerald-600 text-white shadow-lg' : 'text-slate-500 hover:bg-slate-50'}`}>Reloj Checador</button>
@@ -616,7 +690,7 @@ const StaffManagement: React.FC<StaffManagementProps> = ({ staffList, onUpdateSt
       {activeTab === 'directory' && (
         <div className="space-y-6 animate-in slide-in-from-bottom-4">
            {/* ... Filtros y Botón Nuevo ... */}
-           <div className="flex flex-col md:flex-row gap-4 justify-between bg-white p-4 rounded-[2.5rem] border border-slate-200 shadow-sm">
+           <div className="flex flex-col md:flex-row gap-4 justify-between bg-white p-4 rounded-[2.5rem] border border-slate-200 shadow-sm no-print">
               <div className="flex items-center gap-4 flex-1">
                  <div className="relative flex-1 max-w-md">
                     <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18}/>
@@ -633,7 +707,7 @@ const StaffManagement: React.FC<StaffManagementProps> = ({ staffList, onUpdateSt
                     onChange={e => setRoleFilter(e.target.value)}
                  >
                     <option value="TODOS">Todos los Roles</option>
-                    {roles.map(r => <option key={r} value={r}>{r}</option>)}
+                    {dbRoles.map(r => <option key={r.id} value={r.name}>{r.name}</option>)}
                  </select>
               </div>
               <button 
@@ -831,7 +905,7 @@ const StaffManagement: React.FC<StaffManagementProps> = ({ staffList, onUpdateSt
       {/* --- ATTENDANCE TAB --- */}
       {activeTab === 'attendance' && (
           <div className="space-y-6 animate-in slide-in-from-bottom-4">
-              <div className="flex justify-between items-center bg-white p-6 rounded-[2.5rem] border border-slate-200 shadow-sm">
+              <div className="flex justify-between items-center bg-white p-6 rounded-[2.5rem] border border-slate-200 shadow-sm no-print">
                   <div>
                       <h3 className="text-xl font-black text-slate-900 uppercase">Reloj Checador Digital</h3>
                       <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1">
@@ -919,7 +993,7 @@ const StaffManagement: React.FC<StaffManagementProps> = ({ staffList, onUpdateSt
       {/* --- PAYROLL TAB --- */}
       {activeTab === 'payroll' && (
           <div className="space-y-8 animate-in slide-in-from-bottom-4">
-              <div className="flex justify-between items-center bg-white p-6 rounded-[2.5rem] border border-slate-200 shadow-sm">
+              <div className="flex justify-between items-center bg-white p-6 rounded-[2.5rem] border border-slate-200 shadow-sm no-print">
                   <div>
                       <h3 className="text-xl font-black text-slate-900 uppercase">Nómina y Pagos</h3>
                       <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1">Historial de Dispersiones</p>
@@ -972,7 +1046,7 @@ const StaffManagement: React.FC<StaffManagementProps> = ({ staffList, onUpdateSt
                   <div className="space-y-2">
                      <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-2">Rol / Puesto</label>
                      <select className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-black uppercase outline-none" value={staffForm.role} onChange={e => setStaffForm({...staffForm, role: e.target.value as StaffRole})}>
-                        {roles.map(r => <option key={r} value={r}>{r}</option>)}
+                        {dbRoles.map(r => <option key={r.id} value={r.name}>{r.name}</option>)}
                      </select>
                   </div>
                   <div className="space-y-2">
@@ -1178,6 +1252,18 @@ const StaffManagement: React.FC<StaffManagementProps> = ({ staffList, onUpdateSt
       )}
 
       {/* MODAL GENERAR NOMINA */}
+      <style>{`
+        @media print {
+          .no-print, nav, aside, button { display: none !important; }
+          body { background: white !important; margin: 0 !important; }
+          main { margin: 0 !important; padding: 0.5cm !important; width: 100% !important; left: 0 !important; top: 0 !important; }
+          .max-w-7xl { max-width: 100% !important; }
+          .bg-slate-900 { background: #000 !important; color: #fff !important; -webkit-print-color-adjust: exact; }
+          .border { border: 1px solid #000 !important; }
+          .shadow-sm, .shadow-md, .shadow-lg, .shadow-xl, .shadow-2xl { box-shadow: none !important; }
+          @page { margin: 0.5cm; size: landscape; }
+        }
+      `}</style>
       {showPayrollModal && (
           <div className="fixed inset-0 z-[200] bg-slate-900/95 backdrop-blur flex items-center justify-center p-4 animate-in fade-in">
               <div className="bg-white w-full max-w-md rounded-[3rem] p-10 shadow-2xl space-y-6">
